@@ -1,0 +1,152 @@
+@import "@blueprintjs/core/lib/css/blueprint.css";
+@import "@blueprintjs/icons/lib/css/blueprint-icons.css";
+@import "@blueprintjs/select/lib/css/blueprint-select.css";
+@import "@blueprintjs/table/lib/css/table.css";
+@import "@blueprintjs/datetime2/lib/css/blueprint-datetime2.css";
+@import "@blueprintjs/popover2/lib/css/blueprint-popover2.css";
+
+/* Cesium CSS - must be loaded before Tailwind */
+@import "cesium/Build/Cesium/Widgets/widgets.css";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --sda-bg-primary: #0d1117;
+  --sda-bg-secondary: #161b22;
+  --sda-bg-tertiary: #21262d;
+  --sda-bg-elevated: #30363d;
+  --sda-border-default: #30363d;
+  --sda-text-primary: #e6edf3;
+  --sda-text-secondary: #8b949e;
+  --sda-accent-blue: #2f81f7;
+  --sda-accent-cyan: #39c5cf;
+  --sda-accent-green: #3fb950;
+  --sda-accent-yellow: #d29922;
+  --sda-accent-red: #f85149;
+}
+
+html {
+  color-scheme: dark;
+}
+
+body {
+  background-color: var(--sda-bg-primary);
+  color: var(--sda-text-primary);
+  font-family: var(--font-ibm-plex-sans), 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+/* Monospace for code, data, and technical elements */
+code, pre, kbd, samp,
+.font-mono,
+.bp5-monospace-text,
+[data-mono="true"] {
+  font-family: var(--font-ibm-plex-mono), 'IBM Plex Mono', monospace;
+}
+
+/* Apply mono to specific data displays */
+.norad-id,
+.satellite-id,
+.coordinates,
+.timestamp-value,
+.metric-value,
+.json-viewer {
+  font-family: var(--font-ibm-plex-mono), 'IBM Plex Mono', monospace;
+}
+
+/* Blueprint Dark Theme Overrides */
+.bp5-dark {
+  --pt-app-background-color: var(--sda-bg-primary);
+}
+
+.bp5-dark .bp5-card {
+  background-color: var(--sda-bg-secondary);
+  border-color: var(--sda-border-default);
+}
+
+.bp5-dark .bp5-input {
+  background-color: var(--sda-bg-tertiary);
+  border-color: var(--sda-border-default);
+}
+
+.bp5-dark .bp5-button {
+  background-color: var(--sda-bg-tertiary);
+}
+
+.bp5-dark .bp5-menu {
+  background-color: var(--sda-bg-secondary);
+}
+
+.bp5-dark .bp5-navbar {
+  background-color: var(--sda-bg-secondary);
+  border-bottom: 1px solid var(--sda-border-default);
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--sda-bg-secondary);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--sda-bg-elevated);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #484f58;
+}
+
+/* Cesium dark theme overrides */
+.cesium-viewer {
+  background-color: var(--sda-bg-primary);
+  width: 100% !important;
+  height: 100% !important;
+}
+
+.cesium-viewer-cesiumWidgetContainer {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+.cesium-widget {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+.cesium-viewer-toolbar {
+  background-color: var(--sda-bg-secondary);
+}
+
+.cesium-viewer-bottom {
+  background-color: var(--sda-bg-secondary);
+}
+
+/* Ensure canvas fills container */
+.cesium-viewer canvas {
+  width: 100% !important;
+  height: 100% !important;
+  image-rendering: auto;
+}
+
+/* Animation utilities */
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 5px var(--sda-accent-cyan); }
+  50% { box-shadow: 0 0 20px var(--sda-accent-cyan); }
+}
+
+.pulse-glow {
+  animation: pulse-glow 2s infinite;
+}
+
+/* Status indicators */
+.status-critical { color: var(--sda-accent-red); }
+.status-high { color: var(--sda-accent-yellow); }
+.status-medium { color: var(--sda-accent-yellow); }
+.status-low { color: var(--sda-accent-green); }
+.status-info { color: var(--sda-accent-blue); }
