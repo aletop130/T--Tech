@@ -14,8 +14,9 @@ interface TimelineEvent {
 }
 
 export default function TimelinePage() {
+  const [mounted, setMounted] = useState(false);
   const [events, setEvents] = useState<TimelineEvent[]>([]);
-  const [selectedDate, setSelectedDate] = useState(new Date());
+  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [selectedType, setSelectedType] = useState<string>('all');
 
   useEffect(() => {
@@ -61,6 +62,8 @@ export default function TimelinePage() {
       },
     ];
     setEvents(demoEvents);
+    setSelectedDate(new Date());
+    setMounted(true);
   }, []);
 
   const eventIcon = (type: string) => {
@@ -107,7 +110,7 @@ export default function TimelinePage() {
             <option value="ingestion">Ingestion</option>
           </HTMLSelect>
           <Button icon="chevron-left" minimal />
-          <Button minimal>{format(selectedDate, 'MMM d, yyyy')}</Button>
+          <Button minimal>{selectedDate ? format(selectedDate, 'MMM d, yyyy') : 'Select date'}</Button>
           <Button icon="chevron-right" minimal />
         </div>
       </div>
@@ -178,7 +181,7 @@ export default function TimelinePage() {
       {/* Now indicator */}
       <div className="flex items-center gap-2 mt-4 text-sda-accent-cyan">
         <Icon icon="time" />
-        <span className="text-sm">Now: {format(new Date(), 'PPpp')}</span>
+        <span className="text-sm">Now: {mounted ? format(new Date(), 'PPpp') : 'Loading...'}</span>
       </div>
     </div>
   );

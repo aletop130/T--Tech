@@ -25,6 +25,7 @@ interface DashboardData {
 }
 
 export default function DashboardPage() {
+  const [mounted, setMounted] = useState(false);
   const [data, setData] = useState<DashboardData>({
     incidentStats: null,
     conjunctions: [],
@@ -62,6 +63,7 @@ export default function DashboardPage() {
   };
 
   useEffect(() => {
+    setMounted(true);
     loadData();
   }, []);
 
@@ -84,7 +86,7 @@ export default function DashboardPage() {
           Space Domain Awareness Dashboard
         </h1>
         <div className="text-sm text-sda-text-secondary">
-          Last updated: {format(new Date(), 'PPp')}
+          Last updated: {mounted ? format(new Date(), 'PPp') : 'Loading...'}
         </div>
       </div>
 
