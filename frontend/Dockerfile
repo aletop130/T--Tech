@@ -2,18 +2,20 @@ FROM node:20-alpine
 
 WORKDIR /app
 
-# Install dependencies
+# Install dependencies first (without running postinstall)
 COPY package*.json ./
-RUN npm install --legacy-peer-deps
+RUN npm install --legacy-peer-deps --ignore-scripts
 
-# Copy source
+# Copy the scripts directory needed for postinstall
+COPY scripts/ ./scripts/
+
+# Now run the postinstall script
+RUN npm run postinstall
+
+# Copy the rest of the source (for production builds)
 COPY . .
-
-# Build for faster initial load (pre-compiles all pages)
-ENV NEXT_TELEMETRY_DISABLED=1
-RUN npm run build
 
 EXPOSE 3000
 
-# Run in production mode with the built output
+# Default command (overridden in docker-compose for dev)
 CMD ["npm", "run", "start"]

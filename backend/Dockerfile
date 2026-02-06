@@ -7,6 +7,7 @@ RUN apt-get update && apt-get install -y \
     build-essential \
     curl \
     netcat-openbsd \
+    dos2unix \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Python dependencies
@@ -16,8 +17,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application code
 COPY . .
 
-# Make wait script executable
-RUN chmod +x /app/scripts/wait-for-it.sh
+# Convert line endings and make wait script executable
+RUN dos2unix /app/scripts/wait-for-it.sh && \
+    chmod +x /app/scripts/wait-for-it.sh
 
 # Create non-root user
 RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app
@@ -26,4 +28,3 @@ USER appuser
 EXPOSE 8000
 
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
-
