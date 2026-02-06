@@ -152,6 +152,7 @@ services:
       - ./frontend:/app
       - /app/node_modules
       - /app/.next
+      - /app/public/cesium
     depends_on:
       - backend
     networks:
