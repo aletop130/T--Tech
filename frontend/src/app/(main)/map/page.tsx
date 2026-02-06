@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import dynamic from 'next/dynamic';
-import { Card, Elevation, Spinner, Tag, Icon, Button, Checkbox } from '@blueprintjs/core';
+import { Card, Elevation, Spinner, Tag, Icon, Button, Checkbox, Intent } from '@blueprintjs/core';
 import { api, GroundStation, Satellite, ConjunctionEvent } from '@/lib/api';
 import * as Cesium from 'cesium';
 import { CesiumViewer } from '@/components/CesiumMap/CesiumViewer';
@@ -16,44 +16,174 @@ const DynamicCesiumViewer = dynamic(
   { ssr: false }
 );
 
+// Initialize satellite.js promise - wait for it before using
+let satellitePromise: Promise<typeof import('satellite.js') | null> | null = null;
+let satelliteModule: typeof import('satellite.js') | null = null;
+
+const initializeSatellite = () => {
+  if (typeof window === 'undefined') return null;
+  if (satelliteModule) return Promise.resolve(satelliteModule);
+  if (!satellitePromise) {
+    satellitePromise = import('satellite.js').then((mod) => {
+      satelliteModule = mod;
+      return mod;
+    });
+  }
+  return satellitePromise;
+};
+
+// Orbit data with TLE
+interface OrbitData {
+  satellite_id: string;
+  positions: Array<{ lat: number; lon: number; alt: number; time: string }>;
+  tle_line1?: string;
+  tle_line2?: string;
+  epoch?: string;
+}
+
 export default function MapPage() {
   const [viewer, setViewer] = useState<Cesium.Viewer | null>(null);
   const [groundStations, setGroundStations] = useState<GroundStation[]>([]);
   const [satellites, setSatellites] = useState<Satellite[]>([]);
   const [conjunctions, setConjunctions] = useState<ConjunctionEvent[]>([]);
-  const [orbits, setOrbits] = useState<Array<{
-    satellite_id: string;
-    positions: Array<{ lat: number; lon: number; alt: number; time: string }>;
-  }>>([]);
+  const [orbits, setOrbits] = useState<OrbitData[]>([]);
   const [loading, setLoading] = useState(true);
+  const [satelliteReady, setSatelliteReady] = useState(false);
+  const [fetchingFamous, setFetchingFamous] = useState(false);
+  const [fetchMessage, setFetchMessage] = useState<string | null>(null);
+  const [fetchIntent, setFetchIntent] = useState<Intent>(Intent.SUCCESS);
   const [selectedStation, setSelectedStation] = useState<GroundStation | null>(null);
+  const [selectedSatellite, setSelectedSatellite] = useState<Satellite | null>(null);
+  const [loadingSatellite, setLoadingSatellite] = useState(false);
   const [showOrbits, setShowOrbits] = useState(true);
   const [showCoverage, setShowCoverage] = useState(true);
   const [showConjunctions, setShowConjunctions] = useState(true);
   const satellitePositionsRef = useRef<Map<string, Cesium.Cartesian3>>(new Map());
+  const animationFrameRef = useRef<number | null>(null);
+  const lastUpdateRef = useRef<number>(0);
 
   useEffect(() => {
-    loadData();
+    // Initialize satellite.js first, then load data
+    const init = initializeSatellite();
+    if (init) {
+      init.then(() => {
+        setSatelliteReady(true);
+        loadData();
+      });
+    } else {
+      // SSR case - load data anyway (satellite.js won't be used)
+      loadData();
+    }
   }, []);
+
+  // Real-time position updates
+  useEffect(() => {
+    if (!satelliteReady || !satelliteModule || satellites.length === 0 || orbits.length === 0) return;
+
+    const updatePositions = () => {
+      const now = Date.now();
+      // Update every 5 seconds to avoid too much computation
+      if (now - lastUpdateRef.current < 5000) {
+        animationFrameRef.current = requestAnimationFrame(updatePositions);
+        return;
+      }
+      lastUpdateRef.current = now;
+
+      const updatedOrbits = orbits.map((orbit) => {
+        if (!orbit.tle_line1 || !orbit.tle_line2 || !satelliteModule) {
+          return orbit;
+        }
+
+        try {
+          const satrec = satelliteModule.twoline2satrec(orbit.tle_line1, orbit.tle_line2);
+          const currentTime = new Date();
+          
+          // Propagate to current time
+          const positionAndVelocity = satelliteModule.propagate(satrec, currentTime);
+          
+          if (positionAndVelocity.position && typeof positionAndVelocity.position === 'object') {
+            // Convert ECI to lat/lon/alt
+            const gmst = satelliteModule.gstime(currentTime);
+            const latLonAlt = satelliteModule.eciToGeodetic(positionAndVelocity.position, gmst);
+            
+            // Convert radians to degrees manually (radiansToDegrees not in types)
+            const radToDeg = (radians: number) => radians * (180 / Math.PI);
+            
+            // Update first position with current propagated position
+            const newPositions = [...orbit.positions];
+            if (newPositions.length > 0) {
+              newPositions[0] = {
+                lat: radToDeg(latLonAlt.latitude),
+                lon: radToDeg(latLonAlt.longitude),
+                alt: latLonAlt.height,
+                time: currentTime.toISOString(),
+              };
+            }
+            
+            return { ...orbit, positions: newPositions };
+          }
+        } catch (e) {
+          // Keep original positions if propagation fails
+        }
+        
+        return orbit;
+      });
+
+      setOrbits(updatedOrbits);
+      
+      // Update satellite positions ref
+      updatedOrbits.forEach((orbit) => {
+        if (orbit.positions.length > 0) {
+          const pos = orbit.positions[0];
+          satellitePositionsRef.current.set(
+            orbit.satellite_id,
+            Cesium.Cartesian3.fromDegrees(pos.lon, pos.lat, pos.alt * 1000)
+          );
+        }
+      });
+
+      animationFrameRef.current = requestAnimationFrame(updatePositions);
+    };
+
+    animationFrameRef.current = requestAnimationFrame(updatePositions);
+
+    return () => {
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+      }
+    };
+  }, [satellites, orbits]);
 
   const loadData = async () => {
     setLoading(true);
     try {
-      const [stationsData, satellitesData, conjunctionsData] = await Promise.all([
+      const [stationsData, satellitesWithOrbits, conjunctionsData] = await Promise.all([
         api.getGroundStations({ page_size: 100 }),
-        api.getSatellites({ page_size: 100, is_active: true }),
+        api.getSatellitesWithOrbits(),
         api.getConjunctions({ page_size: 50, is_actionable: true }),
       ]);
 
       setGroundStations(stationsData.items);
-      setSatellites(satellitesData.items);
+      setSatellites(satellitesWithOrbits);
       setConjunctions(conjunctionsData.items);
 
-      // Generate orbit positions (simplified - in production, use actual TLE propagation)
-      const generatedOrbits = satellitesData.items.map((sat) => ({
-        satellite_id: sat.id,
-        positions: generateOrbitPositions(sat),
-      }));
+      // Generate orbit positions from TLE if available
+      const generatedOrbits: OrbitData[] = satellitesWithOrbits.map((sat) => {
+        const tle1 = sat.latest_orbit?.tle_line1;
+        const tle2 = sat.latest_orbit?.tle_line2;
+        
+        if (tle1 && tle2 && satelliteModule) {
+          // Use TLE for realistic orbit
+          return generateOrbitFromTLE(sat.id, tle1, tle2, sat.latest_orbit?.epoch);
+        } else {
+          // Fallback to simplified orbit
+          return {
+            satellite_id: sat.id,
+            positions: generateOrbitPositions(sat),
+          };
+        }
+      });
+      
       setOrbits(generatedOrbits);
 
       // Store satellite positions for conjunction layer
@@ -73,14 +203,98 @@ export default function MapPage() {
     }
   };
 
-  // Simplified orbit generation (in production, use SGP4 from TLE)
-  const generateOrbitPositions = (satellite: Satellite): Array<{
+  const fetchFamousSatellites = async () => {
+    setFetchingFamous(true);
+    setFetchMessage(null);
+    
+    try {
+      const result = await api.fetchFamousSatellites();
+      
+      if (result.success) {
+        setFetchIntent(Intent.SUCCESS);
+        setFetchMessage(result.message);
+        
+        // Reload data to get new satellites with orbits
+        await loadData();
+        
+        // Clear message after 5 seconds
+        setTimeout(() => setFetchMessage(null), 5000);
+      } else {
+        setFetchIntent(Intent.DANGER);
+        setFetchMessage(result.message || 'Failed to fetch satellites');
+      }
+    } catch (error) {
+      setFetchIntent(Intent.DANGER);
+      setFetchMessage(error instanceof Error ? error.message : 'Failed to fetch satellites');
+    } finally {
+      setFetchingFamous(false);
+    }
+  };
+
+  // Generate orbit positions from TLE using satellite.js
+  const generateOrbitFromTLE = useCallback((
+    satelliteId: string,
+    tleLine1: string,
+    tleLine2: string,
+    epoch?: string
+  ): OrbitData => {
+    const positions: Array<{ lat: number; lon: number; alt: number; time: string }> = [];
+    
+    if (!satelliteModule) {
+      return {
+        satellite_id: satelliteId,
+        positions: [],
+        tle_line1: tleLine1,
+        tle_line2: tleLine2,
+        epoch,
+      };
+    }
+
+    try {
+      const satrec = satelliteModule.twoline2satrec(tleLine1, tleLine2);
+      const numPoints = 100;
+      const now = new Date();
+      const radToDeg = (radians: number) => radians * (180 / Math.PI);
+      
+      // Generate positions for one full orbit
+      for (let i = 0; i < numPoints; i++) {
+        const time = new Date(now.getTime() + i * 60000); // Every minute
+        const positionAndVelocity = satelliteModule.propagate(satrec, time);
+        
+        if (positionAndVelocity.position && typeof positionAndVelocity.position === 'object') {
+          const gmst = satelliteModule.gstime(time);
+          const latLonAlt = satelliteModule.eciToGeodetic(positionAndVelocity.position, gmst);
+          
+          positions.push({
+            lat: radToDeg(latLonAlt.latitude),
+            lon: radToDeg(latLonAlt.longitude),
+            alt: latLonAlt.height,
+            time: time.toISOString(),
+          });
+        }
+      }
+    } catch (e) {
+      console.error('Error propagating TLE:', e);
+    }
+
+    return {
+      satellite_id: satelliteId,
+      positions,
+      tle_line1: tleLine1,
+      tle_line2: tleLine2,
+      epoch,
+    };
+  }, []);
+
+  // Generate simplified orbit positions (fallback)
+  const generateOrbitPositions = useCallback((sat: Satellite): Array<{
     lat: number;
     lon: number;
     alt: number;
     time: string;
   }> => {
     const positions: Array<{ lat: number; lon: number; alt: number; time: string }> = [];
+    
     const altitude = 400; // km (typical LEO)
     const numPoints = 100;
 
@@ -97,7 +311,7 @@ export default function MapPage() {
     }
 
     return positions;
-  };
+  }, []);
 
   const handleViewerReady = (cesiumViewer: Cesium.Viewer) => {
     setViewer(cesiumViewer);
@@ -125,12 +339,61 @@ export default function MapPage() {
   };
 
   const flyToSatellite = (satellite: Satellite) => {
+    setLoadingSatellite(true);
+    setSelectedSatellite(satellite);
+    
     const orbit = orbits.find((o) => o.satellite_id === satellite.id);
-    if (viewer && orbit && orbit.positions.length > 0) {
-      const pos = orbit.positions[0];
+    
+    if (!viewer) {
+      console.warn('Viewer not ready');
+      setLoadingSatellite(false);
+      return;
+    }
+    
+    if (!orbit) {
+      console.warn('Orbit not found for satellite:', satellite.id);
+      setLoadingSatellite(false);
+      return;
+    }
+    
+    if (!orbit.positions || orbit.positions.length === 0) {
+      console.warn('No positions available for satellite:', satellite.id);
+      setLoadingSatellite(false);
+      return;
+    }
+    
+    const pos = orbit.positions[0];
+    
+    if (typeof pos.lon !== 'number' || typeof pos.lat !== 'number' || typeof pos.alt !== 'number') {
+      console.error('Invalid position data:', pos);
+      setLoadingSatellite(false);
+      return;
+    }
+    
+    if (!Number.isFinite(pos.lon) || !Number.isFinite(pos.lat) || !Number.isFinite(pos.alt)) {
+      console.error('Position contains invalid values:', pos);
+      setLoadingSatellite(false);
+      return;
+    }
+    
+    if (pos.lat < -90 || pos.lat > 90) {
+      console.error('Invalid latitude:', pos.lat);
+      setLoadingSatellite(false);
+      return;
+    }
+    
+    const altitudeMeters = pos.alt * 1000 + 1000;
+    
+    try {
       viewer.camera.flyTo({
-        destination: Cesium.Cartesian3.fromDegrees(pos.lon, pos.lat, pos.alt * 1000 + 1000),
+        destination: Cesium.Cartesian3.fromDegrees(pos.lon, pos.lat, altitudeMeters),
+        duration: 2,
       });
+      // Set loading to false after animation
+      setTimeout(() => setLoadingSatellite(false), 2100);
+    } catch (error) {
+      console.error('Failed to fly to satellite:', error);
+      setLoadingSatellite(false);
     }
   };
 
@@ -143,6 +406,14 @@ export default function MapPage() {
           3D Globe View
         </h1>
         <div className="flex items-center gap-4">
+          <Button
+            intent={Intent.PRIMARY}
+            loading={fetchingFamous}
+            onClick={fetchFamousSatellites}
+            icon="satellite"
+          >
+            Load Famous Satellites
+          </Button>
           <Checkbox
             checked={showOrbits}
             onChange={(e) => setShowOrbits(e.currentTarget.checked)}
@@ -160,6 +431,13 @@ export default function MapPage() {
           />
         </div>
       </div>
+
+      {/* Fetch message */}
+      {fetchMessage && (
+        <div className={`mb-4 p-3 rounded ${fetchIntent === Intent.SUCCESS ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+          {fetchMessage}
+        </div>
+      )}
 
       <div className="flex-1 flex gap-4 min-h-0">
         {/* Map */}
@@ -216,12 +494,18 @@ export default function MapPage() {
                 {satellites.slice(0, 10).map((sat) => (
                   <div
                     key={sat.id}
-                    className="p-2 text-sm hover:bg-sda-bg-tertiary rounded cursor-pointer"
+                    className={`p-2 text-sm hover:bg-sda-bg-tertiary rounded cursor-pointer ${
+                      selectedSatellite?.id === sat.id ? 'bg-sda-bg-tertiary' : ''
+                    }`}
                     onClick={() => flyToSatellite(sat)}
                   >
                     <div className="flex items-center justify-between">
                       <span className="font-medium">{sat.name}</span>
-                      <Tag minimal>{sat.norad_id}</Tag>
+                      {loadingSatellite && selectedSatellite?.id === sat.id ? (
+                        <Spinner size={16} />
+                      ) : (
+                        <Tag minimal>{sat.norad_id}</Tag>
+                      )}
                     </div>
                   </div>
                 ))}

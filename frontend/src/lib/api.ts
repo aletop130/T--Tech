@@ -8,6 +8,28 @@ export interface PaginatedResponse<T> {
   pages: number;
 }
 
+export interface Orbit {
+  id: string;
+  satellite_id: string;
+  epoch: string;
+  semi_major_axis_km?: number;
+  eccentricity?: number;
+  inclination_deg?: number;
+  raan_deg?: number;
+  arg_perigee_deg?: number;
+  mean_anomaly_deg?: number;
+  mean_motion_rev_day?: number;
+  tle_line1?: string;
+  tle_line2?: string;
+  orbit_type?: string;
+  period_minutes?: number;
+  apogee_km?: number;
+  perigee_km?: number;
+  source: string;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface Satellite {
   id: string;
   norad_id: number;
@@ -20,6 +42,18 @@ export interface Satellite {
   tags: string[];
   created_at: string;
   updated_at: string;
+}
+
+export interface SatelliteDetail extends Satellite {
+  latest_orbit?: Orbit;
+  relations: Array<{
+    id: string;
+    source_type: string;
+    source_id: string;
+    relation_type: string;
+    target_type: string;
+    target_id: string;
+  }>;
 }
 
 export interface GroundStation {
@@ -127,6 +161,10 @@ class ApiClient {
 
   async getSatellite(id: string): Promise<Satellite> {
     return this.fetch(`/api/v1/ontology/satellites/${id}`);
+  }
+
+  async getSatellitesWithOrbits(): Promise<SatelliteDetail[]> {
+    return this.fetch('/api/v1/ontology/satellites/with-orbits');
   }
 
   // Ground Stations
@@ -307,6 +345,47 @@ class ApiClient {
     }
 
     return response.json();
+  }
+
+  // CelesTrack Integration
+  async fetchFromCelesTrack(noradIds: number[]): Promise<{
+    success: boolean;
+    message: string;
+    satellites_created: number;
+    satellites_updated: number;
+    satellite_ids: string[];
+    errors: string[];
+  }> {
+    return this.fetch('/api/v1/ontology/satellites/fetch-celestrack', {
+      method: 'POST',
+      body: JSON.stringify({ norad_ids: noradIds }),
+    });
+  }
+
+  async fetchFamousSatellites(): Promise<{
+    success: boolean;
+    message: string;
+    satellites_created: number;
+    satellites_updated: number;
+    satellite_ids: string[];
+    errors: string[];
+  }> {
+    return this.fetch('/api/v1/ontology/satellites/fetch-famous', {
+      method: 'POST',
+    });
+  }
+
+  async refreshTLE(satelliteId: string): Promise<{
+    success: boolean;
+    message: string;
+    satellite_id?: string;
+    norad_id?: number;
+    orbit_id?: string;
+    epoch?: string;
+  }> {
+    return this.fetch(`/api/v1/ontology/satellites/${satelliteId}/refresh-tle`, {
+      method: 'POST',
+    });
   }
 }
 

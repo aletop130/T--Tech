@@ -11,6 +11,7 @@ from app.api.deps import (
 from app.core.security import TokenData
 from app.core.exceptions import NotFoundError
 from app.services.ontology import OntologyService
+from app.services.celestrack import CelesTrackService, get_celestrack_service, FAMOUS_SATELLITES
 from app.schemas.common import PaginatedResponse
 from app.schemas.ontology import (
     SatelliteCreate,
@@ -30,6 +31,9 @@ from app.schemas.ontology import (
     ConjunctionEventDetail,
     RelationCreate,
     RelationResponse,
+    CelestrackFetchRequest,
+    CelestrackFetchResponse,
+    CelestrackRefreshResponse,
 )
 
 router = APIRouter()
@@ -64,6 +68,45 @@ async def list_satellites(
         page_size=page_size,
         pages=(total + page_size - 1) // page_size,
     )
+
+
+@router.get("/satellites/with-orbits", response_model=list[SatelliteDetail])
+async def list_satellites_with_orbits(
+    user: Annotated[TokenData, Depends(get_current_user)],
+    service: Annotated[OntologyService, Depends(get_ontology_service)],
+):
+    """List all satellites with their latest orbits including TLE data.
+    
+    Returns satellites with full orbit details for visualization.
+    """
+    satellites, _ = await service.list_satellites(
+        tenant_id=user.tenant_id,
+        page=1,
+        page_size=1000,
+        is_active=True,
+    )
+    
+    result = []
+    for sat in satellites:
+        latest_orbit = await service.get_latest_orbit(sat.id, user.tenant_id)
+        relations = await service.get_relations(
+            tenant_id=user.tenant_id,
+            source_type="satellite",
+            source_id=sat.id,
+        )
+        
+        result.append(SatelliteDetail(
+            **SatelliteResponse.model_validate(sat).model_dump(),
+            latest_orbit=(
+                OrbitResponse.model_validate(latest_orbit)
+                if latest_orbit else None
+            ),
+            relations=[
+                RelationResponse.model_validate(r) for r in relations
+            ],
+        ))
+    
+    return result
 
 
 @router.post("/satellites", response_model=SatelliteResponse, status_code=201)
@@ -401,4 +444,109 @@ async def list_relations(
         target_id=target_id,
         relation_type=relation_type,
     )
+
+
+# ============== CelesTrack Integration ==============
+
+@router.post(
+    "/satellites/fetch-celestrack",
+    response_model=CelestrackFetchResponse,
+    status_code=201
+)
+async def fetch_from_celestrack(
+    data: CelestrackFetchRequest,
+    user: Annotated[TokenData, Depends(get_current_user)],
+):
+    """Fetch satellites from CelesTrack and store in database.
+    
+    Receives array of NORAD IDs, downloads TLE from CelesTrack,
+    creates or updates satellites and orbits in the database.
+    """
+    celestrack = get_celestrack_service()
+    
+    try:
+        result = await celestrack.fetch_and_store_satellites(
+            norad_ids=data.norad_ids,
+            tenant_id=user.tenant_id,
+            user_id=user.sub,
+        )
+        
+        return CelestrackFetchResponse(
+            success=result.get("success", False),
+            message=f"Created {result.get('satellites_created', 0)}, updated {result.get('satellites_updated', 0)} satellites",
+            satellites_created=result.get("satellites_created", 0),
+            satellites_updated=result.get("satellites_updated", 0),
+            satellite_ids=result.get("satellite_ids", []),
+            errors=result.get("errors", []),
+        )
+    finally:
+        await celestrack.close()
+
+
+@router.post(
+    "/satellites/fetch-famous",
+    response_model=CelestrackFetchResponse,
+    status_code=201
+)
+async def fetch_famous_satellites(
+    user: Annotated[TokenData, Depends(get_current_user)],
+):
+    """Fetch the 10 famous satellites from CelesTrack.
+    
+    Predefined list: ISS, Hubble, Landsat 5, TESS, Tiangong-1, 
+    Aeolus, Starlink-1007, NOAA-15, GPS BIIR-2, Cartosat-2F
+    """
+    celestrack = get_celestrack_service()
+    
+    try:
+        norad_ids = list(FAMOUS_SATELLITES.keys())
+        result = await celestrack.fetch_and_store_satellites(
+            norad_ids=norad_ids,
+            tenant_id=user.tenant_id,
+            user_id=user.sub,
+        )
+        
+        return CelestrackFetchResponse(
+            success=result.get("success", False),
+            message=f"Famous satellites: created {result.get('satellites_created', 0)}, updated {result.get('satellites_updated', 0)}",
+            satellites_created=result.get("satellites_created", 0),
+            satellites_updated=result.get("satellites_updated", 0),
+            satellite_ids=result.get("satellite_ids", []),
+            errors=result.get("errors", []),
+        )
+    finally:
+        await celestrack.close()
+
+
+@router.post(
+    "/satellites/{satellite_id}/refresh-tle",
+    response_model=CelestrackRefreshResponse
+)
+async def refresh_satellite_tle(
+    satellite_id: Annotated[str, Path()],
+    user: Annotated[TokenData, Depends(get_current_user)],
+):
+    """Refresh TLE for a specific satellite from CelesTrack.
+    
+    Downloads the latest TLE and creates a new orbit record.
+    """
+    celestrack = get_celestrack_service()
+    
+    try:
+        result = await celestrack.refresh_satellite_tle(
+            satellite_id=satellite_id,
+            tenant_id=user.tenant_id,
+            user_id=user.sub,
+        )
+        
+        return CelestrackRefreshResponse(
+            success=result.get("success", False),
+            message=result.get("message", ""),
+            satellite_id=result.get("satellite_id"),
+            norad_id=result.get("norad_id"),
+            orbit_id=result.get("orbit_id"),
+            epoch=result.get("epoch"),
+        )
+    finally:
+        await celestrack.close()
 

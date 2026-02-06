@@ -49,6 +49,10 @@ class Settings(BaseSettings):
     # Logging
     LOG_LEVEL: str = "INFO"
     LOG_FORMAT: str = "json"
+    
+    # CelesTrack
+    CELESTRACK_BASE_URL: str = "https://celestrak.org/NORAD/elements"
+    TLE_CACHE_HOURS: int = 6
 
 
 @lru_cache

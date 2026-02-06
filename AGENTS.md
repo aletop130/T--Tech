@@ -1,0 +1,1 @@
+EVERYTHING IS MOUNTED ON DOCKER. FRONTEND DOESN'T NEED TO BE REBUILD IN TERMINAL, just restart the container and updates are hot loaded

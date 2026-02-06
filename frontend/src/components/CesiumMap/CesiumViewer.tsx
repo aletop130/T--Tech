@@ -1,16 +1,12 @@
-'use client';
-
-import { useEffect, useRef, useState, useMemo } from 'react';
+import { useEffect, useRef, useState, useCallback, memo } from 'react';
 import { Viewer, useCesium } from 'resium';
 import * as Cesium from 'cesium';
 
 // Configure Cesium to use local assets - MUST be done before any Cesium usage
 if (typeof window !== 'undefined') {
-  // Set the base URL for Cesium assets
   window.CESIUM_BASE_URL = '/cesium/';
   Cesium.buildModuleUrl.setBaseUrl('/cesium/');
-  
-  // Set default Ion token if available
+
   if (process.env.NEXT_PUBLIC_CESIUM_ION_TOKEN) {
     Cesium.Ion.defaultAccessToken = process.env.NEXT_PUBLIC_CESIUM_ION_TOKEN;
   }
@@ -21,31 +17,20 @@ interface CesiumViewerProps {
   onViewerReady?: (viewer: Cesium.Viewer) => void;
 }
 
-// Internal component to access viewer via hook
-function ViewerConfig({ onViewerReady }: { onViewerReady?: (viewer: Cesium.Viewer) => void }) {
+const ViewerConfig = memo(function ViewerConfig({ onViewerReady }: { onViewerReady?: (viewer: Cesium.Viewer) => void }) {
   const { viewer } = useCesium();
   const isConfiguredRef = useRef(false);
 
-  useEffect(() => {
+  const handleReady = useCallback(() => {
     if (viewer && !isConfiguredRef.current) {
-      console.log('Cesium Viewer ready, configuring...');
-      
-      // Configure dark theme
       viewer.scene.globe.enableLighting = true;
       viewer.scene.globe.dynamicAtmosphereLighting = true;
       viewer.scene.globe.dynamicAtmosphereLightingFromSun = true;
-      
-      // Ensure globe is visible
       viewer.scene.globe.show = true;
       viewer.scene.globe.depthTestAgainstTerrain = false;
-      
-      // Set scene background
       viewer.scene.backgroundColor = Cesium.Color.BLACK;
-      
-      // Enable sky atmosphere
       viewer.scene.skyAtmosphere.show = true;
-      
-      // Configure SkyBox with local assets
+
       viewer.scene.skyBox = new Cesium.SkyBox({
         sources: {
           positiveX: '/cesium/Assets/Textures/SkyBox/tycho2t3_80_px.jpg',
@@ -57,27 +42,20 @@ function ViewerConfig({ onViewerReady }: { onViewerReady?: (viewer: Cesium.Viewe
         }
       });
       viewer.scene.skyBox.show = true;
-      
-      // Configure imagery - use OpenStreetMap
+
       try {
-        // Remove default layers
         viewer.imageryLayers.removeAll();
-        
-        // Add OpenStreetMap imagery
         const osmProvider = new Cesium.UrlTemplateImageryProvider({
           url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
           subdomains: ['a', 'b', 'c'],
           maximumLevel: 19,
           credit: new Cesium.Credit('© OpenStreetMap contributors')
         });
-        
         viewer.imageryLayers.addImageryProvider(osmProvider);
-        console.log('OpenStreetMap imagery provider added');
       } catch (error) {
         console.error('Error configuring imagery:', error);
       }
-      
-      // Set initial camera position - view Earth from space
+
       viewer.camera.setView({
         destination: Cesium.Cartesian3.fromDegrees(0, 0, 20000000),
         orientation: {
@@ -87,19 +65,22 @@ function ViewerConfig({ onViewerReady }: { onViewerReady?: (viewer: Cesium.Viewe
         }
       });
 
-      console.log('Cesium Viewer configured successfully');
       isConfiguredRef.current = true;
-      
+
       if (onViewerReady) {
         onViewerReady(viewer);
       }
     }
   }, [viewer, onViewerReady]);
 
-  return null;
-}
+  useEffect(() => {
+    handleReady();
+  }, [handleReady]);
 
-export function CesiumViewer({ className, onViewerReady }: CesiumViewerProps) {
+  return null;
+});
+
+export const CesiumViewer = memo(function CesiumViewer({ className, onViewerReady }: CesiumViewerProps) {
   const creditContainerRef = useRef<HTMLDivElement | null>(null);
   const [isMounted, setIsMounted] = useState(false);
 
@@ -132,18 +113,11 @@ export function CesiumViewer({ className, onViewerReady }: CesiumViewerProps) {
         baseLayerPicker={false}
         navigationHelpButton={false}
         selectionIndicator={true}
-        creditContainer={creditContainerRef.current || undefined}
+        creditContainer={creditContainerRef.current ?? undefined}
         skyBox={false}
-        contextOptions={{
-          webgl: {
-            alpha: false,
-            antialias: true,
-            preserveDrawingBuffer: true
-          }
-        }}
       >
         <ViewerConfig onViewerReady={onViewerReady} />
       </Viewer>
     </div>
   );
-}
+});

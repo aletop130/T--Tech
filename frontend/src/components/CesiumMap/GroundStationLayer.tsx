@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import * as Cesium from 'cesium';
 import { GroundStation } from '@/lib/api';
 
@@ -17,8 +17,28 @@ export function GroundStationLayer({
   showCoverage = true,
   coverageRadiusKm = 2000,
 }: GroundStationLayerProps) {
+  const cleanupRef = useRef<(() => void) | null>(null);
+
   useEffect(() => {
-    if (!viewer || stations.length === 0) return;
+    if (!viewer) return;
+
+    if (cleanupRef.current) {
+      cleanupRef.current();
+      cleanupRef.current = null;
+    }
+
+    if (!viewer.entities) {
+      const interval = setInterval(() => {
+        if (viewer.entities) {
+          clearInterval(interval);
+        }
+      }, 50);
+
+      cleanupRef.current = () => clearInterval(interval);
+      return;
+    }
+
+    const currentEntities = new Set<string>();
 
     stations.forEach((station) => {
       const position = Cesium.Cartesian3.fromDegrees(
@@ -27,8 +47,7 @@ export function GroundStationLayer({
         0
       );
 
-      // Create ground station point
-      viewer.entities.add({
+      const stationEntity = viewer.entities.add({
         id: `station-${station.id}`,
         name: station.name,
         position: position,
@@ -63,10 +82,10 @@ export function GroundStationLayer({
           </div>
         `,
       });
+      if (stationEntity) currentEntities.add(`station-${station.id}`);
 
-      // Create coverage circle
       if (showCoverage && station.is_operational) {
-        viewer.entities.add({
+        const coverageEntity = viewer.entities.add({
           id: `coverage-${station.id}`,
           name: `${station.name} Coverage`,
           position: position,
@@ -79,18 +98,31 @@ export function GroundStationLayer({
             height: 0,
           },
         });
+        if (coverageEntity) currentEntities.add(`coverage-${station.id}`);
       }
     });
 
-    return () => {
-      // Cleanup entities on unmount
-      stations.forEach((station) => {
-        viewer.entities.removeById(`station-${station.id}`);
-        viewer.entities.removeById(`coverage-${station.id}`);
-      });
+    cleanupRef.current = () => {
+      if (viewer && viewer.entities) {
+        currentEntities.forEach((id) => {
+          try {
+            const entity = viewer.entities.getById(id);
+            if (entity) viewer.entities.remove(entity);
+          } catch {}
+        });
+      }
+      currentEntities.clear();
     };
   }, [viewer, stations, showCoverage, coverageRadiusKm]);
 
+  useEffect(() => {
+    return () => {
+      if (cleanupRef.current) {
+        cleanupRef.current();
+        cleanupRef.current = null;
+      }
+    };
+  }, []);
+
   return null;
 }
-

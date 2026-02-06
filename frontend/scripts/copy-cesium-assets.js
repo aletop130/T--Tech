@@ -7,13 +7,27 @@ const publicCesium = path.join(__dirname, '..', 'public', 'cesium');
 if (fs.existsSync(cesiumSource)) {
   console.log('Copying Cesium assets to public folder...');
 
-  // Remove old assets if they exist
   if (fs.existsSync(publicCesium)) {
     fs.rmSync(publicCesium, { recursive: true, force: true });
   }
 
-  // Copy assets
-  fs.cpSync(cesiumSource, publicCesium, { recursive: true });
+  fs.mkdirSync(publicCesium, { recursive: true });
+
+  const copyDir = (src, dest) => {
+    const entries = fs.readdirSync(src, { withFileTypes: true });
+    fs.mkdirSync(dest, { recursive: true });
+    for (const entry of entries) {
+      const srcPath = path.join(src, entry.name);
+      const destPath = path.join(dest, entry.name);
+      if (entry.isDirectory()) {
+        copyDir(srcPath, destPath);
+      } else {
+        fs.copyFileSync(srcPath, destPath);
+      }
+    }
+  };
+
+  copyDir(cesiumSource, publicCesium);
 
   console.log('Cesium assets copied successfully!');
 } else {

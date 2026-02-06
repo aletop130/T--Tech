@@ -12,23 +12,24 @@
   },
   "dependencies": {
     "@blueprintjs/core": "^5.10.0",
+    "@blueprintjs/datetime2": "^2.3.0",
     "@blueprintjs/icons": "^5.9.0",
+    "@blueprintjs/popover2": "^2.1.0",
     "@blueprintjs/select": "^5.1.0",
     "@blueprintjs/table": "^5.1.0",
-    "@blueprintjs/datetime2": "^2.3.0",
-    "@blueprintjs/popover2": "^2.1.0",
+    "cesium": "^1.137.0",
+    "classnames": "^2.5.1",
+    "d3": "^7.8.5",
+    "date-fns": "^3.3.1",
+    "leaflet": "^1.9.4",
     "next": "^16.1.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "cesium": "^1.137.0",
-    "resium": "^1.19.0",
-    "d3": "^7.8.5",
-    "leaflet": "^1.9.4",
     "react-leaflet": "^4.2.1",
+    "resium": "^1.19.0",
+    "satellite.js": "^5.0.0",
     "swr": "^2.2.4",
-    "zustand": "^4.5.0",
-    "date-fns": "^3.3.1",
-    "classnames": "^2.5.1"
+    "zustand": "^4.5.0"
   },
   "devDependencies": {
     "@types/d3": "^7.4.3",
@@ -45,4 +46,3 @@
     "vitest": "^1.2.2"
   }
 }
-

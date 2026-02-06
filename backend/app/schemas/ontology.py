@@ -261,3 +261,30 @@ class RelationResponse(RelationBase, AuditSchema):
 # Forward references
 SatelliteDetail.model_rebuild()
 
+
+# ============== CelesTrack ==============
+
+class CelestrackFetchRequest(BaseSchema):
+    """Request to fetch satellites from CelesTrack."""
+    norad_ids: list[int] = Field(..., min_length=1, max_length=100, description="List of NORAD IDs to fetch")
+
+
+class CelestrackFetchResponse(BaseSchema):
+    """Response from CelesTrack fetch operation."""
+    success: bool
+    message: str = ""
+    satellites_created: int = 0
+    satellites_updated: int = 0
+    satellite_ids: list[str] = Field(default_factory=list)
+    errors: list[str] = Field(default_factory=list)
+
+
+class CelestrackRefreshResponse(BaseSchema):
+    """Response from TLE refresh operation."""
+    success: bool
+    message: str
+    satellite_id: Optional[str] = None
+    norad_id: Optional[int] = None
+    orbit_id: Optional[str] = None
+    epoch: Optional[str] = None
+

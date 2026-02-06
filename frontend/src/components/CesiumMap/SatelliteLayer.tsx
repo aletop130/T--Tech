@@ -1,7 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
-import { Entity } from 'resium';
+import { useEffect, useRef } from 'react';
 import * as Cesium from 'cesium';
 import { Satellite } from '@/lib/api';
 
@@ -21,39 +20,60 @@ export function SatelliteLayer({
   orbits,
   showOrbits = true,
 }: SatelliteLayerProps) {
-  useEffect(() => {
-    if (!viewer || satellites.length === 0) return;
+  const cleanupRef = useRef<(() => void) | null>(null);
 
-    // Create satellite entities
+  useEffect(() => {
+    if (!viewer) return;
+
+    if (cleanupRef.current) {
+      cleanupRef.current();
+      cleanupRef.current = null;
+    }
+
+    if (!viewer.entities) {
+      const interval = setInterval(() => {
+        if (viewer.entities) {
+          clearInterval(interval);
+        }
+      }, 50);
+
+      cleanupRef.current = () => clearInterval(interval);
+      return;
+    }
+
+    const currentEntities = new Set<string>();
+
     satellites.forEach((sat) => {
       const orbit = orbits.find((o) => o.satellite_id === sat.id);
-      
+
       if (orbit && orbit.positions.length > 0) {
         const positions = orbit.positions.map((pos) =>
           Cesium.Cartesian3.fromDegrees(pos.lon, pos.lat, pos.alt * 1000)
         );
 
-        // Create orbit polyline
+        const satelliteId = `satellite-${sat.id}`;
+        const orbitId = `orbit-${sat.id}`;
+
         if (showOrbits && positions.length > 1) {
-          viewer.entities.add({
-            id: `orbit-${sat.id}`,
+          const entity = viewer.entities.add({
+            id: orbitId,
             name: `${sat.name} Orbit`,
             polyline: {
-              positions: positions,
+              positions: new Cesium.ConstantProperty(positions),
               width: 2,
               material: new Cesium.PolylineGlowMaterialProperty({
                 glowPower: 0.2,
                 color: Cesium.Color.CYAN.withAlpha(0.6),
               }),
               clampToGround: false,
-            },
+            } as Cesium.PolylineGraphics,
           });
+          if (entity) currentEntities.add(orbitId);
         }
 
-        // Create satellite point at current position
         const currentPos = positions[0];
-        viewer.entities.add({
-          id: `satellite-${sat.id}`,
+        const satEntity = viewer.entities.add({
+          id: satelliteId,
           name: sat.name,
           position: currentPos,
           point: {
@@ -72,7 +92,7 @@ export function SatelliteLayer({
             style: Cesium.LabelStyle.FILL_AND_OUTLINE,
             verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
             pixelOffset: new Cesium.Cartesian2(0, -20),
-            show: false, // Show on hover/click
+            show: false,
           },
           description: `
             <div style="font-family: 'IBM Plex Sans', sans-serif;">
@@ -85,18 +105,31 @@ export function SatelliteLayer({
             </div>
           `,
         });
+        if (satEntity) currentEntities.add(satelliteId);
       }
     });
 
-    return () => {
-      // Cleanup entities on unmount
-      satellites.forEach((sat) => {
-        viewer.entities.removeById(`satellite-${sat.id}`);
-        viewer.entities.removeById(`orbit-${sat.id}`);
-      });
+    cleanupRef.current = () => {
+      if (viewer && viewer.entities) {
+        currentEntities.forEach((id) => {
+          try {
+            const entity = viewer.entities.getById(id);
+            if (entity) viewer.entities.remove(entity);
+          } catch {}
+        });
+      }
+      currentEntities.clear();
     };
   }, [viewer, satellites, orbits, showOrbits]);
 
+  useEffect(() => {
+    return () => {
+      if (cleanupRef.current) {
+        cleanupRef.current();
+        cleanupRef.current = null;
+      }
+    };
+  }, []);
+
   return null;
 }
-

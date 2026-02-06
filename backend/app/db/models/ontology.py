@@ -6,7 +6,6 @@ from sqlalchemy import (
     Boolean,
     Column,
     DateTime,
-    Enum as SQLEnum,
     Float,
     ForeignKey,
     Index,
@@ -84,7 +83,7 @@ class Satellite(Base, AuditMixin):
     name = Column(String(100), nullable=False, index=True)
     international_designator = Column(String(20), nullable=True)
     object_type = Column(
-        SQLEnum(ObjectType), default=ObjectType.SATELLITE
+        String(20), default='satellite'
     )
     
     # Owner/operator info
@@ -155,7 +154,7 @@ class Orbit(Base, AuditMixin):
     bstar = Column(Float, nullable=True)
     
     # Derived
-    orbit_type = Column(SQLEnum(OrbitType), nullable=True)
+    orbit_type = Column(String(20), nullable=True)
     period_minutes = Column(Float, nullable=True)
     apogee_km = Column(Float, nullable=True)
     perigee_km = Column(Float, nullable=True)
@@ -172,7 +171,7 @@ class Sensor(Base, AuditMixin):
     
     id = Column(String(50), primary_key=True, default=generate_uuid)
     name = Column(String(100), nullable=False, index=True)
-    sensor_type = Column(SQLEnum(SensorType), nullable=False)
+    sensor_type = Column(String(20), nullable=False)
     
     # Location
     latitude = Column(Float, nullable=True)
@@ -257,7 +256,7 @@ class RFLink(Base, AuditMixin):
     polarization = Column(String(20), nullable=True)
     
     # Status
-    status = Column(SQLEnum(LinkStatus), default=LinkStatus.ACTIVE)
+    status = Column(String(20), default='active')
     signal_strength_dbm = Column(Float, nullable=True)
     bit_error_rate = Column(Float, nullable=True)
     
@@ -281,7 +280,7 @@ class SpaceWeatherEvent(Base, AuditMixin):
     end_time = Column(DateTime, nullable=True)
     
     # Intensity
-    severity = Column(SQLEnum(WeatherSeverity), nullable=False)
+    severity = Column(String(20), nullable=False)
     kp_index = Column(Float, nullable=True)
     dst_index = Column(Float, nullable=True)
     solar_wind_speed = Column(Float, nullable=True)
@@ -327,7 +326,7 @@ class ConjunctionEvent(Base, AuditMixin):
     collision_probability = Column(Float, nullable=True)
     
     # Risk assessment
-    risk_level = Column(SQLEnum(ConjunctionRisk), nullable=False)
+    risk_level = Column(String(20), nullable=False)
     risk_score = Column(Float, nullable=True)  # 0-100
     
     # Analysis metadata

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import * as Cesium from 'cesium';
 import { ConjunctionEvent } from '@/lib/api';
 
@@ -15,16 +15,35 @@ export function ConjunctionLayer({
   conjunctions,
   satellitePositions,
 }: ConjunctionLayerProps) {
+  const cleanupRef = useRef<(() => void) | null>(null);
+
   useEffect(() => {
-    if (!viewer || conjunctions.length === 0) return;
+    if (!viewer) return;
+
+    if (cleanupRef.current) {
+      cleanupRef.current();
+      cleanupRef.current = null;
+    }
+
+    if (!viewer.entities) {
+      const interval = setInterval(() => {
+        if (viewer.entities) {
+          clearInterval(interval);
+        }
+      }, 50);
+
+      cleanupRef.current = () => clearInterval(interval);
+      return;
+    }
+
+    const currentEntities = new Set<string>();
 
     conjunctions.forEach((conj) => {
       const pos1 = satellitePositions.get(conj.primary_object_id);
       const pos2 = satellitePositions.get(conj.secondary_object_id);
 
       if (pos1 && pos2) {
-        // Create line between objects
-        viewer.entities.add({
+        const conjEntity = viewer.entities.add({
           id: `conjunction-${conj.id}`,
           name: `Conjunction: ${conj.id}`,
           polyline: {
@@ -50,10 +69,10 @@ export function ConjunctionLayer({
             </div>
           `,
         });
+        if (conjEntity) currentEntities.add(`conjunction-${conj.id}`);
 
-        // Add warning label at midpoint
         const midpoint = Cesium.Cartesian3.midpoint(pos1, pos2, new Cesium.Cartesian3());
-        viewer.entities.add({
+        const labelEntity = viewer.entities.add({
           id: `conjunction-label-${conj.id}`,
           position: midpoint,
           label: {
@@ -67,18 +86,31 @@ export function ConjunctionLayer({
             pixelOffset: new Cesium.Cartesian2(0, -10),
           },
         });
+        if (labelEntity) currentEntities.add(`conjunction-label-${conj.id}`);
       }
     });
 
-    return () => {
-      // Cleanup entities on unmount
-      conjunctions.forEach((conj) => {
-        viewer.entities.removeById(`conjunction-${conj.id}`);
-        viewer.entities.removeById(`conjunction-label-${conj.id}`);
-      });
+    cleanupRef.current = () => {
+      if (viewer && viewer.entities) {
+        currentEntities.forEach((id) => {
+          try {
+            const entity = viewer.entities.getById(id);
+            if (entity) viewer.entities.remove(entity);
+          } catch {}
+        });
+      }
+      currentEntities.clear();
     };
   }, [viewer, conjunctions, satellitePositions]);
 
+  useEffect(() => {
+    return () => {
+      if (cleanupRef.current) {
+        cleanupRef.current();
+        cleanupRef.current = null;
+      }
+    };
+  }, []);
+
   return null;
 }
-
