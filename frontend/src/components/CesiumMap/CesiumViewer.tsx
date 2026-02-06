@@ -28,8 +28,15 @@ const ViewerConfig = memo(function ViewerConfig({ onViewerReady }: { onViewerRea
       viewer.scene.globe.dynamicAtmosphereLightingFromSun = true;
       viewer.scene.globe.show = true;
       viewer.scene.globe.depthTestAgainstTerrain = false;
-      viewer.scene.backgroundColor = Cesium.Color.BLACK;
+      viewer.scene.backgroundColor = Cesium.Color.fromCssColorString('#0a0a0f');
       viewer.scene.skyAtmosphere.show = true;
+      viewer.scene.skyAtmosphere.hueShift = -0.02;
+      viewer.scene.skyAtmosphere.saturationShift = 0.2;
+      viewer.scene.skyAtmosphere.brightnessShift = 0.1;
+
+      viewer.scene.fog.enabled = true;
+      viewer.scene.fog.density = 0.0001;
+      viewer.scene.fog.screenSpaceErrorFactor = 2.0;
 
       viewer.scene.skyBox = new Cesium.SkyBox({
         sources: {
@@ -45,6 +52,7 @@ const ViewerConfig = memo(function ViewerConfig({ onViewerReady }: { onViewerRea
 
       try {
         viewer.imageryLayers.removeAll();
+
         const osmProvider = new Cesium.UrlTemplateImageryProvider({
           url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
           subdomains: ['a', 'b', 'c'],
@@ -52,6 +60,7 @@ const ViewerConfig = memo(function ViewerConfig({ onViewerReady }: { onViewerRea
           credit: new Cesium.Credit('© OpenStreetMap contributors')
         });
         viewer.imageryLayers.addImageryProvider(osmProvider);
+
       } catch (error) {
         console.error('Error configuring imagery:', error);
       }
@@ -108,11 +117,11 @@ export const CesiumViewer = memo(function CesiumViewer({ className, onViewerRead
         vrButton={false}
         geocoder={true}
         homeButton={true}
-        infoBox={true}
+        infoBox={false}
         sceneModePicker={true}
         baseLayerPicker={false}
         navigationHelpButton={false}
-        selectionIndicator={true}
+        selectionIndicator={false}
         creditContainer={creditContainerRef.current ?? undefined}
         skyBox={false}
       >
