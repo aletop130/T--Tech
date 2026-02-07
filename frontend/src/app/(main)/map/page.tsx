@@ -2,13 +2,14 @@
 
 import { useEffect, useState, useRef, useCallback } from 'react';
 import dynamic from 'next/dynamic';
-import { Card, Elevation, Spinner, Tag, Icon, Button, Checkbox, Intent, Collapse } from '@blueprintjs/core';
+import { Card, Elevation, Spinner, Tag, Icon, Button, Checkbox, Intent } from '@blueprintjs/core';
 import { api, GroundStation, Satellite, ConjunctionEvent } from '@/lib/api';
 import * as Cesium from 'cesium';
 import { CesiumViewer } from '@/components/CesiumMap/CesiumViewer';
 import { SatelliteLayer } from '@/components/CesiumMap/SatelliteLayer';
 import { GroundStationLayer } from '@/components/CesiumMap/GroundStationLayer';
 import { ConjunctionLayer } from '@/components/CesiumMap/ConjunctionLayer';
+import { SatelliteInfoCard } from '@/components/CesiumMap/SatelliteInfoCard';
 import { AgentChat } from '@/components/Chat/AgentChat';
 import { cesiumController } from '@/lib/cesium/controller';
 
@@ -320,8 +321,32 @@ export default function MapPage() {
     cesiumController.initialize(cesiumViewer);
 
     cesiumViewer.selectedEntityChanged.addEventListener((selectedEntity) => {
-      if (selectedEntity) {
-        cesiumViewer.flyTo(selectedEntity);
+      if (selectedEntity && selectedEntity.position) {
+        // Check if entity has valid position before flying
+        try {
+          const position = selectedEntity.position.getValue(cesiumViewer.clock.currentTime);
+          if (position && Cesium.Cartesian3.equals(position, Cesium.Cartesian3.ZERO) === false) {
+            cesiumViewer.flyTo(selectedEntity, {
+              duration: 2,
+              offset: new Cesium.HeadingPitchRange(
+                Cesium.Math.toRadians(0),
+                Cesium.Math.toRadians(-45),
+                10000
+              )
+            });
+          }
+        } catch (e) {
+          console.warn('Could not fly to selected entity:', e);
+        }
+
+        // Check if selected entity is a satellite and update selection state
+        if (selectedEntity.id && typeof selectedEntity.id === 'string' && selectedEntity.id.startsWith('satellite-')) {
+          const satelliteId = selectedEntity.id.replace('satellite-', '');
+          const sat = satellites.find((s) => s.id === satelliteId);
+          if (sat) {
+            setSelectedSatellite(sat);
+          }
+        }
       }
     });
   };
@@ -473,13 +498,126 @@ export default function MapPage() {
                       satellitePositions={satellitePositionsRef.current}
                     />
                   )}
+                  {/* Satellite Info Card */}
+                  {selectedSatellite && (
+                    <SatelliteInfoCard
+                      satellite={selectedSatellite}
+                      orbit={orbits.find((o) => o.satellite_id === selectedSatellite.id)}
+                      onClose={() => setSelectedSatellite(null)}
+                    />
+                  )}
                 </>
               )}
             </div>
           )}
         </Card>
 
-        {/* AI Chat Panel - Fixed Sidebar */}
+        {/* Satellites Panel */}
+        <Card elevation={Elevation.TWO} className="w-80 flex flex-col overflow-hidden" style={{ minWidth: '320px' }}>
+          <div className="p-3 border-b border-sda-border-default bg-sda-bg-secondary">
+            <span className="text-sm font-semibold text-sda-text-primary flex items-center gap-2">
+              <Icon icon="satellite" className="text-sda-accent-cyan" />
+              Satellites ({satellites.length})
+            </span>
+          </div>
+          <div className="flex-1 overflow-auto p-3">
+            <div className="space-y-1">
+              {satellites.slice(0, 15).map((sat) => (
+                <div
+                  key={sat.id}
+                  className={`p-2 text-sm hover:bg-sda-bg-tertiary rounded cursor-pointer ${
+                    selectedSatellite?.id === sat.id ? 'bg-sda-bg-tertiary' : ''
+                  }`}
+                  onClick={() => flyToSatellite(sat)}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="font-medium">{sat.name}</span>
+                    {loadingSatellite && selectedSatellite?.id === sat.id ? (
+                      <Spinner size={16} />
+                    ) : (
+                      <Tag minimal>{sat.norad_id}</Tag>
+                    )}
+                  </div>
+                </div>
+              ))}
+              {satellites.length > 15 && (
+                <div className="text-xs text-sda-text-muted text-center pt-2">
+                  +{satellites.length - 15} more
+                </div>
+              )}
+            </div>
+
+            {/* Ground Stations */}
+            <div className="mt-4 pt-4 border-t border-sda-border-default">
+              <h4 className="text-sm font-semibold text-sda-text-secondary mb-2 flex items-center gap-2">
+                <Icon icon="globe" className="text-sda-accent-cyan" />
+                Ground Stations ({groundStations.length})
+              </h4>
+              <div className="space-y-1 max-h-40 overflow-auto">
+                {groundStations.map((station) => (
+                  <div
+                    key={station.id}
+                    className={`p-2 text-sm hover:bg-sda-bg-tertiary rounded cursor-pointer ${
+                      selectedStation?.id === station.id ? 'bg-sda-bg-tertiary' : ''
+                    }`}
+                    onClick={() => flyToStation(station)}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="font-medium">{station.name}</span>
+                      <Tag
+                        intent={station.is_operational ? 'success' : 'danger'}
+                        minimal
+                      >
+                        {station.is_operational ? 'ON' : 'OFF'}
+                      </Tag>
+                    </div>
+                    <div className="text-xs text-sda-text-muted mt-1">
+                      {station.code && `${station.code} • `}
+                      {station.country}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Conjunctions */}
+            {showConjunctions && conjunctions.length > 0 && (
+              <div className="mt-4 pt-4 border-t border-sda-border-default">
+                <h4 className="text-sm font-semibold text-sda-text-secondary mb-2 flex items-center gap-2">
+                  <Icon icon="warning-sign" className="text-sda-accent-cyan" />
+                  Conjunctions ({conjunctions.length})
+                </h4>
+                <div className="space-y-1 max-h-32 overflow-auto">
+                  {conjunctions.slice(0, 5).map((conj) => (
+                    <div
+                      key={conj.id}
+                      className="p-2 text-sm bg-sda-bg-tertiary rounded"
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="font-medium">Risk: {conj.risk_level}</span>
+                        <Tag
+                          intent={
+                            conj.risk_level === 'high' || conj.risk_level === 'critical'
+                              ? 'danger'
+                              : 'warning'
+                          }
+                          minimal
+                        >
+                          {conj.miss_distance_km.toFixed(1)} km
+                        </Tag>
+                      </div>
+                      <div className="text-xs text-sda-text-muted mt-1">
+                        TCA: {new Date(conj.tca).toLocaleString()}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </Card>
+
+        {/* AI Chat Panel */}
         <Card elevation={Elevation.TWO} className="w-96 flex flex-col overflow-hidden" style={{ minWidth: '380px' }}>
           <div className="flex items-center justify-between p-3 border-b border-sda-border-default bg-sda-bg-secondary">
             <span className="text-sm font-semibold text-sda-text-primary flex items-center gap-2">
@@ -491,114 +629,6 @@ export default function MapPage() {
             <AgentChat useStreaming={true} />
           </div>
         </Card>
-
-        <Collapse isOpen={false} className="w-80">
-          <Card elevation={Elevation.TWO} className="h-full overflow-hidden flex flex-col">
-            <div className="p-4 border-b border-sda-border-default">
-              <h3 className="font-semibold">Layers</h3>
-            </div>
-
-            <div className="flex-1 overflow-auto">
-              {/* Satellites */}
-              <div className="p-3 border-b border-sda-border-default">
-                <h4 className="text-sm font-semibold text-sda-text-secondary mb-2">
-                  Satellites ({satellites.length})
-                </h4>
-                <div className="space-y-1 max-h-40 overflow-auto">
-                  {satellites.slice(0, 10).map((sat) => (
-                    <div
-                      key={sat.id}
-                      className={`p-2 text-sm hover:bg-sda-bg-tertiary rounded cursor-pointer ${
-                        selectedSatellite?.id === sat.id ? 'bg-sda-bg-tertiary' : ''
-                      }`}
-                      onClick={() => flyToSatellite(sat)}
-                    >
-                      <div className="flex items-center justify-between">
-                        <span className="font-medium">{sat.name}</span>
-                        {loadingSatellite && selectedSatellite?.id === sat.id ? (
-                          <Spinner size={16} />
-                        ) : (
-                          <Tag minimal>{sat.norad_id}</Tag>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                  {satellites.length > 10 && (
-                    <div className="text-xs text-sda-text-muted text-center pt-2">
-                      +{satellites.length - 10} more
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Ground Stations */}
-              <div className="p-3 border-b border-sda-border-default">
-                <h4 className="text-sm font-semibold text-sda-text-secondary mb-2">
-                  Ground Stations ({groundStations.length})
-                </h4>
-                <div className="space-y-1 max-h-60 overflow-auto">
-                  {groundStations.map((station) => (
-                    <div
-                      key={station.id}
-                      className={`p-2 text-sm hover:bg-sda-bg-tertiary rounded cursor-pointer ${
-                        selectedStation?.id === station.id ? 'bg-sda-bg-tertiary' : ''
-                      }`}
-                      onClick={() => flyToStation(station)}
-                    >
-                      <div className="flex items-center justify-between">
-                        <span className="font-medium">{station.name}</span>
-                        <Tag
-                          intent={station.is_operational ? 'success' : 'danger'}
-                          minimal
-                        >
-                          {station.is_operational ? 'ON' : 'OFF'}
-                        </Tag>
-                      </div>
-                      <div className="text-xs text-sda-text-muted mt-1">
-                        {station.code && `${station.code} • `}
-                        {station.country}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Conjunctions */}
-              {showConjunctions && conjunctions.length > 0 && (
-                <div className="p-3">
-                  <h4 className="text-sm font-semibold text-sda-text-secondary mb-2">
-                    Conjunctions ({conjunctions.length})
-                  </h4>
-                  <div className="space-y-1 max-h-40 overflow-auto">
-                    {conjunctions.slice(0, 5).map((conj) => (
-                      <div
-                        key={conj.id}
-                        className="p-2 text-sm bg-sda-bg-tertiary rounded"
-                      >
-                        <div className="flex items-center justify-between">
-                          <span className="font-medium">Risk: {conj.risk_level}</span>
-                          <Tag
-                            intent={
-                              conj.risk_level === 'high' || conj.risk_level === 'critical'
-                                ? 'danger'
-                                : 'warning'
-                            }
-                            minimal
-                          >
-                            {conj.miss_distance_km.toFixed(1)} km
-                          </Tag>
-                        </div>
-                        <div className="text-xs text-sda-text-muted mt-1">
-                          TCA: {new Date(conj.tca).toLocaleString()}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          </Card>
-        </Collapse>
       </div>
     </div>
   );

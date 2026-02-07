@@ -53,13 +53,21 @@ const ViewerConfig = memo(function ViewerConfig({ onViewerReady }: { onViewerRea
       try {
         viewer.imageryLayers.removeAll();
 
-        const osmProvider = new Cesium.UrlTemplateImageryProvider({
-          url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-          subdomains: ['a', 'b', 'c'],
+        // Use ArcGIS World Imagery for satellite view (free, no API key required)
+        const satelliteProvider = new Cesium.UrlTemplateImageryProvider({
+          url: 'https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
           maximumLevel: 19,
-          credit: new Cesium.Credit('© OpenStreetMap contributors')
+          credit: new Cesium.Credit('© Esri')
         });
-        viewer.imageryLayers.addImageryProvider(osmProvider);
+        viewer.imageryLayers.addImageryProvider(satelliteProvider);
+
+        // Add labels layer for place names (optional but helpful)
+        const labelsProvider = new Cesium.UrlTemplateImageryProvider({
+          url: 'https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',
+          maximumLevel: 19,
+          credit: new Cesium.Credit('© Esri')
+        });
+        viewer.imageryLayers.addImageryProvider(labelsProvider);
 
       } catch (error) {
         console.error('Error configuring imagery:', error);
