@@ -432,29 +432,29 @@ export default function MapPage() {
           3D Globe View
         </h1>
         <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
+            <Tag minimal intent="primary">Allied: {satellites.filter(s => {
+              const name = s.name?.toLowerCase() || '';
+              return name.includes('guardian') || name.includes('deepwatch') || name.includes('terrascan') ||
+                     name.includes('starfinder') || name.includes('celestial') || name.includes('windwatcher') ||
+                     name.includes('commlink') || name.includes('weathereye') || name.includes('navbeacon') ||
+                     name.includes('eyeinsky');
+            }).length}</Tag>
+            <Tag minimal intent="danger">Enemy: {satellites.filter(s => {
+              const name = s.name?.toLowerCase() || '';
+              return name.includes('unknown') || name.includes('hostile') || name.includes('suspect') ||
+                     name.includes('tracked') || name.includes('unidentified') || name.includes('contact');
+            }).length}</Tag>
+          </div>
           <Button
             intent={Intent.PRIMARY}
             loading={fetchingFamous}
             onClick={fetchFamousSatellites}
             icon="satellite"
+            minimal
           >
-            Load Famous Satellites
+            Refresh
           </Button>
-          <Checkbox
-            checked={showOrbits}
-            onChange={(e) => setShowOrbits(e.currentTarget.checked)}
-            label="Show Orbits"
-          />
-          <Checkbox
-            checked={showCoverage}
-            onChange={(e) => setShowCoverage(e.currentTarget.checked)}
-            label="Show Coverage"
-          />
-          <Checkbox
-            checked={showConjunctions}
-            onChange={(e) => setShowConjunctions(e.currentTarget.checked)}
-            label="Show Conjunctions"
-          />
         </div>
       </div>
 
@@ -464,6 +464,18 @@ export default function MapPage() {
           {fetchMessage}
         </div>
       )}
+
+      {/* Legend */}
+      <div className="flex items-center gap-6 mb-4 text-sm">
+        <div className="flex items-center gap-2">
+          <span className="w-3 h-3 rounded-full bg-blue-500"></span>
+          <span>Allied Forces</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="w-3 h-3 rounded-full bg-red-500"></span>
+          <span>Enemy Forces</span>
+        </div>
+      </div>
 
       <div className="flex-1 flex gap-4 min-h-0 overflow-hidden">
         {/* Map */}
@@ -519,32 +531,94 @@ export default function MapPage() {
               <Icon icon="satellite" className="text-sda-accent-cyan" />
               Satellites ({satellites.length})
             </span>
+            <div className="flex items-center gap-3 mt-2 text-xs text-sda-text-muted">
+              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-blue-500"></span> Allied</span>
+              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-500"></span> Enemy</span>
+            </div>
           </div>
           <div className="flex-1 overflow-auto p-3">
-            <div className="space-y-1">
-              {satellites.slice(0, 15).map((sat) => (
-                <div
-                  key={sat.id}
-                  className={`p-2 text-sm hover:bg-sda-bg-tertiary rounded cursor-pointer ${
-                    selectedSatellite?.id === sat.id ? 'bg-sda-bg-tertiary' : ''
-                  }`}
-                  onClick={() => flyToSatellite(sat)}
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="font-medium">{sat.name}</span>
-                    {loadingSatellite && selectedSatellite?.id === sat.id ? (
-                      <Spinner size={16} />
-                    ) : (
-                      <Tag minimal>{sat.norad_id}</Tag>
-                    )}
+            {/* Allied Satellites Folder */}
+            <div className="mb-3">
+              <div className="flex items-center gap-2 mb-1">
+                <Icon icon="folder-close" className="text-blue-500" size={14} />
+                <span className="text-sm font-semibold text-blue-500 flex items-center gap-1">
+                  <span className="w-2 h-2 rounded-full bg-blue-500"></span>
+                  Allied Forces
+                </span>
+                <Tag minimal intent="primary" className="ml-auto">{satellites.filter(s => {
+                  const name = s.name?.toLowerCase() || '';
+                  return name.includes('guardian') || name.includes('deepwatch') || name.includes('terrascan') ||
+                         name.includes('starfinder') || name.includes('celestial') || name.includes('windwatcher') ||
+                         name.includes('commlink') || name.includes('weathereye') || name.includes('navbeacon') ||
+                         name.includes('eyeinsky');
+                }).length}</Tag>
+              </div>
+              <div className="space-y-1 ml-4 border-l-2 border-blue-500 pl-2">
+                {satellites.filter(s => {
+                  const name = s.name?.toLowerCase() || '';
+                  return name.includes('guardian') || name.includes('deepwatch') || name.includes('terrascan') ||
+                         name.includes('starfinder') || name.includes('celestial') || name.includes('windwatcher') ||
+                         name.includes('commlink') || name.includes('weathereye') || name.includes('navbeacon') ||
+                         name.includes('eyeinsky');
+                }).slice(0, 10).map((sat) => (
+                  <div
+                    key={sat.id}
+                    className={`p-2 text-sm hover:bg-sda-bg-tertiary rounded cursor-pointer ${
+                      selectedSatellite?.id === sat.id ? 'bg-sda-bg-tertiary' : ''
+                    }`}
+                    onClick={() => flyToSatellite(sat)}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="font-medium truncate max-w-[120px]">{sat.name}</span>
+                      {loadingSatellite && selectedSatellite?.id === sat.id ? (
+                        <Spinner size={16} />
+                      ) : (
+                        <Tag minimal intent="primary">{sat.norad_id}</Tag>
+                      )}
+                    </div>
                   </div>
-                </div>
-              ))}
-              {satellites.length > 15 && (
-                <div className="text-xs text-sda-text-muted text-center pt-2">
-                  +{satellites.length - 15} more
-                </div>
-              )}
+                ))}
+              </div>
+            </div>
+
+            {/* Enemy Satellites Folder */}
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <Icon icon="folder-close" className="text-red-500" size={14} />
+                <span className="text-sm font-semibold text-red-500 flex items-center gap-1">
+                  <span className="w-2 h-2 rounded-full bg-red-500"></span>
+                  Enemy Forces
+                </span>
+                <Tag minimal intent="danger" className="ml-auto">{satellites.filter(s => {
+                  const name = s.name?.toLowerCase() || '';
+                  return name.includes('unknown') || name.includes('hostile') || name.includes('suspect') ||
+                         name.includes('tracked') || name.includes('unidentified') || name.includes('contact');
+                }).length}</Tag>
+              </div>
+              <div className="space-y-1 ml-4 border-l-2 border-red-500 pl-2">
+                {satellites.filter(s => {
+                  const name = s.name?.toLowerCase() || '';
+                  return name.includes('unknown') || name.includes('hostile') || name.includes('suspect') ||
+                         name.includes('tracked') || name.includes('unidentified') || name.includes('contact');
+                }).slice(0, 10).map((sat) => (
+                  <div
+                    key={sat.id}
+                    className={`p-2 text-sm hover:bg-sda-bg-tertiary rounded cursor-pointer ${
+                      selectedSatellite?.id === sat.id ? 'bg-sda-bg-tertiary' : ''
+                    }`}
+                    onClick={() => flyToSatellite(sat)}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="font-medium truncate max-w-[120px]">{sat.name}</span>
+                      {loadingSatellite && selectedSatellite?.id === sat.id ? (
+                        <Spinner size={16} />
+                      ) : (
+                        <Tag minimal intent="danger">{sat.norad_id}</Tag>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
 
             {/* Ground Stations */}

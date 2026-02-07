@@ -40,6 +40,7 @@ export interface Satellite {
   operator?: string;
   classification: string;
   tags: string[];
+  faction?: 'allied' | 'enemy' | 'neutral';
   created_at: string;
   updated_at: string;
 }
@@ -407,6 +408,72 @@ class ApiClient {
     errors: string[];
   }> {
     return this.fetch('/api/v1/ontology/satellites/fetch-famous', {
+      method: 'POST',
+    });
+  }
+
+  async fetchAlliedSatellites(): Promise<{
+    success: boolean;
+    message: string;
+    satellites_created: number;
+    satellites_updated: number;
+    satellite_ids: string[];
+    errors: string[];
+  }> {
+    return this.fetch('/api/v1/ontology/satellites/fetch-allied', {
+      method: 'POST',
+    });
+  }
+
+  async fetchEnemySatellites(): Promise<{
+    success: boolean;
+    message: string;
+    satellites_created: number;
+    satellites_updated: number;
+    satellite_ids: string[];
+    errors: string[];
+  }> {
+    return this.fetch('/api/v1/ontology/satellites/fetch-enemy', {
+      method: 'POST',
+    });
+  }
+
+  async hideAlliedSatellites(): Promise<{
+    success: boolean;
+    message: string;
+    hidden_count: number;
+  }> {
+    return this.fetch('/api/v1/ontology/satellites/hide-allied', {
+      method: 'POST',
+    });
+  }
+
+  async hideEnemySatellites(): Promise<{
+    success: boolean;
+    message: string;
+    hidden_count: number;
+  }> {
+    return this.fetch('/api/v1/ontology/satellites/hide-enemy', {
+      method: 'POST',
+    });
+  }
+
+  async showAlliedSatellites(): Promise<{
+    success: boolean;
+    message: string;
+    shown_count: number;
+  }> {
+    return this.fetch('/api/v1/ontology/satellites/show-allied', {
+      method: 'POST',
+    });
+  }
+
+  async showEnemySatellites(): Promise<{
+    success: boolean;
+    message: string;
+    shown_count: number;
+  }> {
+    return this.fetch('/api/v1/ontology/satellites/show-enemy', {
       method: 'POST',
     });
   }
