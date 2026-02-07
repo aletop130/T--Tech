@@ -1,9 +1,11 @@
 """AI service for Regolo.ai integration."""
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any, Optional, AsyncGenerator
 import json
+import asyncio
 
 from openai import AsyncOpenAI
+from openai.types.chat import ChatCompletionChunk
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -24,6 +26,7 @@ from app.schemas.ai import (
     MitigationProposal,
     MitigationOption,
 )
+from app.schemas.cesium import CESIUM_FUNCTION_DEFINITIONS, CesiumAction
 from app.services.ontology import OntologyService
 from app.services.audit import AuditService
 
@@ -33,19 +36,24 @@ logger = get_logger(__name__)
 class AIService:
     """AI service using Regolo.ai OpenAI-compatible API."""
     
-    SYSTEM_PROMPT = """You are an expert Space Domain Awareness (SDA) analyst AI.
-You help operators understand space situational awareness data, analyze
-conjunction events, assess space weather impacts, and recommend courses
-of action for protecting space assets and ground infrastructure.
+    SYSTEM_PROMPT = """You are a helpful AI assistant for Space Domain Awareness (SDA).
 
-Always provide structured, actionable insights. When analyzing risks,
-consider:
-- Object characteristics (mass, maneuverability, operational status)
-- Orbital mechanics and propagation uncertainties
-- Space weather conditions and their effects on different services
-- Operational constraints and mission priorities
+IMPORTANT RULES:
+1. Be conversational and natural - respond like a helpful colleague, not a database
+2. For greetings like "ciao", "hello", "hi" - respond warmly and ask how you can help
+3. NEVER invent or generate mock data - only use real data from the system
+4. If no data is available, simply say: "Non ho dati disponibili nel sistema per questa richiesta."
+5. Only provide technical satellite/conjunction/space weather data when explicitly asked
+6. Keep responses concise and natural unless detailed analysis is requested
 
-Be concise but thorough. Cite specific data when available."""
+You can help with:
+- Space situational awareness and satellite tracking
+- Conjunction event analysis and risk assessment
+- Space weather impact evaluation
+- Ground station operations
+- General questions about space domain awareness
+
+When technical data IS requested and available, provide structured, actionable insights citing specific data."""
     
     def __init__(self, db: AsyncSession, ontology: OntologyService):
         self.db = db
@@ -69,14 +77,12 @@ Be concise but thorough. Cite specific data when available."""
         """Process a chat request with context."""
         request_id = generate_uuid()
         
-        # Build context from referenced objects
         context = await self._build_context(
             request.context_object_ids,
             tenant_id,
             request.include_recent_events,
         )
         
-        # Construct messages with system prompt and context
         messages = [
             {"role": "system", "content": self.SYSTEM_PROMPT},
         ]
@@ -88,17 +94,24 @@ Be concise but thorough. Cite specific data when available."""
         for msg in request.messages:
             messages.append({"role": msg.role, "content": msg.content})
         
-        # Call Regolo API
         try:
             if not self.client:
                 raise AIServiceError("AI service not configured")
-            
-            response = await self.client.chat.completions.create(
-                model=settings.REGOLO_MODEL,
-                messages=messages,
-                max_tokens=request.max_tokens,
-                temperature=request.temperature,
-            )
+
+            request_params = {
+                "model": settings.REGOLO_MODEL,
+                "messages": messages,
+                "max_tokens": request.max_tokens,
+                "temperature": request.temperature,
+            }
+
+            # Only include tools and tool_choice when context_object_ids are provided
+            # Regolo API requires tools when tool_choice is set
+            if request.context_object_ids:
+                request_params["tools"] = CESIUM_FUNCTION_DEFINITIONS
+                request_params["tool_choice"] = "auto"
+
+            response = await self.client.chat.completions.create(**request_params)
             
             assistant_message = response.choices[0].message
             
@@ -124,6 +137,303 @@ Be concise but thorough. Cite specific data when available."""
         except Exception as e:
             logger.error(f"AI chat error: {e}", request_id=request_id)
             raise AIServiceError(f"Failed to process chat: {str(e)}")
+    
+    async def chat_with_functions(
+        self,
+        request: ChatRequest,
+        tenant_id: str,
+        scene_state: Optional[dict[str, Any]] = None,
+        user_id: Optional[str] = None,
+    ) -> tuple[str, list[CesiumAction]]:
+        """Process a chat request with function calling for Cesium actions."""
+        request_id = generate_uuid()
+        
+        context = await self._build_context(
+            request.context_object_ids,
+            tenant_id,
+            request.include_recent_events,
+        )
+        
+        system_content = self.SYSTEM_PROMPT
+        if scene_state:
+            system_content += f"\n\nCurrent scene state:\n{json.dumps(scene_state, indent=2)}"
+        
+        messages: list[dict[str, Any]] = [
+            {"role": "system", "content": system_content},
+        ]
+        
+        if context:
+            context_str = "Referenced objects:\n" + json.dumps(context, indent=2)
+            messages.append({"role": "system", "content": context_str})
+        
+        for msg in request.messages:
+            messages.append({"role": msg.role, "content": msg.content})
+        
+        actions: list[CesiumAction] = []
+        
+        try:
+            if not self.client:
+                return "AI service not configured. Please configure REGOLO_API_KEY.", actions
+            
+            response = await self.client.chat.completions.create(
+                model=settings.REGOLO_MODEL,
+                messages=messages,
+                max_tokens=request.max_tokens,
+                temperature=request.temperature,
+                tools=CESIUM_FUNCTION_DEFINITIONS,
+            )
+            
+            response_message = response.choices[0].message
+            content = response_message.content or ""
+            
+            if response_message.tool_calls:
+                for tool_call in response_message.tool_calls:
+                    function_name = tool_call.function.name
+                    function_args = json.loads(tool_call.function.arguments or "{}")
+                    
+                    action = self._create_cesium_action(function_name, function_args)
+                    if action:
+                        actions.append(action)
+                    
+                    messages.append({
+                        "role": "tool",
+                        "tool_call_id": tool_call.id,
+                        "name": function_name,
+                        "content": json.dumps(function_args),
+                    })
+                
+                second_response = await self.client.chat.completions.create(
+                    model=settings.REGOLO_MODEL,
+                    messages=messages,
+                    max_tokens=request.max_tokens,
+                    temperature=request.temperature,
+                )
+                
+                content = second_response.choices[0].message.content or content
+            
+            logger.info(
+                "ai_chat_with_functions_complete",
+                request_id=request_id,
+                actions_count=len(actions),
+            )
+            
+            return content, actions
+            
+        except Exception as e:
+            logger.error(f"AI chat with functions error: {e}", request_id=request_id)
+            return f"Error: {str(e)}", actions
+    
+    def _create_cesium_action(
+        self,
+        function_name: str,
+        arguments: dict[str, Any],
+    ) -> Optional[CesiumAction]:
+        """Create a CesiumAction from function name and arguments."""
+        action_map = {
+            "cesium_set_clock": ("cesium.setClock", arguments),
+            "cesium_load_czml": ("cesium.loadCzml", {"layerId": arguments.get("layerId"), "data": arguments.get("data")}),
+            "cesium_add_entity": ("cesium.addEntity", {
+                "entityType": arguments.get("entityType"),
+                "name": arguments.get("name"),
+                "position": arguments.get("position"),
+                "properties": arguments.get("properties"),
+            }),
+            "cesium_fly_to": ("cesium.flyTo", {
+                "entityId": arguments.get("entityId"),
+                "longitude": arguments.get("longitude"),
+                "latitude": arguments.get("latitude"),
+                "altitude": arguments.get("altitude"),
+                "heading": arguments.get("heading"),
+                "pitch": arguments.get("pitch"),
+                "roll": arguments.get("roll"),
+                "duration": arguments.get("duration"),
+            }),
+            "cesium_toggle": ("cesium.toggle", {
+                "showOrbits": arguments.get("showOrbits"),
+                "showCoverage": arguments.get("showCoverage"),
+                "showConjunctions": arguments.get("showConjunctions"),
+                "showLabels": arguments.get("showLabels"),
+            }),
+            "cesium_remove_layer": ("cesium.removeLayer", {"layerId": arguments.get("layerId")}),
+            "cesium_set_selected": ("cesium.setSelected", {"entityId": arguments.get("entityId")}),
+            "cesium_fly_to_country": ("cesium.flyToCountry", {
+                "country": arguments.get("country"),
+                "altitude": arguments.get("altitude"),
+                "duration": arguments.get("duration"),
+            }),
+        }
+        
+        if function_name in action_map:
+            action_type, payload = action_map[function_name]
+            return CesiumAction(type=action_type, payload=payload)
+        
+        return None
+    
+    async def stream_chat(
+        self,
+        messages: list[dict[str, Any]],
+        scene_state: Optional[dict[str, Any]] = None,
+    ) -> AsyncGenerator[str, None]:
+        """Stream chat response from AI."""
+        if not self.client:
+            yield "data: error\n\n"
+            return
+        
+        system_content = self.SYSTEM_PROMPT
+        if scene_state:
+            system_content += f"\n\nCurrent scene state:\n{json.dumps(scene_state, indent=2)}"
+        
+        full_messages = [{"role": "system", "content": system_content}] + messages
+        
+        try:
+            response = await self.client.chat.completions.create(
+                model=settings.REGOLO_MODEL,
+                messages=full_messages,
+                max_tokens=2048,
+                temperature=0.7,
+                stream=True,
+            )
+            
+            async for chunk in response:
+                if chunk.choices[0].delta.content:
+                    yield f"data: {json.dumps({'type': 'content', 'chunk': chunk.choices[0].delta.content})}\n\n"
+            
+            yield "data: [DONE]\n\n"
+            
+        except Exception as e:
+            yield f"data: {json.dumps({'type': 'error', 'error': str(e)})}\n\n"
+    
+    async def stream_chat_with_functions(
+        self,
+        messages: list[dict[str, Any]],
+        scene_state: Optional[dict[str, Any]] = None,
+        tenant_id: Optional[str] = None,
+        include_satellites: bool = True,
+    ) -> AsyncGenerator[str, None]:
+        """Stream chat with function calling support.
+        
+        1. First call: Get tool calls (non-streaming)
+        2. Emit tool calls as SSE action events
+        3. Second call: Stream final response
+        """
+        if not self.client:
+            yield f"data: {json.dumps({'type': 'error', 'error': 'AI service not configured'})}\n\n"
+            return
+        
+        # Build system content with available satellites
+        system_content = self.SYSTEM_PROMPT
+        
+        if scene_state:
+            system_content += f"\n\nCurrent scene state:\n{json.dumps(scene_state, indent=2)}"
+        
+        # Add satellite data to context if requested and tenant_id provided
+        if include_satellites and tenant_id:
+            try:
+                satellites_data = await self._get_satellites_context(tenant_id)
+                if satellites_data:
+                    system_content += f"\n\nAvailable satellites in system:\n{json.dumps(satellites_data, indent=2)}\n\nWhen user asks to view a satellite (e.g., 'show me ISS'), use cesium_fly_to with the entityId from the entityId field (format: 'satellite-<id>') matching the satellite name or NORAD ID."
+            except Exception as e:
+                logger.warning(f"Failed to load satellites context: {e}")
+        
+        full_messages: list[dict[str, Any]] = [
+            {"role": "system", "content": system_content}
+        ] + messages
+        
+        actions: list[CesiumAction] = []
+        
+        try:
+            # Step 1: First call with tools (non-streaming) to get tool calls
+            response = await self.client.chat.completions.create(
+                model=settings.REGOLO_MODEL,
+                messages=full_messages,
+                max_tokens=2048,
+                temperature=0.7,
+                tools=CESIUM_FUNCTION_DEFINITIONS,
+            )
+            
+            response_message = response.choices[0].message
+            
+            # Step 2: Handle tool calls if present
+            if response_message.tool_calls:
+                for tool_call in response_message.tool_calls:
+                    function_name = tool_call.function.name
+                    function_args = json.loads(tool_call.function.arguments or "{}")
+                    
+                    # Create action
+                    action = self._create_cesium_action(function_name, function_args)
+                    if action:
+                        actions.append(action)
+                        # Emit action as SSE event immediately
+                        yield f"data: {json.dumps({'type': 'action', 'action_type': action.type, 'payload': action.payload})}\n\n"
+                    
+                    # Add tool result to messages for second call
+                    full_messages.append({
+                        "role": "assistant",
+                        "content": None,
+                        "tool_calls": [{
+                            "id": tool_call.id,
+                            "type": "function",
+                            "function": {
+                                "name": function_name,
+                                "arguments": tool_call.function.arguments
+                            }
+                        }]
+                    })
+                    full_messages.append({
+                        "role": "tool",
+                        "tool_call_id": tool_call.id,
+                        "content": json.dumps({"status": "success", "action": action.type if action else "unknown"}),
+                    })
+                
+                # Step 3: Second call for final response (streaming)
+                final_response = await self.client.chat.completions.create(
+                    model=settings.REGOLO_MODEL,
+                    messages=full_messages,
+                    max_tokens=2048,
+                    temperature=0.7,
+                    stream=True,
+                )
+                
+                async for chunk in final_response:
+                    if chunk.choices[0].delta.content:
+                        yield f"data: {json.dumps({'type': 'content', 'chunk': chunk.choices[0].delta.content})}\n\n"
+            else:
+                # No tool calls, stream the first response
+                if response_message.content:
+                    yield f"data: {json.dumps({'type': 'content', 'chunk': response_message.content})}\n\n"
+            
+            yield "data: [DONE]\n\n"
+            
+        except Exception as e:
+            logger.error(f"Stream chat with functions error: {e}")
+            yield f"data: {json.dumps({'type': 'error', 'error': str(e)})}\n\n"
+    
+    async def _get_satellites_context(self, tenant_id: str) -> list[dict]:
+        """Get list of satellites for context."""
+        satellites = []
+        try:
+            # Get satellites from ontology service
+            from app.schemas.ontology import ObjectType
+            sats, _ = await self.ontology.list_satellites(
+                tenant_id=tenant_id,
+                page_size=100,  # Limit to avoid too much context
+            )
+            
+            for sat in sats:
+                sat_data = {
+                    "id": sat.id,
+                    "entityId": f"satellite-{sat.id}",  # Cesium entity ID format
+                    "name": sat.name,
+                    "norad_id": sat.norad_id,
+                    "is_active": sat.is_active,
+                    "object_type": sat.object_type.value if hasattr(sat.object_type, 'value') else str(sat.object_type),
+                }
+                satellites.append(sat_data)
+                
+        except Exception as e:
+            logger.warning(f"Failed to get satellites for context: {e}")
+        
+        return satellites
     
     async def analyze_conjunction(
         self,
@@ -198,10 +508,7 @@ Provide your analysis in the following JSON format:
         
         try:
             if not self.client:
-                # Return mock response for demo
-                return self._mock_conjunction_response(
-                    request_id, event, request
-                )
+                raise AIServiceError("Servizio AI non configurato. Contatta l'amministratore.")
             
             response = await self.client.chat.completions.create(
                 model=settings.REGOLO_MODEL,
@@ -256,7 +563,7 @@ Provide your analysis in the following JSON format:
             )
         except Exception as e:
             logger.error(f"Conjunction analysis error: {e}")
-            return self._mock_conjunction_response(request_id, event, request)
+            raise AIServiceError(f"Errore durante l'analisi della congiunzione: {str(e)}")
     
     async def analyze_space_weather(
         self,
@@ -320,7 +627,7 @@ Provide your analysis in the following JSON format:
         
         try:
             if not self.client:
-                return self._mock_weather_response(request_id, request, events)
+                raise AIServiceError("Servizio AI non configurato. Contatta l'amministratore.")
             
             response = await self.client.chat.completions.create(
                 model=settings.REGOLO_MODEL,
@@ -343,7 +650,7 @@ Provide your analysis in the following JSON format:
                 
                 analysis = json.loads(json_str)
             except json.JSONDecodeError:
-                return self._mock_weather_response(request_id, request, events)
+                raise AIServiceError("Impossibile analizzare la risposta del modello AI. Riprova.")
             
             return SpaceWeatherWatchResponse(
                 time_range_start=request.start_time,
@@ -364,7 +671,7 @@ Provide your analysis in the following JSON format:
             )
         except Exception as e:
             logger.error(f"Space weather analysis error: {e}")
-            return self._mock_weather_response(request_id, request, events)
+            raise AIServiceError(f"Errore durante l'analisi meteo spaziale: {str(e)}")
     
     async def propose_mitigation(
         self,
@@ -373,51 +680,88 @@ Provide your analysis in the following JSON format:
         tenant_id: str,
         user_id: Optional[str] = None,
     ) -> MitigationProposal:
-        """Propose mitigation options for an event."""
+        """Propose mitigation options for an event using AI analysis."""
         request_id = generate_uuid()
         
-        # Mock implementation for demo
-        options = [
-            MitigationOption(
-                option_id="opt_1",
-                title="Collision Avoidance Maneuver",
-                description="Execute pre-planned maneuver to increase miss distance",
-                risk_reduction_percent=95.0,
-                cost_estimate="Medium (fuel consumption)",
-                implementation_time="4-8 hours",
-                pros=["High risk reduction", "Proven technique"],
-                cons=["Fuel cost", "Mission impact"],
-            ),
-            MitigationOption(
-                option_id="opt_2",
-                title="Enhanced Tracking",
-                description="Increase tracking frequency for better predictions",
-                risk_reduction_percent=20.0,
-                cost_estimate="Low",
-                implementation_time="1 hour",
-                pros=["Low cost", "Improved situational awareness"],
-                cons=["May not reduce actual risk"],
-            ),
-            MitigationOption(
-                option_id="opt_3",
-                title="Accept Risk with Monitoring",
-                description="Monitor situation without active intervention",
-                risk_reduction_percent=0.0,
-                cost_estimate="None",
-                implementation_time="Immediate",
-                pros=["No resource cost", "No mission impact"],
-                cons=["Risk remains unchanged"],
-            ),
-        ]
+        if not self.client:
+            raise AIServiceError("Servizio AI non configurato. Contatta l'amministratore.")
         
-        return MitigationProposal(
-            event_id=event_id,
-            event_type=event_type,
-            options=options,
-            recommended_option_id="opt_1",
-            rationale="Based on current risk score and object characteristics",
-            confidence=0.85,
-        )
+        # Get event data based on type
+        event_data = {}
+        if event_type == "conjunction":
+            event = await self.ontology.get_conjunction_event(event_id, tenant_id)
+            if event:
+                event_data = {
+                    "type": "conjunction",
+                    "miss_distance_km": event.miss_distance_km,
+                    "risk_level": event.risk_level.value if event.risk_level else "unknown",
+                    "collision_probability": event.collision_probability,
+                    "tca": event.tca.isoformat() if event.tca else None,
+                }
+        
+        if not event_data:
+            raise AIServiceError(f"Evento {event_id} di tipo {event_type} non trovato o dati non disponibili.")
+        
+        prompt = f"""Proponi opzioni di mitigazione per questo evento:
+
+Dati evento:
+{json.dumps(event_data, indent=2)}
+
+Fornisci 2-3 opzioni realistiche in formato JSON:
+{{
+  "options": [
+    {{
+      "option_id": "unique_id",
+      "title": "Titolo breve",
+      "description": "Descrizione dettagliata",
+      "risk_reduction_percent": 0-100,
+      "cost_estimate": "Basso/Medio/Alto",
+      "implementation_time": "tempo stimato",
+      "pros": ["vantaggio 1", "vantaggio 2"],
+      "cons": ["svantaggio 1"]
+    }}
+  ],
+  "recommended_option_id": "id dell'opzione consigliata",
+  "rationale": "spiegazione della scelta",
+  "confidence": 0.0-1.0
+}}"""
+        
+        try:
+            response = await self.client.chat.completions.create(
+                model=settings.REGOLO_MODEL,
+                messages=[
+                    {"role": "system", "content": self.SYSTEM_PROMPT},
+                    {"role": "user", "content": prompt},
+                ],
+                max_tokens=2048,
+                temperature=0.3,
+            )
+            
+            content = response.choices[0].message.content or "{}"
+            
+            try:
+                json_str = content
+                if "```json" in content:
+                    json_str = content.split("```json")[1].split("```")[0]
+                elif "```" in content:
+                    json_str = content.split("```")[1].split("```")[0]
+                
+                analysis = json.loads(json_str)
+            except json.JSONDecodeError:
+                raise AIServiceError("Impossibile analizzare le opzioni di mitigazione dal modello AI.")
+            
+            return MitigationProposal(
+                event_id=event_id,
+                event_type=event_type,
+                options=[MitigationOption(**opt) for opt in analysis.get("options", [])],
+                recommended_option_id=analysis.get("recommended_option_id", ""),
+                rationale=analysis.get("rationale", ""),
+                confidence=analysis.get("confidence", 0.7),
+            )
+            
+        except Exception as e:
+            logger.error(f"Mitigation proposal error: {e}")
+            raise AIServiceError(f"Errore durante la generazione delle opzioni di mitigazione: {str(e)}")
     
     async def _build_context(
         self,
@@ -455,99 +799,4 @@ Provide your analysis in the following JSON format:
         
         return context
     
-    def _mock_conjunction_response(
-        self,
-        request_id: str,
-        event: Any,
-        request: ConjunctionAnalystRequest,
-    ) -> ConjunctionAnalystResponse:
-        """Generate mock response for demo."""
-        return ConjunctionAnalystResponse(
-            conjunction_event_id=request.conjunction_event_id,
-            severity=event.risk_level.value,
-            risk_explanation=(
-                f"Close approach detected with miss distance of "
-                f"{event.miss_distance_km:.3f} km. Risk assessment based on "
-                f"orbital mechanics and object characteristics."
-            ),
-            primary_object_assessment=(
-                f"Primary object {event.primary_object.name if event.primary_object else 'N/A'}"
-                f" is {'active' if event.primary_object and event.primary_object.is_active else 'inactive'}."
-            ),
-            secondary_object_assessment=(
-                f"Secondary object {event.secondary_object.name if event.secondary_object else 'N/A'}"
-                f" assessment pending."
-            ),
-            recommended_action=(
-                "Monitor" if event.miss_distance_km > 1.0 else "Consider maneuver"
-            ),
-            courses_of_action=[
-                CourseOfAction(
-                    action_type="monitor",
-                    description="Continue tracking and refine prediction",
-                    confidence=0.8,
-                ),
-                CourseOfAction(
-                    action_type="maneuver",
-                    description="Execute avoidance maneuver if risk increases",
-                    maneuver_window_start=event.tca,
-                    expected_delta_v_m_s=0.5,
-                    risk_reduction_percent=90.0,
-                    constraints=["Fuel budget", "Mission timeline"],
-                    confidence=0.7,
-                ),
-            ],
-            monitoring_recommendations=[
-                "Increase tracking frequency",
-                "Notify operations team",
-                "Prepare maneuver plan",
-            ],
-            confidence=0.75,
-            request_id=request_id,
-        )
-    
-    def _mock_weather_response(
-        self,
-        request_id: str,
-        request: SpaceWeatherWatchRequest,
-        events: list,
-    ) -> SpaceWeatherWatchResponse:
-        """Generate mock weather response for demo."""
-        max_kp = max((e.kp_index or 0 for e in events), default=0)
-        overall = "low" if max_kp < 4 else "medium" if max_kp < 6 else "high"
-        
-        return SpaceWeatherWatchResponse(
-            time_range_start=request.start_time,
-            time_range_end=request.end_time,
-            overall_risk=overall,
-            risk_summary=f"Space weather conditions with Kp up to {max_kp}.",
-            risk_by_service=[
-                ServiceImpact(
-                    service="gnss",
-                    risk_level=overall,
-                    impact_description="Potential ionospheric effects on GNSS",
-                    confidence=0.7,
-                ),
-                ServiceImpact(
-                    service="rf_comms",
-                    risk_level=overall,
-                    impact_description="Possible RF propagation degradation",
-                    confidence=0.7,
-                ),
-            ],
-            recommended_controls=[
-                RecommendedControl(
-                    control_type="monitoring",
-                    description="Increase space weather monitoring",
-                    priority="medium",
-                    affected_services=["gnss", "rf_comms"],
-                ),
-            ],
-            monitoring_actions=[
-                "Monitor NOAA alerts",
-                "Track Kp index changes",
-            ],
-            confidence=0.7,
-            request_id=request_id,
-        )
 

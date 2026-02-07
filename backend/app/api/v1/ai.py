@@ -1,12 +1,14 @@
 """AI API endpoints."""
-from typing import Annotated
-
-from fastapi import APIRouter, Depends
+import json
+from typing import Annotated, Any, AsyncGenerator
+from fastapi import APIRouter, Depends, Request
+from fastapi.responses import StreamingResponse
 
 from app.api.deps import get_current_user, get_ai_service
 from app.core.security import TokenData
 from app.services.ai import AIService
 from app.schemas.ai import (
+    ChatMessage,
     ChatRequest,
     ChatResponse,
     ConjunctionAnalystRequest,
@@ -15,6 +17,7 @@ from app.schemas.ai import (
     SpaceWeatherWatchResponse,
     MitigationProposal,
 )
+from app.schemas.cesium import CesiumAction
 
 router = APIRouter()
 
@@ -31,6 +34,71 @@ async def chat(
         tenant_id=user.tenant_id,
         user_id=user.sub,
     )
+
+
+@router.post("/chat/stream")
+async def stream_chat(
+    request: Request,
+    user: Annotated[TokenData, Depends(get_current_user)],
+    service: Annotated[AIService, Depends(get_ai_service)],
+):
+    """Stream chat response with SSE and function calling."""
+    body = await request.json()
+    messages = body.get("messages", [])
+    scene_state = body.get("sceneState", {})
+    include_satellites = body.get("includeSatellites", True)  # Default: includi satelliti
+    
+    async def generate() -> AsyncGenerator[str, None]:
+        try:
+            async for data in service.stream_chat_with_functions(
+                messages=messages, 
+                scene_state=scene_state,
+                tenant_id=user.tenant_id,
+                include_satellites=include_satellites
+            ):
+                yield data
+        except Exception as e:
+            yield f"data: {json.dumps({'type': 'error', 'error': str(e)})}\n\n"
+    
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+@router.post("/chat/execute")
+async def execute_chat(
+    request: Request,
+    user: Annotated[TokenData, Depends(get_current_user)],
+    service: Annotated[AIService, Depends(get_ai_service)],
+):
+    """Chat with function calling execution."""
+    body = await request.json()
+    messages = body.get("messages", [])
+    scene_state = body.get("sceneState", {})
+    
+    chat_request = ChatRequest(
+        messages=[ChatMessage(role=m.get("role", "user"), content=m.get("content", "")) for m in messages],
+        max_tokens=2048,
+        temperature=0.7,
+    )
+    
+    content, actions = await service.chat_with_functions(
+        request=chat_request,
+        tenant_id=user.tenant_id,
+        scene_state=scene_state,
+        user_id=user.sub,
+    )
+    
+    return {
+        "message": content,
+        "actions": [a.model_dump() for a in actions],
+    }
 
 
 @router.post(

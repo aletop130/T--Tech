@@ -126,7 +126,11 @@ class ApiClient {
     endpoint: string,
     options: RequestInit = {}
   ): Promise<T> {
-    const url = `${this.baseUrl}${endpoint}`;
+    const baseUrl = this.baseUrl;
+    if (!baseUrl) {
+      throw new Error('API base URL not configured');
+    }
+    const url = `${baseUrl}${endpoint}`;
     const headers = {
       'Content-Type': 'application/json',
       'X-Tenant-ID': this.tenantId,
@@ -264,6 +268,38 @@ class ApiClient {
       body: JSON.stringify({
         messages,
         context_object_ids: contextIds || [],
+      }),
+    });
+  }
+
+  async chatStream(messages: Array<{ role: string; content: string }>, sceneState?: Record<string, unknown>) {
+    const url = `${this.baseUrl}/api/v1/ai/chat/stream`;
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Tenant-ID': this.tenantId,
+      },
+      body: JSON.stringify({
+        messages,
+        sceneState: sceneState || {},
+      }),
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.detail || `API error: ${response.status}`);
+    }
+
+    return response.body;
+  }
+
+  async chatExecute(messages: Array<{ role: string; content: string }>, sceneState?: Record<string, unknown>) {
+    return this.fetch('/api/v1/ai/chat/execute', {
+      method: 'POST',
+      body: JSON.stringify({
+        messages,
+        sceneState: sceneState || {},
       }),
     });
   }

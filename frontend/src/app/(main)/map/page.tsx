@@ -2,13 +2,15 @@
 
 import { useEffect, useState, useRef, useCallback } from 'react';
 import dynamic from 'next/dynamic';
-import { Card, Elevation, Spinner, Tag, Icon, Button, Checkbox, Intent } from '@blueprintjs/core';
+import { Card, Elevation, Spinner, Tag, Icon, Button, Checkbox, Intent, Collapse } from '@blueprintjs/core';
 import { api, GroundStation, Satellite, ConjunctionEvent } from '@/lib/api';
 import * as Cesium from 'cesium';
 import { CesiumViewer } from '@/components/CesiumMap/CesiumViewer';
 import { SatelliteLayer } from '@/components/CesiumMap/SatelliteLayer';
 import { GroundStationLayer } from '@/components/CesiumMap/GroundStationLayer';
 import { ConjunctionLayer } from '@/components/CesiumMap/ConjunctionLayer';
+import { AgentChat } from '@/components/Chat/AgentChat';
+import { cesiumController } from '@/lib/cesium/controller';
 
 // Dynamically import Cesium to avoid SSR issues
 const DynamicCesiumViewer = dynamic(
@@ -315,11 +317,10 @@ export default function MapPage() {
 
   const handleViewerReady = (cesiumViewer: Cesium.Viewer) => {
     setViewer(cesiumViewer);
+    cesiumController.initialize(cesiumViewer);
 
-    // Configure entity selection
     cesiumViewer.selectedEntityChanged.addEventListener((selectedEntity) => {
       if (selectedEntity) {
-        // Fly to selected entity
         cesiumViewer.flyTo(selectedEntity);
       }
     });
@@ -439,7 +440,7 @@ export default function MapPage() {
         </div>
       )}
 
-      <div className="flex-1 flex gap-4 min-h-0">
+      <div className="flex-1 flex gap-4 min-h-0 overflow-hidden">
         {/* Map */}
         <Card elevation={Elevation.TWO} className="flex-1 overflow-hidden relative" style={{ minHeight: '400px' }}>
           {loading ? (
@@ -478,112 +479,126 @@ export default function MapPage() {
           )}
         </Card>
 
-        {/* Sidebar */}
-        <Card elevation={Elevation.TWO} className="w-80 overflow-hidden flex flex-col">
-          <div className="p-4 border-b border-sda-border-default">
-            <h3 className="font-semibold">Layers</h3>
+        {/* AI Chat Panel - Fixed Sidebar */}
+        <Card elevation={Elevation.TWO} className="w-96 flex flex-col overflow-hidden" style={{ minWidth: '380px' }}>
+          <div className="flex items-center justify-between p-3 border-b border-sda-border-default bg-sda-bg-secondary">
+            <span className="text-sm font-semibold text-sda-text-primary flex items-center gap-2">
+              <Icon icon="chat" className="text-sda-accent-cyan" />
+              AI Assistant
+            </span>
           </div>
+          <div className="flex-1 overflow-hidden">
+            <AgentChat useStreaming={true} />
+          </div>
+        </Card>
 
-          <div className="flex-1 overflow-auto">
-            {/* Satellites */}
-            <div className="p-3 border-b border-sda-border-default">
-              <h4 className="text-sm font-semibold text-sda-text-secondary mb-2">
-                Satellites ({satellites.length})
-              </h4>
-              <div className="space-y-1 max-h-40 overflow-auto">
-                {satellites.slice(0, 10).map((sat) => (
-                  <div
-                    key={sat.id}
-                    className={`p-2 text-sm hover:bg-sda-bg-tertiary rounded cursor-pointer ${
-                      selectedSatellite?.id === sat.id ? 'bg-sda-bg-tertiary' : ''
-                    }`}
-                    onClick={() => flyToSatellite(sat)}
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="font-medium">{sat.name}</span>
-                      {loadingSatellite && selectedSatellite?.id === sat.id ? (
-                        <Spinner size={16} />
-                      ) : (
-                        <Tag minimal>{sat.norad_id}</Tag>
-                      )}
-                    </div>
-                  </div>
-                ))}
-                {satellites.length > 10 && (
-                  <div className="text-xs text-sda-text-muted text-center pt-2">
-                    +{satellites.length - 10} more
-                  </div>
-                )}
-              </div>
+        <Collapse isOpen={false} className="w-80">
+          <Card elevation={Elevation.TWO} className="h-full overflow-hidden flex flex-col">
+            <div className="p-4 border-b border-sda-border-default">
+              <h3 className="font-semibold">Layers</h3>
             </div>
 
-            {/* Ground Stations */}
-            <div className="p-3 border-b border-sda-border-default">
-              <h4 className="text-sm font-semibold text-sda-text-secondary mb-2">
-                Ground Stations ({groundStations.length})
-              </h4>
-              <div className="space-y-1 max-h-60 overflow-auto">
-                {groundStations.map((station) => (
-                  <div
-                    key={station.id}
-                    className={`p-2 text-sm hover:bg-sda-bg-tertiary rounded cursor-pointer ${
-                      selectedStation?.id === station.id ? 'bg-sda-bg-tertiary' : ''
-                    }`}
-                    onClick={() => flyToStation(station)}
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="font-medium">{station.name}</span>
-                      <Tag
-                        intent={station.is_operational ? 'success' : 'danger'}
-                        minimal
-                      >
-                        {station.is_operational ? 'ON' : 'OFF'}
-                      </Tag>
-                    </div>
-                    <div className="text-xs text-sda-text-muted mt-1">
-                      {station.code && `${station.code} • `}
-                      {station.country}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Conjunctions */}
-            {showConjunctions && conjunctions.length > 0 && (
-              <div className="p-3">
+            <div className="flex-1 overflow-auto">
+              {/* Satellites */}
+              <div className="p-3 border-b border-sda-border-default">
                 <h4 className="text-sm font-semibold text-sda-text-secondary mb-2">
-                  Conjunctions ({conjunctions.length})
+                  Satellites ({satellites.length})
                 </h4>
                 <div className="space-y-1 max-h-40 overflow-auto">
-                  {conjunctions.slice(0, 5).map((conj) => (
+                  {satellites.slice(0, 10).map((sat) => (
                     <div
-                      key={conj.id}
-                      className="p-2 text-sm bg-sda-bg-tertiary rounded"
+                      key={sat.id}
+                      className={`p-2 text-sm hover:bg-sda-bg-tertiary rounded cursor-pointer ${
+                        selectedSatellite?.id === sat.id ? 'bg-sda-bg-tertiary' : ''
+                      }`}
+                      onClick={() => flyToSatellite(sat)}
                     >
                       <div className="flex items-center justify-between">
-                        <span className="font-medium">Risk: {conj.risk_level}</span>
+                        <span className="font-medium">{sat.name}</span>
+                        {loadingSatellite && selectedSatellite?.id === sat.id ? (
+                          <Spinner size={16} />
+                        ) : (
+                          <Tag minimal>{sat.norad_id}</Tag>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                  {satellites.length > 10 && (
+                    <div className="text-xs text-sda-text-muted text-center pt-2">
+                      +{satellites.length - 10} more
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Ground Stations */}
+              <div className="p-3 border-b border-sda-border-default">
+                <h4 className="text-sm font-semibold text-sda-text-secondary mb-2">
+                  Ground Stations ({groundStations.length})
+                </h4>
+                <div className="space-y-1 max-h-60 overflow-auto">
+                  {groundStations.map((station) => (
+                    <div
+                      key={station.id}
+                      className={`p-2 text-sm hover:bg-sda-bg-tertiary rounded cursor-pointer ${
+                        selectedStation?.id === station.id ? 'bg-sda-bg-tertiary' : ''
+                      }`}
+                      onClick={() => flyToStation(station)}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="font-medium">{station.name}</span>
                         <Tag
-                          intent={
-                            conj.risk_level === 'high' || conj.risk_level === 'critical'
-                              ? 'danger'
-                              : 'warning'
-                          }
+                          intent={station.is_operational ? 'success' : 'danger'}
                           minimal
                         >
-                          {conj.miss_distance_km.toFixed(1)} km
+                          {station.is_operational ? 'ON' : 'OFF'}
                         </Tag>
                       </div>
                       <div className="text-xs text-sda-text-muted mt-1">
-                        TCA: {new Date(conj.tca).toLocaleString()}
+                        {station.code && `${station.code} • `}
+                        {station.country}
                       </div>
                     </div>
                   ))}
                 </div>
               </div>
-            )}
-          </div>
-        </Card>
+
+              {/* Conjunctions */}
+              {showConjunctions && conjunctions.length > 0 && (
+                <div className="p-3">
+                  <h4 className="text-sm font-semibold text-sda-text-secondary mb-2">
+                    Conjunctions ({conjunctions.length})
+                  </h4>
+                  <div className="space-y-1 max-h-40 overflow-auto">
+                    {conjunctions.slice(0, 5).map((conj) => (
+                      <div
+                        key={conj.id}
+                        className="p-2 text-sm bg-sda-bg-tertiary rounded"
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="font-medium">Risk: {conj.risk_level}</span>
+                          <Tag
+                            intent={
+                              conj.risk_level === 'high' || conj.risk_level === 'critical'
+                                ? 'danger'
+                                : 'warning'
+                            }
+                            minimal
+                          >
+                            {conj.miss_distance_km.toFixed(1)} km
+                          </Tag>
+                        </div>
+                        <div className="text-xs text-sda-text-muted mt-1">
+                          TCA: {new Date(conj.tca).toLocaleString()}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </Card>
+        </Collapse>
       </div>
     </div>
   );
