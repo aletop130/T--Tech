@@ -261,6 +261,11 @@ When technical data IS requested and available, provide structured, actionable i
                 "altitude": arguments.get("altitude"),
                 "duration": arguments.get("duration"),
             }),
+            "cesium_search_location": ("cesium.searchLocation", {
+                "query": arguments.get("query"),
+                "altitude": arguments.get("altitude"),
+                "duration": arguments.get("duration"),
+            }),
         }
         
         if function_name in action_map:

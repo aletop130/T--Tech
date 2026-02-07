@@ -57,6 +57,7 @@ class CesiumAction(BaseModel):
         'cesium.addEntity',
         'cesium.flyTo',
         'cesium.flyToCountry',
+        'cesium.searchLocation',
         'cesium.toggle',
         'cesium.removeLayer',
         'cesium.setSelected',
@@ -291,6 +292,33 @@ CESIUM_FUNCTION_DEFINITIONS = [
                     }
                 },
                 "required": ["country"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "cesium_search_location",
+            "description": "Search for and fly to any location on Earth using the Cesium built-in geocoder. Use for cities, landmarks, addresses, or any place name. Examples: 'Rome', 'Eiffel Tower', 'New York', 'Mount Everest', 'Via del Corso 1, Roma'.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "Location name, address, or place to search for. Can be a city, landmark, country, or full address."
+                    },
+                    "altitude": {
+                        "type": "number",
+                        "description": "Camera altitude in meters after flying to location",
+                        "default": 50000
+                    },
+                    "duration": {
+                        "type": "number",
+                        "description": "Animation duration in seconds",
+                        "default": 2.0
+                    }
+                },
+                "required": ["query"]
             }
         }
     }
