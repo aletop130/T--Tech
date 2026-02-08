@@ -82,14 +82,14 @@ export function SatelliteLayer({
             id: orbitId,
             name: `${sat.name} Orbit`,
             polyline: {
-              positions: new Cesium.ConstantProperty(positions),
+              positions: positions,
               width: 2,
               material: new Cesium.PolylineGlowMaterialProperty({
                 glowPower: 0.2,
                 color: orbitColor,
               }),
               clampToGround: false,
-            } as Cesium.PolylineGraphics,
+            },
           });
           if (entity) currentEntities.add(orbitId);
         }

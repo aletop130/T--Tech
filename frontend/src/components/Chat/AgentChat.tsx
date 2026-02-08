@@ -153,11 +153,11 @@ export function AgentChat({ onSendMessage, initialMessages = [], useStreaming = 
 
         await sseClientRef.current.streamChat(
           [{ role: 'user', content: userMessage.content }],
-          sceneState,
+          sceneState as unknown as Record<string, unknown>,
         );
         
-      } else if (onSendMessage) {
-        const response = await onSendMessage(userMessage.content, sceneState as Record<string, unknown>);
+        } else if (onSendMessage) {
+        const response = await onSendMessage(userMessage.content, sceneState as unknown as Record<string, unknown>);
         
         const assistantMessage: ChatDisplayMessage = {
           id: (Date.now() + 1).toString(),

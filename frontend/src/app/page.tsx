@@ -9,10 +9,10 @@ export default function Home() {
   useEffect(() => {
     const timer = setTimeout(() => {
       try {
-        router.push('/dashboard');
+        router.push('/map');
       } catch (e) {
         console.error('Router navigation failed:', e);
-        window.location.href = '/dashboard';
+        window.location.href = '/map';
       }
     }, 100);
 

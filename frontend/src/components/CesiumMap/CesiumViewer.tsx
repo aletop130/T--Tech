@@ -2,10 +2,16 @@ import { useEffect, useRef, useState, useCallback, memo } from 'react';
 import { Viewer, useCesium } from 'resium';
 import * as Cesium from 'cesium';
 
+declare global {
+  interface Window {
+    CESIUM_BASE_URL?: string;
+  }
+}
+
 // Configure Cesium to use local assets - MUST be done before any Cesium usage
 if (typeof window !== 'undefined') {
   window.CESIUM_BASE_URL = '/cesium/';
-  Cesium.buildModuleUrl.setBaseUrl('/cesium/');
+  (Cesium.buildModuleUrl as unknown as { setBaseUrl: (url: string) => void }).setBaseUrl('/cesium/');
 
   if (process.env.NEXT_PUBLIC_CESIUM_ION_TOKEN) {
     Cesium.Ion.defaultAccessToken = process.env.NEXT_PUBLIC_CESIUM_ION_TOKEN;
@@ -29,10 +35,12 @@ const ViewerConfig = memo(function ViewerConfig({ onViewerReady }: { onViewerRea
       viewer.scene.globe.show = true;
       viewer.scene.globe.depthTestAgainstTerrain = false;
       viewer.scene.backgroundColor = Cesium.Color.fromCssColorString('#0a0a0f');
-      viewer.scene.skyAtmosphere.show = true;
-      viewer.scene.skyAtmosphere.hueShift = -0.02;
-      viewer.scene.skyAtmosphere.saturationShift = 0.2;
-      viewer.scene.skyAtmosphere.brightnessShift = 0.1;
+      if (viewer.scene.skyAtmosphere) {
+        viewer.scene.skyAtmosphere.show = true;
+        viewer.scene.skyAtmosphere.hueShift = -0.02;
+        viewer.scene.skyAtmosphere.saturationShift = 0.2;
+        viewer.scene.skyAtmosphere.brightnessShift = 0.1;
+      }
 
       viewer.scene.fog.enabled = true;
       viewer.scene.fog.density = 0.0001;
