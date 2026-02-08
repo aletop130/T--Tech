@@ -3,5 +3,4 @@
 __pycache__/
 .next/
 node_modules/
-cesium/
 opencode.json

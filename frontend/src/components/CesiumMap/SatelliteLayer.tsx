@@ -51,6 +51,29 @@ export function SatelliteLayer({
           Cesium.Cartesian3.fromDegrees(pos.lon, pos.lat, pos.alt * 1000)
         );
 
+        const isAllied = sat.name?.toLowerCase().includes('guardian') || 
+                         sat.name?.toLowerCase().includes('deepwatch') || 
+                         sat.name?.toLowerCase().includes('terrascan') ||
+                         sat.name?.toLowerCase().includes('starfinder') || 
+                         sat.name?.toLowerCase().includes('celestial') ||
+                         sat.name?.toLowerCase().includes('windwatcher') || 
+                         sat.name?.toLowerCase().includes('commlink') ||
+                         sat.name?.toLowerCase().includes('weathereye') || 
+                         sat.name?.toLowerCase().includes('navbeacon') ||
+                         sat.name?.toLowerCase().includes('eyeinsky') ||
+                         sat.faction === 'allied';
+        
+        const isEnemy = sat.name?.toLowerCase().includes('unknown') || 
+                        sat.name?.toLowerCase().includes('hostile') || 
+                        sat.name?.toLowerCase().includes('suspect') ||
+                        sat.name?.toLowerCase().includes('tracked') || 
+                        sat.name?.toLowerCase().includes('unidentified') ||
+                        sat.name?.toLowerCase().includes('contact') ||
+                        sat.faction === 'enemy';
+        
+        const pointColor = isEnemy ? Cesium.Color.RED : Cesium.Color.DODGERBLUE;
+        const orbitColor = isEnemy ? Cesium.Color.RED.withAlpha(0.6) : Cesium.Color.DODGERBLUE.withAlpha(0.6);
+        
         const satelliteId = `satellite-${sat.id}`;
         const orbitId = `orbit-${sat.id}`;
 
@@ -59,14 +82,14 @@ export function SatelliteLayer({
             id: orbitId,
             name: `${sat.name} Orbit`,
             polyline: {
-              positions: new Cesium.ConstantProperty(positions),
+              positions: positions,
               width: 2,
               material: new Cesium.PolylineGlowMaterialProperty({
                 glowPower: 0.2,
-                color: Cesium.Color.CYAN.withAlpha(0.6),
+                color: orbitColor,
               }),
               clampToGround: false,
-            } as Cesium.PolylineGraphics,
+            },
           });
           if (entity) currentEntities.add(orbitId);
         }
@@ -78,7 +101,7 @@ export function SatelliteLayer({
           position: currentPos,
           point: {
             pixelSize: 8,
-            color: Cesium.Color.YELLOW,
+            color: pointColor,
             outlineColor: Cesium.Color.WHITE,
             outlineWidth: 2,
             heightReference: Cesium.HeightReference.NONE,

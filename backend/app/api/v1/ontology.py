@@ -11,7 +11,7 @@ from app.api.deps import (
 from app.core.security import TokenData
 from app.core.exceptions import NotFoundError
 from app.services.ontology import OntologyService
-from app.services.celestrack import CelesTrackService, get_celestrack_service, FAMOUS_SATELLITES
+from app.services.celestrack import CelesTrackService, get_celestrack_service, FAMOUS_SATELLITES, ALLIED_SATELLITES, ENEMY_SATELLITES
 from app.schemas.common import PaginatedResponse
 from app.schemas.ontology import (
     SatelliteCreate,
@@ -509,6 +509,225 @@ async def fetch_famous_satellites(
         return CelestrackFetchResponse(
             success=result.get("success", False),
             message=f"Famous satellites: created {result.get('satellites_created', 0)}, updated {result.get('satellites_updated', 0)}",
+            satellites_created=result.get("satellites_created", 0),
+            satellites_updated=result.get("satellites_updated", 0),
+            satellite_ids=result.get("satellite_ids", []),
+            errors=result.get("errors", []),
+        )
+    finally:
+        await celestrack.close()
+
+
+@router.post(
+    "/satellites/fetch-allied",
+    response_model=CelestrackFetchResponse,
+    status_code=201
+)
+async def fetch_allied_satellites(
+    user: Annotated[TokenData, Depends(get_current_user)],
+):
+    """Fetch allied (friendly) satellites from CelesTrack.
+    
+    Allied satellites are displayed as BLUE on the map.
+    Mock names: Guardian Station Alpha, DeepWatch One, TerraScan-1, etc.
+    """
+    celestrack = get_celestrack_service()
+    
+    try:
+        result = await celestrack.fetch_and_store_allied_satellites(
+            tenant_id=user.tenant_id,
+            user_id=user.sub,
+        )
+        
+        return CelestrackFetchResponse(
+            success=result.get("success", False),
+            message=f"Allied satellites: created {result.get('satellites_created', 0)}, updated {result.get('satellites_updated', 0)}",
+            satellites_created=result.get("satellites_created", 0),
+            satellites_updated=result.get("satellites_updated", 0),
+            satellite_ids=result.get("satellite_ids", []),
+            errors=result.get("errors", []),
+        )
+    finally:
+        await celestrack.close()
+
+
+@router.post(
+    "/satellites/hide-allied",
+    response_model=dict,
+    status_code=200
+)
+async def hide_allied_satellites(
+    user: Annotated[TokenData, Depends(get_current_user)],
+    service: Annotated[OntologyService, Depends(get_ontology_service)],
+):
+    """Mark all allied satellites as hidden/inactive.
+    
+    Allied satellites are those with mock names: Guardian Station Alpha, DeepWatch One, etc.
+    """
+    ally_names = [
+        'guardian', 'deepwatch', 'terrascan', 'starfinder', 'celestial',
+        'windwatcher', 'commlink', 'weathereye', 'navbeacon', 'eyeinsky'
+    ]
+    
+    satellites, _ = await service.list_satellites(
+        tenant_id=user.tenant_id,
+        page=1,
+        page_size=1000,
+    )
+    
+    hidden_count = 0
+    for sat in satellites:
+        sat_name_lower = sat.name.lower() if sat.name else ''
+        if any(name in sat_name_lower for name in ally_names):
+            from app.schemas.ontology import SatelliteUpdate
+            sat_update = SatelliteUpdate(is_active=False)
+            await service.update_satellite(sat.id, sat_update, user.tenant_id, user.sub)
+            hidden_count += 1
+    
+    return {
+        "success": True,
+        "message": f"Hid {hidden_count} allied satellites",
+        "hidden_count": hidden_count,
+    }
+
+
+@router.post(
+    "/satellites/hide-enemy",
+    response_model=dict,
+    status_code=200
+)
+async def hide_enemy_satellites(
+    user: Annotated[TokenData, Depends(get_current_user)],
+    service: Annotated[OntologyService, Depends(get_ontology_service)],
+):
+    """Mark all enemy satellites as hidden/inactive.
+    
+    Enemy satellites are those with code names: UNKNOWN-ALPHA, HOSTILE-NAV-1, etc.
+    """
+    enemy_patterns = [
+        'unknown', 'hostile', 'suspect', 'tracked', 'unidentified', 'contact'
+    ]
+    
+    satellites, _ = await service.list_satellites(
+        tenant_id=user.tenant_id,
+        page=1,
+        page_size=1000,
+    )
+    
+    hidden_count = 0
+    for sat in satellites:
+        sat_name_lower = sat.name.lower() if sat.name else ''
+        if any(pattern in sat_name_lower for pattern in enemy_patterns):
+            from app.schemas.ontology import SatelliteUpdate
+            sat_update = SatelliteUpdate(is_active=False)
+            await service.update_satellite(sat.id, sat_update, user.tenant_id, user.sub)
+            hidden_count += 1
+    
+    return {
+        "success": True,
+        "message": f"Hid {hidden_count} enemy satellites",
+        "hidden_count": hidden_count,
+    }
+
+
+@router.post(
+    "/satellites/show-allied",
+    response_model=dict,
+    status_code=200
+)
+async def show_allied_satellites(
+    user: Annotated[TokenData, Depends(get_current_user)],
+    service: Annotated[OntologyService, Depends(get_ontology_service)],
+):
+    """Mark all allied satellites as active/visible."""
+    ally_names = [
+        'guardian', 'deepwatch', 'terrascan', 'starfinder', 'celestial',
+        'windwatcher', 'commlink', 'weathereye', 'navbeacon', 'eyeinsky'
+    ]
+    
+    satellites, _ = await service.list_satellites(
+        tenant_id=user.tenant_id,
+        page=1,
+        page_size=1000,
+    )
+    
+    shown_count = 0
+    for sat in satellites:
+        sat_name_lower = sat.name.lower() if sat.name else ''
+        if any(name in sat_name_lower for name in ally_names):
+            from app.schemas.ontology import SatelliteUpdate
+            sat_update = SatelliteUpdate(is_active=True)
+            await service.update_satellite(sat.id, sat_update, user.tenant_id, user.sub)
+            shown_count += 1
+    
+    return {
+        "success": True,
+        "message": f"Showing {shown_count} allied satellites",
+        "shown_count": shown_count,
+    }
+
+
+@router.post(
+    "/satellites/show-enemy",
+    response_model=dict,
+    status_code=200
+)
+async def show_enemy_satellites(
+    user: Annotated[TokenData, Depends(get_current_user)],
+    service: Annotated[OntologyService, Depends(get_ontology_service)],
+):
+    """Mark all enemy satellites as active/visible."""
+    enemy_patterns = [
+        'unknown', 'hostile', 'suspect', 'tracked', 'unidentified', 'contact'
+    ]
+    
+    satellites, _ = await service.list_satellites(
+        tenant_id=user.tenant_id,
+        page=1,
+        page_size=1000,
+    )
+    
+    shown_count = 0
+    for sat in satellites:
+        sat_name_lower = sat.name.lower() if sat.name else ''
+        if any(pattern in sat_name_lower for pattern in enemy_patterns):
+            from app.schemas.ontology import SatelliteUpdate
+            sat_update = SatelliteUpdate(is_active=True)
+            await service.update_satellite(sat.id, sat_update, user.tenant_id, user.sub)
+            shown_count += 1
+    
+    return {
+        "success": True,
+        "message": f"Showing {shown_count} enemy satellites",
+        "shown_count": shown_count,
+    }
+
+
+@router.post(
+    "/satellites/fetch-enemy",
+    response_model=CelestrackFetchResponse,
+    status_code=201
+)
+async def fetch_enemy_satellites(
+    user: Annotated[TokenData, Depends(get_current_user)],
+):
+    """Fetch enemy (hostile/unknown) satellites from CelesTrack.
+    
+    Enemy satellites are displayed as RED on the map.
+    Data sourced from CelesTrak (celestrak.org) - Real NORAD Catalog IDs.
+    Code names: UNKNOWN-ALPHA, HOSTILE-NAV-1, SUSPECT-COM-1, etc.
+    """
+    celestrack = get_celestrack_service()
+    
+    try:
+        result = await celestrack.fetch_and_store_enemy_satellites(
+            tenant_id=user.tenant_id,
+            user_id=user.sub,
+        )
+        
+        return CelestrackFetchResponse(
+            success=result.get("success", False),
+            message=f"Enemy satellites: created {result.get('satellites_created', 0)}, updated {result.get('satellites_updated', 0)}",
             satellites_created=result.get("satellites_created", 0),
             satellites_updated=result.get("satellites_updated", 0),
             satellite_ids=result.get("satellite_ids", []),

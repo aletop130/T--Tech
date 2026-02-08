@@ -10,13 +10,21 @@ import {
   Tag,
   ProgressBar,
   Callout,
+  Intent,
+  Spinner,
 } from '@blueprintjs/core';
+import { api } from '@/lib/api';
 
 export default function IngestionPage() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadResult, setUploadResult] = useState<{
+    success: boolean;
+    message: string;
+  } | null>(null);
+  const [hiding, setHiding] = useState<'allied' | 'enemy' | null>(null);
+  const [hideResult, setHideResult] = useState<{
     success: boolean;
     message: string;
   } | null>(null);
@@ -53,6 +61,82 @@ export default function IngestionPage() {
       });
     } finally {
       setUploading(false);
+    }
+  };
+
+  const handleHideAllied = async () => {
+    setHiding('allied');
+    setHideResult(null);
+    try {
+      const result = await api.hideAlliedSatellites();
+      setHideResult({
+        success: result.success,
+        message: result.message,
+      });
+    } catch (error) {
+      setHideResult({
+        success: false,
+        message: error instanceof Error ? error.message : 'Failed to hide allied satellites',
+      });
+    } finally {
+      setHiding(null);
+    }
+  };
+
+  const handleHideEnemy = async () => {
+    setHiding('enemy');
+    setHideResult(null);
+    try {
+      const result = await api.hideEnemySatellites();
+      setHideResult({
+        success: result.success,
+        message: result.message,
+      });
+    } catch (error) {
+      setHideResult({
+        success: false,
+        message: error instanceof Error ? error.message : 'Failed to hide enemy satellites',
+      });
+    } finally {
+      setHiding(null);
+    }
+  };
+
+  const handleShowAllied = async () => {
+    setHiding('allied');
+    setHideResult(null);
+    try {
+      const result = await api.showAlliedSatellites();
+      setHideResult({
+        success: result.success,
+        message: result.message,
+      });
+    } catch (error) {
+      setHideResult({
+        success: false,
+        message: error instanceof Error ? error.message : 'Failed to show allied satellites',
+      });
+    } finally {
+      setHiding(null);
+    }
+  };
+
+  const handleShowEnemy = async () => {
+    setHiding('enemy');
+    setHideResult(null);
+    try {
+      const result = await api.showEnemySatellites();
+      setHideResult({
+        success: result.success,
+        message: result.message,
+      });
+    } catch (error) {
+      setHideResult({
+        success: false,
+        message: error instanceof Error ? error.message : 'Failed to show enemy satellites',
+      });
+    } finally {
+      setHiding(null);
     }
   };
 
@@ -194,6 +278,84 @@ export default function IngestionPage() {
               </div>
             ))}
           </div>
+        </Card>
+
+        {/* SDA Defense Controls */}
+        <Card elevation={Elevation.TWO} className="p-6 lg:col-span-2">
+          <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+            <Icon icon="eye-off" className="text-sda-accent-yellow" />
+            SDA Defense Controls
+          </h2>
+          <p className="text-sm text-sda-text-secondary mb-4">
+            Hide or show satellite forces on the 3D map. Use these controls to focus on specific assets during analysis.
+          </p>
+
+          <div className="flex flex-wrap gap-4 mb-4">
+            {/* Allied Controls */}
+            <div className="flex-1 min-w-[200px] p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
+              <div className="flex items-center gap-2 mb-3">
+                <span className="w-3 h-3 rounded-full bg-blue-500"></span>
+                <span className="font-semibold text-blue-700 dark:text-blue-400">Allied Forces</span>
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  icon="eye-open"
+                  intent={Intent.SUCCESS}
+                  onClick={handleShowAllied}
+                  loading={hiding === 'allied'}
+                  small
+                >
+                  Show
+                </Button>
+                <Button
+                  icon="eye-off"
+                  intent={Intent.WARNING}
+                  onClick={handleHideAllied}
+                  loading={hiding === 'allied'}
+                  small
+                >
+                  Hide
+                </Button>
+              </div>
+            </div>
+
+            {/* Enemy Controls */}
+            <div className="flex-1 min-w-[200px] p-4 bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-200 dark:border-red-800">
+              <div className="flex items-center gap-2 mb-3">
+                <span className="w-3 h-3 rounded-full bg-red-500"></span>
+                <span className="font-semibold text-red-700 dark:text-red-400">Enemy Forces</span>
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  icon="eye-open"
+                  intent={Intent.SUCCESS}
+                  onClick={handleShowEnemy}
+                  loading={hiding === 'enemy'}
+                  small
+                >
+                  Show
+                </Button>
+                <Button
+                  icon="eye-off"
+                  intent={Intent.DANGER}
+                  onClick={handleHideEnemy}
+                  loading={hiding === 'enemy'}
+                  small
+                >
+                  Hide
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          {hideResult && (
+            <Callout
+              intent={hideResult.success ? 'success' : 'danger'}
+              icon={hideResult.success ? 'tick-circle' : 'error'}
+            >
+              {hideResult.message}
+            </Callout>
+          )}
         </Card>
 
         {/* Data Quality */}

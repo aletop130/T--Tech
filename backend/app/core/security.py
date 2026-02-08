@@ -22,6 +22,11 @@ class TokenData(BaseModel):
     roles: list[str] = []
     exp: Optional[datetime] = None
 
+    @property
+    def user_id(self) -> str:
+        """Alias for sub for convenience."""
+        return self.sub
+
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Verify a password against its hash."""

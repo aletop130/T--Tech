@@ -13,6 +13,18 @@ from app.db.models.incidents import Incident, IncidentComment
 from app.db.models.ingestion import IngestionRun, DataQualityCheck
 from app.db.models.audit import AuditEvent
 from app.db.models.users import User, Tenant
+from app.db.models.operations import (
+    RoutePlan,
+    Waypoint,
+    Maneuver,
+    Formation,
+    FormationMember,
+    Operation,
+    Task,
+    CollisionAlert,
+    PositionReport,
+    CommunicationWindow,
+)
 
 __all__ = [
     "Satellite",
@@ -30,5 +42,15 @@ __all__ = [
     "AuditEvent",
     "User",
     "Tenant",
+    "RoutePlan",
+    "Waypoint",
+    "Maneuver",
+    "Formation",
+    "FormationMember",
+    "Operation",
+    "Task",
+    "CollisionAlert",
+    "PositionReport",
+    "CommunicationWindow",
 ]
 

@@ -93,3 +93,70 @@ async def get_ai_service(
     """Get AI service instance."""
     return AIService(db, ontology)
 
+
+async def get_operations_service(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    audit: Annotated[AuditService, Depends(get_audit_service)],
+):
+    """Get operations service instance."""
+    from app.services.operations import (
+        RoutePlanningService, FormationService,
+        CollisionDetectionService, OperationService,
+        PositionTrackingService, CommunicationService
+    )
+    return RoutePlanningService(db, audit)
+
+
+async def get_route_planning_service(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    audit: Annotated[AuditService, Depends(get_audit_service)],
+):
+    """Get route planning service instance."""
+    from app.services.operations import RoutePlanningService
+    return RoutePlanningService(db, audit)
+
+
+async def get_formation_service(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    audit: Annotated[AuditService, Depends(get_audit_service)],
+):
+    """Get formation service instance."""
+    from app.services.operations import FormationService
+    return FormationService(db, audit)
+
+
+async def get_collision_detection_service(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    audit: Annotated[AuditService, Depends(get_audit_service)],
+):
+    """Get collision detection service instance."""
+    from app.services.operations import CollisionDetectionService
+    return CollisionDetectionService(db, audit)
+
+
+async def get_operation_service(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    audit: Annotated[AuditService, Depends(get_audit_service)],
+):
+    """Get operation service instance."""
+    from app.services.operations import OperationService
+    return OperationService(db, audit)
+
+
+async def get_position_tracking_service(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    audit: Annotated[AuditService, Depends(get_audit_service)],
+):
+    """Get position tracking service instance."""
+    from app.services.operations import PositionTrackingService
+    return PositionTrackingService(db, audit)
+
+
+async def get_communication_service(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    audit: Annotated[AuditService, Depends(get_audit_service)],
+):
+    """Get communication service instance."""
+    from app.services.operations import CommunicationService
+    return CommunicationService(db, audit)
+

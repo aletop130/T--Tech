@@ -1,0 +1,54 @@
+{
+  "vehicles": {
+    "tank": {
+      "name": "Main Battle Tank",
+      "description": "Panzer MBT - Main Battle Tank",
+      "scales": {
+        "x": 15,
+        "y": 15,
+        "z": 15
+      },
+      "color": "#5C4033"
+    },
+    "apc": {
+      "name": "Armored Personnel Carrier",
+      "description": "APC - Truppe Transport",
+      "scales": {
+        "x": 12,
+        "y": 12,
+        "z": 12
+      },
+      "color": "#4A5D23"
+    },
+    "jeep": {
+      "name": "Light Utility Vehicle",
+      "description": "Jeep - Scout Vehicle",
+      "scales": {
+        "x": 8,
+        "y": 8,
+        "z": 8
+      },
+      "color": "#3D5C3D"
+    },
+    "truck": {
+      "name": "Logistics Truck",
+      "description": "Supply Truck",
+      "scales": {
+        "x": 10,
+        "y": 10,
+        "z": 10
+      },
+      "color": "#708090"
+    },
+    "artillery": {
+      "name": "Self-Propelled Artillery",
+      "description": "SPA - Mobile Artillery",
+      "scales": {
+        "x": 14,
+        "y": 14,
+        "z": 14
+      },
+      "color": "#556B2F"
+    }
+  }
+}

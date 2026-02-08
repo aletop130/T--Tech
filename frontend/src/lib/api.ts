@@ -44,6 +44,7 @@ export interface Satellite {
   operator?: string;
   classification: string;
   tags: string[];
+  faction?: 'allied' | 'enemy' | 'neutral';
   created_at: string;
   updated_at: string;
 }
@@ -126,7 +127,7 @@ class ApiClient {
     this.tenantId = 'default';
   }
 
-  private async fetch<T>(
+  private async _fetch<T>(
     endpoint: string,
     options: RequestInit = {}
   ): Promise<T> {
@@ -171,15 +172,15 @@ class ApiClient {
     if (params?.search) searchParams.set('search', params.search);
     if (params?.is_active !== undefined) searchParams.set('is_active', params.is_active.toString());
 
-    return this.fetch(`/api/v1/ontology/satellites?${searchParams}`);
+    return this._fetch(`/api/v1/ontology/satellites?${searchParams}`);
   }
 
   async getSatellite(id: string): Promise<Satellite> {
-    return this.fetch(`/api/v1/ontology/satellites/${id}`);
+    return this._fetch(`/api/v1/ontology/satellites/${id}`);
   }
 
   async getSatellitesWithOrbits(): Promise<SatelliteDetail[]> {
-    return this.fetch('/api/v1/ontology/satellites/with-orbits');
+    return this._fetch('/api/v1/ontology/satellites/with-orbits');
   }
 
   // Ground Stations
@@ -194,7 +195,7 @@ class ApiClient {
     if (params?.is_operational !== undefined) {
       searchParams.set('is_operational', params.is_operational.toString());
     }
-    return this.fetch(`/api/v1/ontology/ground-stations?${searchParams}`);
+    return this._fetch(`/api/v1/ontology/ground-stations?${searchParams}`);
   }
 
   // Incidents
@@ -209,15 +210,15 @@ class ApiClient {
     if (params?.page_size) searchParams.set('page_size', params.page_size.toString());
     if (params?.status) searchParams.set('status', params.status);
     if (params?.severity) searchParams.set('severity', params.severity);
-    return this.fetch(`/api/v1/incidents?${searchParams}`);
+    return this._fetch(`/api/v1/incidents?${searchParams}`);
   }
 
   async getIncident(id: string): Promise<Incident> {
-    return this.fetch(`/api/v1/incidents/${id}`);
+    return this._fetch(`/api/v1/incidents/${id}`);
   }
 
   async getIncidentStats(): Promise<IncidentStats> {
-    return this.fetch('/api/v1/incidents/stats');
+    return this._fetch('/api/v1/incidents/stats');
   }
 
   async updateIncidentStatus(
@@ -225,7 +226,7 @@ class ApiClient {
     status: string,
     comment?: string
   ): Promise<Incident> {
-    return this.fetch(`/api/v1/incidents/${id}/status`, {
+    return this._fetch(`/api/v1/incidents/${id}/status`, {
       method: 'POST',
       body: JSON.stringify({ status, comment }),
     });
@@ -245,11 +246,11 @@ class ApiClient {
     if (params?.is_actionable !== undefined) {
       searchParams.set('is_actionable', params.is_actionable.toString());
     }
-    return this.fetch(`/api/v1/ontology/conjunctions?${searchParams}`);
+    return this._fetch(`/api/v1/ontology/conjunctions?${searchParams}`);
   }
 
   async getConjunction(id: string): Promise<ConjunctionEvent> {
-    return this.fetch(`/api/v1/ontology/conjunctions/${id}`);
+    return this._fetch(`/api/v1/ontology/conjunctions/${id}`);
   }
 
   // Space Weather
@@ -262,19 +263,19 @@ class ApiClient {
     if (params?.page) searchParams.set('page', params.page.toString());
     if (params?.page_size) searchParams.set('page_size', params.page_size.toString());
     if (params?.severity) searchParams.set('severity', params.severity);
-    return this.fetch(`/api/v1/ontology/space-weather?${searchParams}`);
+    return this._fetch(`/api/v1/ontology/space-weather?${searchParams}`);
   }
 
   // Search
   async search(query: string, types?: string[]): Promise<SearchResult[]> {
     const searchParams = new URLSearchParams({ q: query });
     if (types?.length) searchParams.set('types', types.join(','));
-    return this.fetch(`/api/v1/search?${searchParams}`);
+    return this._fetch(`/api/v1/search?${searchParams}`);
   }
 
   // AI
   async chat(messages: Array<{ role: string; content: string }>, contextIds?: string[]) {
-    return this.fetch('/api/v1/ai/chat', {
+    return this._fetch('/api/v1/ai/chat', {
       method: 'POST',
       body: JSON.stringify({
         messages,
@@ -306,7 +307,7 @@ class ApiClient {
   }
 
   async chatExecute(messages: Array<{ role: string; content: string }>, sceneState?: Record<string, unknown>) {
-    return this.fetch('/api/v1/ai/chat/execute', {
+    return this._fetch('/api/v1/ai/chat/execute', {
       method: 'POST',
       body: JSON.stringify({
         messages,
@@ -316,7 +317,7 @@ class ApiClient {
   }
 
   async analyzeConjunction(eventId: string) {
-    return this.fetch('/api/v1/ai/agents/conjunction-analyst', {
+    return this._fetch('/api/v1/ai/agents/conjunction-analyst', {
       method: 'POST',
       body: JSON.stringify({ conjunction_event_id: eventId }),
     });
@@ -328,7 +329,7 @@ class ApiClient {
     time_window_hours: number;
     min_distance_km?: number;
   }) {
-    return this.fetch('/api/v1/analytics/conjunction/run', {
+    return this._fetch('/api/v1/analytics/conjunction/run', {
       method: 'POST',
       body: JSON.stringify({
         satellite_ids: params.satellite_ids || [],
@@ -353,7 +354,7 @@ class ApiClient {
   }> {
     const searchParams = new URLSearchParams();
     searchParams.set('hours', hours.toString());
-    return this.fetch(`/api/v1/analytics/space-weather/impact?${searchParams}`);
+    return this._fetch(`/api/v1/analytics/space-weather/impact?${searchParams}`);
   }
 
   // Create Incident
@@ -364,7 +365,7 @@ class ApiClient {
     severity: string;
     related_object_ids?: string[];
   }): Promise<Incident> {
-    return this.fetch('/api/v1/incidents', {
+    return this._fetch('/api/v1/incidents', {
       method: 'POST',
       body: JSON.stringify(data),
     });
@@ -403,7 +404,7 @@ class ApiClient {
     satellite_ids: string[];
     errors: string[];
   }> {
-    return this.fetch('/api/v1/ontology/satellites/fetch-celestrack', {
+    return this._fetch('/api/v1/ontology/satellites/fetch-celestrack', {
       method: 'POST',
       body: JSON.stringify({ norad_ids: noradIds }),
     });
@@ -417,7 +418,73 @@ class ApiClient {
     satellite_ids: string[];
     errors: string[];
   }> {
-    return this.fetch('/api/v1/ontology/satellites/fetch-famous', {
+    return this._fetch('/api/v1/ontology/satellites/fetch-famous', {
+      method: 'POST',
+    });
+  }
+
+  async fetchAlliedSatellites(): Promise<{
+    success: boolean;
+    message: string;
+    satellites_created: number;
+    satellites_updated: number;
+    satellite_ids: string[];
+    errors: string[];
+  }> {
+    return this._fetch('/api/v1/ontology/satellites/fetch-allied', {
+      method: 'POST',
+    });
+  }
+
+  async fetchEnemySatellites(): Promise<{
+    success: boolean;
+    message: string;
+    satellites_created: number;
+    satellites_updated: number;
+    satellite_ids: string[];
+    errors: string[];
+  }> {
+    return this._fetch('/api/v1/ontology/satellites/fetch-enemy', {
+      method: 'POST',
+    });
+  }
+
+  async hideAlliedSatellites(): Promise<{
+    success: boolean;
+    message: string;
+    hidden_count: number;
+  }> {
+    return this._fetch('/api/v1/ontology/satellites/hide-allied', {
+      method: 'POST',
+    });
+  }
+
+  async hideEnemySatellites(): Promise<{
+    success: boolean;
+    message: string;
+    hidden_count: number;
+  }> {
+    return this._fetch('/api/v1/ontology/satellites/hide-enemy', {
+      method: 'POST',
+    });
+  }
+
+  async showAlliedSatellites(): Promise<{
+    success: boolean;
+    message: string;
+    shown_count: number;
+  }> {
+    return this._fetch('/api/v1/ontology/satellites/show-allied', {
+      method: 'POST',
+    });
+  }
+
+  async showEnemySatellites(): Promise<{
+    success: boolean;
+    message: string;
+    shown_count: number;
+  }> {
+    return this._fetch('/api/v1/ontology/satellites/show-enemy', {
       method: 'POST',
     });
   }
@@ -430,11 +497,578 @@ class ApiClient {
     orbit_id?: string;
     epoch?: string;
   }> {
-    return this.fetch(`/api/v1/ontology/satellites/${satelliteId}/refresh-tle`, {
+    return this._fetch(`/api/v1/ontology/satellites/${satelliteId}/refresh-tle`, {
       method: 'POST',
     });
+  }
+
+  // Operations - Routes
+  async getRoutes(params?: {
+    entity_id?: string;
+    status?: string;
+    page?: number;
+    page_size?: number;
+  }): Promise<PaginatedResponse<RoutePlan>> {
+    const searchParams = new URLSearchParams();
+    if (params?.entity_id) searchParams.set('entity_id', params.entity_id);
+    if (params?.status) searchParams.set('status', params.status);
+    if (params?.page) searchParams.set('page', params.page.toString());
+    if (params?.page_size) searchParams.set('page_size', params.page_size.toString());
+    return this._fetch(`/api/v1/operations/routes?${searchParams}`);
+  }
+
+  async getRoute(id: string): Promise<RoutePlan> {
+    return this._fetch(`/api/v1/operations/routes/${id}`);
+  }
+
+  async createRoute(data: RoutePlanCreate): Promise<RoutePlan> {
+    return this._fetch('/api/v1/operations/routes', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateRoute(id: string, data: RoutePlanUpdate): Promise<RoutePlan> {
+    return this._fetch(`/api/v1/operations/routes/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteRoute(id: string): Promise<void> {
+    await this._fetch(`/api/v1/operations/routes/${id}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async getRouteTrajectory(routeId: string): Promise<TrajectoryResponse> {
+    return this._fetch(`/api/v1/operations/routes/${routeId}/trajectory`);
+  }
+
+  // Operations - Formations
+  async getFormations(params?: {
+    is_active?: boolean;
+    page?: number;
+    page_size?: number;
+  }): Promise<PaginatedResponse<Formation>> {
+    const searchParams = new URLSearchParams();
+    if (params?.is_active !== undefined) searchParams.set('is_active', params.is_active.toString());
+    if (params?.page) searchParams.set('page', params.page.toString());
+    if (params?.page_size) searchParams.set('page_size', params.page_size.toString());
+    return this._fetch(`/api/v1/operations/formations?${searchParams}`);
+  }
+
+  async getFormation(id: string): Promise<Formation> {
+    return this._fetch(`/api/v1/operations/formations/${id}`);
+  }
+
+  async createFormation(data: FormationCreate): Promise<Formation> {
+    return this._fetch('/api/v1/operations/formations', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async activateFormation(id: string): Promise<Formation> {
+    return this._fetch(`/api/v1/operations/formations/${id}/activate`, {
+      method: 'POST',
+    });
+  }
+
+  // Operations - Operations
+  async getOperations(params?: {
+    status?: string;
+    operation_type?: string;
+    page?: number;
+    page_size?: number;
+  }): Promise<PaginatedResponse<Operation>> {
+    const searchParams = new URLSearchParams();
+    if (params?.status) searchParams.set('status', params.status);
+    if (params?.operation_type) searchParams.set('operation_type', params.operation_type);
+    if (params?.page) searchParams.set('page', params.page.toString());
+    if (params?.page_size) searchParams.set('page_size', params.page_size.toString());
+    return this._fetch(`/api/v1/operations/operations?${searchParams}`);
+  }
+
+  async getOperation(id: string): Promise<OperationDetail> {
+    return this._fetch(`/api/v1/operations/operations/${id}`);
+  }
+
+  async createOperation(data: OperationCreate): Promise<Operation> {
+    return this._fetch('/api/v1/operations/operations', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async dispatchOperation(operationId: string, dispatchTime?: string): Promise<OperationDispatchResponse> {
+    return this._fetch(`/api/v1/operations/operations/${operationId}/dispatch`, {
+      method: 'POST',
+      body: JSON.stringify({ operation_id: operationId, dispatch_time: dispatchTime }),
+    });
+  }
+
+  async updateOperationStatus(operationId: string, status: string): Promise<Operation> {
+    return this._fetch(`/api/v1/operations/operations/${operationId}/status`, {
+      method: 'PUT',
+      body: JSON.stringify({ status }),
+    });
+  }
+
+  // Collisions
+  async detectCollisions(entityIds: string[]): Promise<CollisionAlert[]> {
+    return this._fetch('/api/v1/operations/collisions/detect', {
+      method: 'POST',
+      body: JSON.stringify(entityIds),
+    });
+  }
+
+  async getActiveCollisions(): Promise<{ items: CollisionAlert[]; total: number; active_count: number }> {
+    return this._fetch('/api/v1/operations/collisions/active');
+  }
+
+  async generateAvoidanceManeuver(request: AvoidanceManeuverRequest): Promise<AvoidanceManeuverResponse> {
+    return this._fetch('/api/v1/operations/collisions/avoidance', {
+      method: 'POST',
+      body: JSON.stringify(request),
+    });
+  }
+
+  // Position Reports
+  async reportPosition(data: PositionReportCreate): Promise<PositionReport> {
+    return this._fetch('/api/v1/operations/positions', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getLatestPosition(entityId: string): Promise<PositionReport> {
+    return this._fetch(`/api/v1/operations/positions/${entityId}/latest`);
+  }
+
+  async getPositionHistory(
+    entityId: string,
+    startTime: string,
+    endTime: string
+  ): Promise<{ items: PositionReport[]; total: number }> {
+    const searchParams = new URLSearchParams();
+    searchParams.set('start_time', startTime);
+    searchParams.set('end_time', endTime);
+    return this._fetch(`/api/v1/operations/positions/${entityId}/history?${searchParams}`);
+  }
+
+  async getGroundVehicles(): Promise<{ items: PositionReport[]; total: number }> {
+    return this._fetch('/api/v1/operations/positions/ground-vehicles');
   }
 }
 
 export const api = new ApiClient();
+
+// Operations Interfaces
+export type OperationType = 
+  | 'transit' | 'patrol' | 'intercept' | 'strike' | 'reconnaissance'
+  | 'support' | 'debris_avoidance' | 'station_keeping' | 'formation' | 'coordinated_maneuver';
+
+export type OperationStatus = 
+  | 'planned' | 'scheduled' | 'active' | 'in_progress' | 'completed' | 'cancelled' | 'failed';
+
+export type FormationType = 'v_shape' | 'line' | 'diamond' | 'echelon' | 'circle' | 'custom';
+
+export type ManeuverType = 
+  | 'orbit_insertion' | 'orbit_change' | 'station_keeping' | 'debris_avoidance'
+  | 'collision_avoidance' | 'formation_join' | 'formation_leave' | 'coordinated_burn'
+  | 'rendezvous' | 'dispersal';
+
+export type ManeuverStatus = 'planned' | 'scheduled' | 'executing' | 'completed' | 'cancelled' | 'failed';
+
+export type EntityType = 
+  | 'satellite' | 'aircraft' | 'ship' | 'ground_vehicle' | 'ground_station'
+  | 'ballistic_missile' | 'debris' | 'simulated';
+
+export type TaskStatus = 'pending' | 'queued' | 'assigned' | 'in_progress' | 'completed' | 'failed' | 'cancelled';
+
+export type CollisionRiskLevel = 'low' | 'medium' | 'high' | 'critical';
+
+export interface Waypoint {
+  id: string;
+  route_plan_id: string;
+  sequence_order: number;
+  name?: string;
+  position_lat: number;
+  position_lon: number;
+  position_alt_km?: number;
+  arrival_time?: string;
+  departure_time?: string;
+  earliest_arrival?: string;
+  latest_arrival?: string;
+  hold_duration_sec?: number;
+  dwell_time_sec?: number;
+  maneuver_type?: string;
+  maneuver_params: Record<string, unknown>;
+  velocity_x?: number;
+  velocity_y?: number;
+  velocity_z?: number;
+  constraints: unknown[];
+  notes?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Maneuver {
+  id: string;
+  route_plan_id: string;
+  waypoint_id?: string;
+  entity_id: string;
+  maneuver_type: ManeuverType;
+  burn_time: string;
+  burn_duration_sec?: number;
+  delta_v_x?: number;
+  delta_v_y?: number;
+  delta_v_z?: number;
+  total_delta_v_ms?: number;
+  fuel_consumed_kg?: number;
+  mass_before_kg?: number;
+  mass_after_kg?: number;
+  status: ManeuverStatus;
+  reference_frame: string;
+  thrust_n?: number;
+  isp_s?: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface RoutePlan {
+  id: string;
+  entity_id: string;
+  entity_type: EntityType;
+  name: string;
+  description?: string;
+  mission_type: string;
+  start_time: string;
+  end_time?: string;
+  origin_lat?: number;
+  origin_lon?: number;
+  origin_alt_km?: number;
+  destination_lat?: number;
+  destination_lon?: number;
+  destination_alt_km?: number;
+  priority: number;
+  is_recurring: boolean;
+  recurrence_pattern?: Record<string, unknown>;
+  trajectory_data?: Record<string, unknown>;
+  constraints: unknown[];
+  objectives: string[];
+  status: string;
+  planned_by?: string;
+  approval_status: string;
+  approved_by?: string;
+  approved_at?: string;
+  actual_start_time?: string;
+  actual_end_time?: string;
+  created_at: string;
+  updated_at: string;
+  waypoints: Waypoint[];
+  maneuvers: Maneuver[];
+}
+
+export interface FormationMember {
+  id: string;
+  formation_id: string;
+  entity_id: string;
+  entity_type: EntityType;
+  slot_position: number;
+  slot_name?: string;
+  relative_x_m: number;
+  relative_y_m: number;
+  relative_z_m: number;
+  relative_vx_ms: number;
+  relative_vy_ms: number;
+  relative_vz_ms: number;
+  time_offset_sec: number;
+  is_optional: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Formation {
+  id: string;
+  name: string;
+  formation_type: FormationType;
+  description?: string;
+  leader_entity_id?: string;
+  spacing_meters: number;
+  altitude_separation_m?: number;
+  time_offset_sec: number;
+  is_active: boolean;
+  activation_time?: string;
+  deactivation_time?: string;
+  formation_data?: Record<string, unknown>;
+  slot_assignments: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+  members: FormationMember[];
+}
+
+export interface Task {
+  id: string;
+  operation_id: string;
+  route_plan_id?: string;
+  task_type: string;
+  name: string;
+  description?: string;
+  assigned_entity_id?: string;
+  assigned_team?: string;
+  scheduled_start?: string;
+  scheduled_end?: string;
+  actual_start?: string;
+  actual_end?: string;
+  status: TaskStatus;
+  priority: number;
+  dependencies: string[];
+  prerequisites: string[];
+  task_parameters: Record<string, unknown>;
+  execution_result?: Record<string, unknown>;
+  status_updates: unknown[];
+  notes?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Operation {
+  id: string;
+  name: string;
+  operation_type: OperationType;
+  description?: string;
+  start_time: string;
+  end_time?: string;
+  participating_entities: string[];
+  entity_count: number;
+  formation_id?: string;
+  coordination_rules: Record<string, unknown>;
+  command_chain: string[];
+  communication_plan?: Record<string, unknown>;
+  priority: number;
+  classification: string;
+  objectives: string[];
+  success_criteria: string[];
+  risk_assessment?: Record<string, unknown>;
+  timeline_data?: Record<string, unknown>;
+  status_reports: unknown[];
+  status: OperationStatus;
+  actual_start_time?: string;
+  actual_end_time?: string;
+  created_at: string;
+  updated_at: string;
+  route_plans: RoutePlan[];
+  tasks: Task[];
+}
+
+export interface OperationDetail extends Operation {
+  formation?: Formation;
+}
+
+export interface CollisionAlert {
+  id: string;
+  entity_a_id: string;
+  entity_a_type: EntityType;
+  entity_b_id: string;
+  entity_b_type: EntityType;
+  detection_time: string;
+  predicted_collision_time: string;
+  miss_distance_km: number;
+  miss_distance_radial_km?: number;
+  miss_distance_intrack_km?: number;
+  miss_distance_crosstrack_km?: number;
+  probability?: number;
+  risk_level: CollisionRiskLevel;
+  entity_a_radius_m?: number;
+  entity_b_radius_m?: number;
+  combined_radius_m?: number;
+  avoidance_maneuver_proposed: boolean;
+  avoidance_route_id?: string;
+  status: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PositionReport {
+  id: string;
+  entity_id: string;
+  entity_type: EntityType;
+  report_time: string;
+  latitude: number;
+  longitude: number;
+  altitude_m?: number;
+  velocity_x?: number;
+  velocity_y?: number;
+  velocity_z?: number;
+  velocity_magnitude_ms?: number;
+  heading_deg?: number;
+  pitch_deg?: number;
+  roll_deg?: number;
+  accuracy_m?: number;
+  data_source?: string;
+  sensor_id?: string;
+  is_simulated: boolean;
+  created_at: string;
+}
+
+export interface TrajectoryPoint {
+  time: string;
+  latitude: number;
+  longitude: number;
+  altitude_km: number;
+  velocity_x?: number;
+  velocity_y?: number;
+  velocity_z?: number;
+}
+
+export interface TrajectoryResponse {
+  entity_id: string;
+  entity_type: EntityType;
+  trajectory: TrajectoryPoint[];
+  start_time: string;
+  end_time: string;
+}
+
+export interface AvoidanceManeuverRequest {
+  entity_id: string;
+  target_collision_id: string;
+  avoidance_type: string;
+  prefer_altitude_change: boolean;
+  min_altitude_km?: number;
+  max_delta_v_ms?: number;
+}
+
+export interface AvoidanceManeuverResponse {
+  maneuver_id: string;
+  route_plan_id: string;
+  estimated_delta_v_ms: number;
+  estimated_fuel_kg: number;
+  new_trajectory: TrajectoryPoint[];
+  maneuver_sequence: Maneuver[];
+}
+
+export interface OperationDispatchRequest {
+  operation_id: string;
+  dispatch_time?: string;
+}
+
+export interface OperationDispatchResponse {
+  operation_id: string;
+  status: string;
+  dispatched_at: string;
+  participating_entities: string[];
+  timeline_events: unknown[];
+}
+
+export interface RoutePlanCreate {
+  entity_id: string;
+  entity_type: EntityType;
+  name: string;
+  description?: string;
+  mission_type: string;
+  start_time: string;
+  end_time?: string;
+  origin_lat?: number;
+  origin_lon?: number;
+  origin_alt_km?: number;
+  destination_lat?: number;
+  destination_lon?: number;
+  destination_alt_km?: number;
+  priority?: number;
+  is_recurring?: boolean;
+  recurrence_pattern?: Record<string, unknown>;
+  trajectory_data?: Record<string, unknown>;
+  constraints?: unknown[];
+  objectives?: string[];
+  waypoints?: Waypoint[];
+  maneuvers?: Maneuver[];
+}
+
+export interface RoutePlanUpdate {
+  name?: string;
+  description?: string;
+  mission_type?: string;
+  start_time?: string;
+  end_time?: string;
+  origin_lat?: number;
+  origin_lon?: number;
+  origin_alt_km?: number;
+  destination_lat?: number;
+  destination_lon?: number;
+  destination_alt_km?: number;
+  priority?: number;
+  is_recurring?: boolean;
+  recurrence_pattern?: Record<string, unknown>;
+  trajectory_data?: Record<string, unknown>;
+  constraints?: unknown[];
+  objectives?: string[];
+  status?: string;
+}
+
+export interface FormationCreate {
+  name: string;
+  formation_type: FormationType;
+  description?: string;
+  leader_entity_id?: string;
+  spacing_meters?: number;
+  altitude_separation_m?: number;
+  time_offset_sec?: number;
+  formation_data?: Record<string, unknown>;
+  slot_assignments?: Record<string, unknown>;
+  members?: FormationMember[];
+}
+
+export interface FormationUpdate {
+  name?: string;
+  formation_type?: FormationType;
+  description?: string;
+  leader_entity_id?: string;
+  spacing_meters?: number;
+  altitude_separation_m?: number;
+  time_offset_sec?: number;
+  is_active?: boolean;
+  formation_data?: Record<string, unknown>;
+  slot_assignments?: Record<string, unknown>;
+}
+
+export interface OperationCreate {
+  name: string;
+  operation_type: OperationType;
+  description?: string;
+  start_time: string;
+  end_time?: string;
+  participating_entities?: string[];
+  formation_id?: string;
+  coordination_rules?: Record<string, unknown>;
+  command_chain?: string[];
+  communication_plan?: Record<string, unknown>;
+  priority?: number;
+  classification?: string;
+  objectives?: string[];
+  success_criteria?: string[];
+  route_plans?: RoutePlanCreate[];
+  tasks?: unknown[];
+}
+
+export interface PositionReportCreate {
+  entity_id: string;
+  entity_type: EntityType;
+  report_time: string;
+  latitude: number;
+  longitude: number;
+  altitude_m?: number;
+  velocity_x?: number;
+  velocity_y?: number;
+  velocity_z?: number;
+  velocity_magnitude_ms?: number;
+  heading_deg?: number;
+  pitch_deg?: number;
+  roll_deg?: number;
+  accuracy_m?: number;
+  data_source?: string;
+  sensor_id?: string;
+  is_simulated?: boolean;
+}
 
