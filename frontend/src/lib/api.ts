@@ -1,4 +1,8 @@
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+// Use relative URL to leverage Next.js API rewrites in development
+// This avoids CORS and network resolution issues
+const API_BASE = typeof window !== 'undefined' 
+  ? '' // Browser: use relative URLs (goes through Next.js rewrites)
+  : (process.env.NEXT_PUBLIC_API_URL || 'http://backend:8000'); // Server: use direct backend URL
 
 export interface PaginatedResponse<T> {
   items: T[];
@@ -128,7 +132,7 @@ class ApiClient {
   ): Promise<T> {
     const baseUrl = this.baseUrl;
     if (!baseUrl) {
-      throw new Error('API base URL not configured');
+      throw new Error('API base URL not configured. Set NEXT_PUBLIC_API_URL environment variable.');
     }
     const url = `${baseUrl}${endpoint}`;
     const headers = {
@@ -137,14 +141,21 @@ class ApiClient {
       ...options.headers,
     };
 
-    const response = await fetch(url, { ...options, headers });
+    try {
+      const response = await fetch(url, { ...options, headers });
 
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({}));
-      throw new Error(error.detail || `API error: ${response.status}`);
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}));
+        throw new Error(error.detail || `API error: ${response.status} - ${response.statusText}`);
+      }
+
+      return response.json();
+    } catch (error) {
+      if (error instanceof TypeError && error.message === 'Failed to fetch') {
+        throw new Error(`Unable to connect to API at ${baseUrl}. Please ensure the backend service is running.`);
+      }
+      throw error;
     }
-
-    return response.json();
   }
 
   // Satellites
@@ -273,7 +284,7 @@ class ApiClient {
   }
 
   async chatStream(messages: Array<{ role: string; content: string }>, sceneState?: Record<string, unknown>) {
-    const url = `${this.baseUrl}/api/v1/ai/chat/stream`;
+    const url = `${this.baseUrl || ''}/api/v1/ai/chat/stream`;
     const response = await fetch(url, {
       method: 'POST',
       headers: {
@@ -364,7 +375,7 @@ class ApiClient {
     const formData = new FormData();
     formData.append('file', file);
 
-    const url = `${this.baseUrl}/api/v1/ingestion/upload/tle`;
+    const url = `${this.baseUrl || ''}/api/v1/ingestion/upload/tle`;
     const headers = {
       'X-Tenant-ID': this.tenantId,
     };
