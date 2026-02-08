@@ -8,7 +8,6 @@ declare global {
   }
 }
 
-// Configure Cesium to use local assets - MUST be done before any Cesium usage
 if (typeof window !== 'undefined') {
   window.CESIUM_BASE_URL = '/cesium/';
   (Cesium.buildModuleUrl as unknown as { setBaseUrl: (url: string) => void }).setBaseUrl('/cesium/');
@@ -27,6 +26,7 @@ interface CesiumViewerProps {
 const ViewerConfig = memo(function ViewerConfig({ onViewerReady, showTerrain }: { onViewerReady?: (viewer: Cesium.Viewer) => void; showTerrain?: boolean }) {
   const { viewer } = useCesium();
   const isConfiguredRef = useRef(false);
+  const terrainLoadedRef = useRef(false);
 
   const handleReady = useCallback(async () => {
     if (viewer && !isConfiguredRef.current) {
@@ -42,15 +42,14 @@ const ViewerConfig = memo(function ViewerConfig({ onViewerReady, showTerrain }: 
           if (process.env.NEXT_PUBLIC_CESIUM_ION_TOKEN) {
             const terrainProvider = await Cesium.createWorldTerrainAsync();
             viewer.scene.globe.terrainProvider = terrainProvider;
-            viewer.scene.globe.depthTestAgainstTerrain = true;
+            terrainLoadedRef.current = true;
             console.log('Cesium World Terrain loaded');
-          } else {
-            console.warn('No CESIUM_ION_TOKEN - terrain not available');
-          }
+          }).catch((err: any) => {
+            console.warn('Failed to load terrain:', err);
+          });
         }
-      } catch (error) {
-        console.warn('Could not load terrain:', error);
       }
+
       if (viewer.scene.skyAtmosphere) {
         viewer.scene.skyAtmosphere.show = true;
         viewer.scene.skyAtmosphere.hueShift = -0.02;
@@ -76,22 +75,13 @@ const ViewerConfig = memo(function ViewerConfig({ onViewerReady, showTerrain }: 
 
       try {
         viewer.imageryLayers.removeAll();
-
-        // Use ArcGIS World Imagery for satellite view (free, no API key required)
+        
         const satelliteProvider = new Cesium.UrlTemplateImageryProvider({
           url: 'https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
           maximumLevel: 19,
           credit: new Cesium.Credit('© Esri')
         });
         viewer.imageryLayers.addImageryProvider(satelliteProvider);
-
-        // Add labels layer for place names (optional but helpful)
-        const labelsProvider = new Cesium.UrlTemplateImageryProvider({
-          url: 'https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',
-          maximumLevel: 19,
-          credit: new Cesium.Credit('© Esri')
-        });
-        viewer.imageryLayers.addImageryProvider(labelsProvider);
 
       } catch (error) {
         console.error('Error configuring imagery:', error);
@@ -112,7 +102,7 @@ const ViewerConfig = memo(function ViewerConfig({ onViewerReady, showTerrain }: 
         onViewerReady(viewer);
       }
     }
-  }, [viewer, onViewerReady]);
+  }, [viewer, onViewerReady, showTerrain]);
 
   useEffect(() => {
     handleReady();
@@ -121,7 +111,7 @@ const ViewerConfig = memo(function ViewerConfig({ onViewerReady, showTerrain }: 
   return null;
 });
 
-export const CesiumViewer = memo(function CesiumViewer({ className, onViewerReady }: CesiumViewerProps) {
+export const CesiumViewer = memo(function CesiumViewer({ className, onViewerReady, showTerrain }: CesiumViewerProps) {
   const creditContainerRef = useRef<HTMLDivElement | null>(null);
   const [isMounted, setIsMounted] = useState(false);
 

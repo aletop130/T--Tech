@@ -45,20 +45,7 @@ export function MilitaryVehicleLayer({
         (vehicle.altitude_m || 0)
       );
 
-      const positionProperty = new Cesium.SampledPositionProperty();
-      positionProperty.addSample(Cesium.JulianDate.now(), position);
-
       const headingRad = Cesium.Math.toRadians(vehicle.heading_deg || 0);
-      const hpr = new Cesium.HeadingPitchRoll(
-        Cesium.Math.toRadians(vehicle.heading_deg || 0),
-        Cesium.Math.toRadians(-5),
-        0
-      );
-      const orientation = Cesium.Transforms.headingPitchRollQuaternion(
-        position,
-        hpr
-      );
-
       const vehicleType = determineVehicleType(vehicle.entity_id);
       const vehicleConfig = getVehicleConfig(vehicleType);
 
@@ -66,7 +53,6 @@ export function MilitaryVehicleLayer({
         id: `vehicle-body-${vehicle.entity_id}`,
         name: vehicle.entity_id,
         position: position,
-        orientation: orientation,
         box: {
           dimensions: new Cesium.Cartesian3(
             vehicleConfig.width,
@@ -98,7 +84,6 @@ export function MilitaryVehicleLayer({
           vehicle.latitude,
           (vehicle.altitude_m || 0) + 5 + vehicleConfig.height * 0.5
         ),
-        orientation: orientation,
         ellipsoid: {
           radii: new Cesium.Cartesian3(
             vehicleConfig.width * 0.35,
