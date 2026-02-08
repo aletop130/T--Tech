@@ -35,14 +35,14 @@ export default function AdminPage() {
                 className="flex items-center justify-between p-3 bg-sda-bg-tertiary rounded-lg"
               >
                 <div className="flex items-center gap-3">
-                  <div
-                    className={`w-2 h-2 rounded-full ${
-                      service.status === 'healthy'
-                        ? 'bg-sda-accent-green'
-                        : 'bg-sda-accent-yellow animate-pulse'
-                    }`}
-                  />
-                  <span>{service.name}</span>
+                   <div
+                     className={`w-2 h-2 rounded-full ${
+                       service.status === 'healthy'
+                         ? 'bg-sda-accent-green'
+                         : 'bg-sda-accent-yellow animate-pulse'
+                     }`}
+                   />
+                   <span className="text-sda-text-primary">{service.name}</span>
                 </div>
                 <div className="flex items-center gap-3">
                   <span className="text-sm text-sda-text-muted">

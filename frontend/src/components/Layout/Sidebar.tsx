@@ -11,18 +11,19 @@ interface NavItem {
   icon: IconName;
   label: string;
   href: string;
+  colorVar: string;
 }
 
 const navItems: NavItem[] = [
-  { icon: 'dashboard', label: 'Dashboard', href: '/dashboard' },
-  { icon: 'search-around', label: 'Explorer', href: '/explorer' },
-  { icon: 'graph', label: 'Graph View', href: '/graph' },
-  { icon: 'timeline-events', label: 'Timeline', href: '/timeline' },
-  { icon: 'globe', label: 'Map', href: '/map' },
-  { icon: 'warning-sign', label: 'Incidents', href: '/incidents' },
-  { icon: 'flows', label: 'Operations', href: '/operations' },
-  { icon: 'import', label: 'Ingestion', href: '/ingestion' },
-  { icon: 'cog', label: 'Admin', href: '/admin' },
+  { icon: 'dashboard', label: 'Dashboard', href: '/dashboard', colorVar: '--sda-accent-blue' },
+  { icon: 'search-around', label: 'Explorer', href: '/explorer', colorVar: '--sda-accent-green' },
+  { icon: 'graph', label: 'Graph View', href: '/graph', colorVar: '#a371f7' },
+  { icon: 'timeline-events', label: 'Timeline', href: '/timeline', colorVar: '--sda-accent-yellow' },
+  { icon: 'globe', label: 'Map', href: '/map', colorVar: '--sda-accent-cyan' },
+  { icon: 'warning-sign', label: 'Incidents', href: '/incidents', colorVar: '--sda-accent-red' },
+  { icon: 'flows', label: 'Operations', href: '/operations', colorVar: '--sda-accent-blue' },
+  { icon: 'import', label: 'Ingestion', href: '/ingestion', colorVar: '#8000ca' },
+  { icon: 'cog', label: 'Admin', href: '/admin', colorVar: '#8b949e' },
 ];
 
 export function Sidebar() {
@@ -32,22 +33,21 @@ export function Sidebar() {
   return (
     <div
       className={classNames(
-        'flex flex-col h-full bg-sda-bg-secondary border-r border-sda-border-default',
+        'flex flex-col h-full bg-sda-bg-sidebar border-r border-sda-border-default',
         'transition-all duration-200',
         sidebarCollapsed ? 'w-16' : 'w-56'
       )}
     >
-      {/* Logo */}
-      <div className="flex items-center h-14 px-4 border-b border-sda-border-default">
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded bg-gradient-to-br from-sda-accent-cyan to-sda-accent-blue flex items-center justify-center">
-            <Icon icon="satellite" size={16} className="text-white" />
-          </div>
-          {!sidebarCollapsed && (
-            <span className="font-bold text-sda-text-primary">SDA</span>
-          )}
-        </div>
-      </div>
+        {/* Logo */}
+        <div className="flex items-center justify-center h-16 px-4">
+          <div className="flex items-center justify-center w-full">
+           <img
+             src={sidebarCollapsed ? "/logotelespazioSOLOLOGO.svg" : "/logotelespazioscritta.svg"}
+             alt="Telespazio logo"
+             className={sidebarCollapsed ? "h-8 w-auto object-contain" : "max-h-10 w-auto object-contain"}
+           />
+         </div>
+       </div>
 
       {/* Navigation */}
       <nav className="flex-1 py-4">
@@ -66,12 +66,11 @@ export function Sidebar() {
                     className={classNames(
                       'flex items-center gap-3 px-3 py-2 rounded-md transition-colors',
                       'hover:bg-sda-bg-tertiary',
-                      isActive
-                        ? 'bg-sda-bg-tertiary text-sda-accent-cyan'
-                        : 'text-sda-text-secondary'
+                      isActive ? 'bg-sda-bg-tertiary' : ''
                     )}
+                    style={{ color: 'var(--sda-text-primary)' }}
                   >
-                    <Icon icon={item.icon} size={16} />
+                    <Icon icon={item.icon} size={16} style={{ color: `var(${item.colorVar})` }} />
                     {!sidebarCollapsed && (
                       <span className="text-sm">{item.label}</span>
                     )}
@@ -86,9 +85,10 @@ export function Sidebar() {
       {/* Collapse Toggle */}
       <div className="p-2 border-t border-sda-border-default">
         <button
-          onClick={toggleSidebar}
-          className="w-full flex items-center justify-center p-2 rounded-md hover:bg-sda-bg-tertiary text-sda-text-secondary"
-        >
+            onClick={toggleSidebar}
+            className="w-full flex items-center justify-center p-2 rounded-md hover:bg-sda-bg-tertiary"
+            style={{ color: 'var(--sda-text-secondary)' }}
+          >
           <Icon
             icon={sidebarCollapsed ? 'chevron-right' : 'chevron-left'}
             size={16}

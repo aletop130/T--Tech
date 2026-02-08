@@ -1,3 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=Google+Sans+Code:wght@300;400;500;600;700&display=swap');
+
 @import "@blueprintjs/core/lib/css/blueprint.css";
 @import "@blueprintjs/icons/lib/css/blueprint-icons.css";
 @import "@blueprintjs/select/lib/css/blueprint-select.css";
@@ -13,13 +15,14 @@
 @tailwind utilities;
 
 :root {
-  --sda-bg-primary: #0d1117;
-  --sda-bg-secondary: #161b22;
-  --sda-bg-tertiary: #21262d;
-  --sda-bg-elevated: #30363d;
-  --sda-border-default: #30363d;
-  --sda-text-primary: #e6edf3;
-  --sda-text-secondary: #8b949e;
+  --sda-bg-primary: #050505;
+  --sda-bg-secondary: #0a0a0a;
+  --sda-bg-tertiary: #141414;
+  --sda-bg-elevated: #1f1f1f;
+  --sda-bg-sidebar: #0f0f0f;
+  --sda-border-default: #2a2a2a;
+  --sda-text-primary: #f0f0f0;
+  --sda-text-secondary: #a0a0a0;
   --sda-accent-blue: #2f81f7;
   --sda-accent-cyan: #39c5cf;
   --sda-accent-green: #3fb950;
@@ -37,21 +40,32 @@ body {
   font-family: var(--font-ibm-plex-sans), 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, sans-serif;
 }
 
-/* Monospace for code, data, and technical elements */
-code, pre, kbd, samp,
-.font-mono,
-.bp5-monospace-text,
-[data-mono="true"] {
-  font-family: var(--font-ibm-plex-mono), 'IBM Plex Mono', monospace;
-}
-
-/* Apply mono to specific data displays */
+/* Google Sans Code for technical headers, operations, data and code */
+.font-code,
+h1.tech-header,
+h2.tech-header,
+h3.tech-header,
+.tech-label,
+.operation-header,
+.data-header,
+code,
+pre,
+kbd,
+.json-viewer,
 .norad-id,
 .satellite-id,
 .coordinates,
 .timestamp-value,
 .metric-value,
-.json-viewer {
+.telemetry-value,
+.command-code {
+  font-family: 'Google Sans Code', monospace;
+}
+
+/* Monospace fallback for general mono elements */
+.font-mono,
+.bp5-monospace-text,
+[data-mono="true"] {
   font-family: var(--font-ibm-plex-mono), 'IBM Plex Mono', monospace;
 }
 
@@ -63,19 +77,23 @@ code, pre, kbd, samp,
 .bp5-dark .bp5-card {
   background-color: var(--sda-bg-secondary);
   border-color: var(--sda-border-default);
+  border-radius: 8px;
 }
 
 .bp5-dark .bp5-input {
   background-color: var(--sda-bg-tertiary);
   border-color: var(--sda-border-default);
+  border-radius: 8px;
 }
 
 .bp5-dark .bp5-button {
   background-color: var(--sda-bg-tertiary);
+  border-radius: 8px;
 }
 
 .bp5-dark .bp5-menu {
   background-color: var(--sda-bg-secondary);
+  border-radius: 8px;
 }
 
 .bp5-dark .bp5-navbar {
@@ -99,7 +117,7 @@ code, pre, kbd, samp,
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #484f58;
+  background: #3a3a3a;
 }
 
 /* Cesium dark theme overrides */
@@ -150,3 +168,116 @@ code, pre, kbd, samp,
 .status-medium { color: var(--sda-accent-yellow); }
 .status-low { color: var(--sda-accent-green); }
 .status-info { color: var(--sda-accent-blue); }
+
+/* Markdown content styling */
+.markdown-content {
+  line-height: 1.5;
+}
+
+.markdown-content p:last-child {
+  margin-bottom: 0;
+}
+
+.markdown-content pre {
+  background-color: var(--sda-bg-primary);
+  border-radius: 4px;
+  padding: 0.75rem;
+  overflow-x: auto;
+}
+
+.markdown-content code {
+  font-family: var(--font-ibm-plex-mono), 'IBM Plex Mono', monospace;
+  font-size: 0.875rem;
+}
+
+.markdown-content pre code {
+  background-color: transparent;
+  padding: 0;
+}
+
+.markdown-content ul, .markdown-content ol {
+  padding-left: 1.5rem;
+}
+
+.markdown-content li {
+  margin-bottom: 0.25rem;
+}
+
+.markdown-content a {
+  color: var(--sda-accent-cyan);
+  text-decoration: underline;
+}
+
+.markdown-content a:hover {
+  color: var(--sda-accent-blue);
+}
+
+.markdown-content blockquote {
+  border-left: 3px solid var(--sda-accent-cyan);
+  padding-left: 1rem;
+  margin: 0.5rem 0;
+  font-style: italic;
+  color: var(--sda-text-secondary);
+}
+
+.markdown-content table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 0.5rem 0;
+}
+
+.markdown-content th, .markdown-content td {
+  border: 1px solid var(--sda-border-default);
+  padding: 0.5rem;
+  text-align: left;
+}
+
+.markdown-content th {
+  background-color: var(--sda-bg-tertiary);
+  font-weight: 600;
+}
+
+/* Glass Panel Effect */
+.glass-panel,
+.glass-card {
+  background-color: rgba(10, 10, 10, 0.5);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Map Overlay Positions */
+.map-overlay-left {
+  position: absolute;
+  left: 1rem;
+  top: 6rem;
+  bottom: 1rem;
+  width: 18rem;
+  z-index: 10;
+  overflow: auto;
+}
+
+.map-overlay-right {
+  position: absolute;
+  right: 1rem;
+  top: 1rem;
+  bottom: 1rem;
+  width: 24rem;
+  z-index: 10;
+  overflow: auto;
+}
+
+.map-overlay-header {
+  position: absolute;
+  top: 1rem;
+  left: 1rem;
+  z-index: 20;
+}
+
+.map-overlay-bottom {
+  position: absolute;
+  bottom: 1rem;
+  left: 1rem;
+  right: 1rem;
+  z-index: 10;
+}

@@ -72,7 +72,7 @@ export function SatelliteInfoCard({ satellite, orbit, onClose }: SatelliteInfoCa
   const tleData = parseTLE();
 
   return (
-    <Card elevation={Elevation.TWO} className="absolute top-4 right-4 w-80 z-10 bg-sda-bg-primary">
+    <Card elevation={Elevation.TWO} className="absolute left-[310px] top-32 bottom-4 w-80 z-10 bg-sda-bg-primary pointer-events-auto">
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
           <Icon icon="satellite" className="text-sda-accent-cyan" />

@@ -769,3 +769,91 @@ async def refresh_satellite_tle(
     finally:
         await celestrack.close()
 
+
+
+# ============== Ground Station and Sensor Endpoints ==============
+
+@router.get("/ground-stations", response_model=PaginatedResponse[GroundStationResponse])
+async def list_ground_stations(
+    user: Annotated[TokenData, Depends(get_current_user)],
+    service: Annotated[OntologyService, Depends(get_ontology_service)],
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=200),
+    is_operational: Optional[bool] = Query(None),
+):
+    """List ground stations."""
+    stations, total = await service.list_ground_stations(
+        tenant_id=user.tenant_id,
+        page=page,
+        page_size=page_size,
+        is_operational=is_operational,
+    )
+    
+    return PaginatedResponse(
+        items=stations,
+        total=total,
+        page=page,
+        page_size=page_size,
+        pages=(total + page_size - 1) // page_size,
+    )
+
+
+@router.get("/sensors", response_model=PaginatedResponse[SensorResponse])
+async def list_sensors(
+    user: Annotated[TokenData, Depends(get_current_user)],
+    service: Annotated[OntologyService, Depends(get_ontology_service)],
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=200),
+    sensor_type: Optional[str] = Query(None),
+):
+    """List sensors."""
+    sensors, total = await service.list_sensors(
+        tenant_id=user.tenant_id,
+        page=page,
+        page_size=page_size,
+    )
+    
+    return PaginatedResponse(
+        items=sensors,
+        total=total,
+        page=page,
+        page_size=page_size,
+        pages=(total + page_size - 1) // page_size,
+    )
+
+
+# ============== Connection Endpoints ==============
+
+class ConnectionDetail(SatelliteDetail):
+    """Satellite with connections."""
+    connections: list[dict]
+
+
+@router.get("/satellites/connections", response_model=list[dict])
+async def get_satellite_connections(
+    user: Annotated[TokenData, Depends(get_current_user)],
+    service: Annotated[OntologyService, Depends(get_ontology_service)],
+    satellite_id: Optional[str] = Query(None),
+):
+    """Get satellite connections."""
+    return await service.calculate_satellite_connections(
+        tenant_id=user.tenant_id,
+        satellite_id=satellite_id,
+    )
+
+
+@router.post("/satellites/connections/refresh")
+async def refresh_connections(
+    user: Annotated[TokenData, Depends(get_current_user)],
+    service: Annotated[OntologyService, Depends(get_ontology_service)],
+):
+    """Refresh satellite connections."""
+    connections = await service.calculate_satellite_connections(
+        tenant_id=user.tenant_id,
+    )
+    
+    return {
+        "success": True,
+        "message": f"Calculated {len(connections)} connections",
+        "connections_count": len(connections),
+    }

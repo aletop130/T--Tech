@@ -25,9 +25,9 @@ export function GroundVehicleLayer({
       cleanupRef.current = null;
     }
 
-    if (!viewer.entities) {
+    if (!viewer?.entities) {
       const interval = setInterval(() => {
-        if (viewer.entities) {
+        if (viewer?.entities) {
           clearInterval(interval);
         }
       }, 50);

@@ -78,8 +78,8 @@ export default function DashboardPage() {
     return colors[severity] || colors.info;
   };
 
-  return (
-    <div className="space-y-6">
+   return (
+     <div className="space-y-6 bg-sda-bg-primary">
       {/* Header */}
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-sda-text-primary">
@@ -92,10 +92,10 @@ export default function DashboardPage() {
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card elevation={Elevation.TWO} className="p-4">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-lg bg-sda-accent-cyan/20 flex items-center justify-center">
-              <Icon icon="satellite" size={24} className="text-sda-accent-cyan" />
+         <Card elevation={Elevation.TWO} className="p-4 bg-sda-bg-secondary">
+           <div className="flex items-center gap-3">
+             <div className="w-12 h-12 rounded-lg bg-sda-accent-cyan/20 flex items-center justify-center">
+               <Icon icon="satellite" size={24} className="text-sda-accent-cyan" />
             </div>
             <div>
               <div className="text-sm text-sda-text-secondary">Tracked Objects</div>
@@ -104,10 +104,10 @@ export default function DashboardPage() {
           </div>
         </Card>
 
-        <Card elevation={Elevation.TWO} className="p-4">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-lg bg-sda-accent-yellow/20 flex items-center justify-center">
-              <Icon icon="warning-sign" size={24} className="text-sda-accent-yellow" />
+         <Card elevation={Elevation.TWO} className="p-4 bg-sda-bg-secondary">
+           <div className="flex items-center gap-3">
+             <div className="w-12 h-12 rounded-lg bg-sda-accent-yellow/20 flex items-center justify-center">
+               <Icon icon="warning-sign" size={24} className="text-sda-accent-yellow" />
             </div>
             <div>
               <div className="text-sm text-sda-text-secondary">Open Incidents</div>
@@ -118,10 +118,10 @@ export default function DashboardPage() {
           </div>
         </Card>
 
-        <Card elevation={Elevation.TWO} className="p-4">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-lg bg-sda-accent-red/20 flex items-center justify-center">
-              <Icon icon="error" size={24} className="text-sda-accent-red" />
+         <Card elevation={Elevation.TWO} className="p-4 bg-sda-bg-secondary">
+           <div className="flex items-center gap-3">
+             <div className="w-12 h-12 rounded-lg bg-sda-accent-red/20 flex items-center justify-center">
+               <Icon icon="error" size={24} className="text-sda-accent-red" />
             </div>
             <div>
               <div className="text-sm text-sda-text-secondary">Critical Events</div>
@@ -132,10 +132,10 @@ export default function DashboardPage() {
           </div>
         </Card>
 
-        <Card elevation={Elevation.TWO} className="p-4">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-lg bg-sda-accent-green/20 flex items-center justify-center">
-              <Icon icon="tick-circle" size={24} className="text-sda-accent-green" />
+         <Card elevation={Elevation.TWO} className="p-4 bg-sda-bg-secondary">
+           <div className="flex items-center gap-3">
+             <div className="w-12 h-12 rounded-lg bg-sda-accent-green/20 flex items-center justify-center">
+               <Icon icon="tick-circle" size={24} className="text-sda-accent-green" />
             </div>
             <div>
               <div className="text-sm text-sda-text-secondary">System Health</div>
@@ -150,11 +150,11 @@ export default function DashboardPage() {
       {/* Main Content Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Actionable Conjunctions */}
-        <Card elevation={Elevation.TWO} className="p-4">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold flex items-center gap-2">
-              <Icon icon="intersection" className="text-sda-accent-yellow" />
-              Actionable Conjunctions
+         <Card elevation={Elevation.TWO} className="p-4 bg-sda-bg-secondary">
+           <div className="flex items-center justify-between mb-4">
+             <h2 className="text-lg font-semibold flex items-center gap-2">
+               <Icon icon="intersection" className="text-sda-accent-yellow" />
+               Actionable Conjunctions
             </h2>
             <Link href="/explorer?type=conjunction">
               <Button minimal rightIcon="arrow-right">
@@ -197,12 +197,12 @@ export default function DashboardPage() {
           </div>
         </Card>
 
-        {/* Recent Space Weather */}
-        <Card elevation={Elevation.TWO} className="p-4">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold flex items-center gap-2">
-              <Icon icon="flash" className="text-sda-accent-orange" />
-              Space Weather Events
+         {/* Recent Space Weather */}
+         <Card elevation={Elevation.TWO} className="p-4 bg-sda-bg-secondary">
+           <div className="flex items-center justify-between mb-4">
+             <h2 className="text-lg font-semibold flex items-center gap-2">
+               <Icon icon="flash" className="text-sda-accent-orange" />
+               Space Weather Events
             </h2>
             <Link href="/explorer?type=space_weather">
               <Button minimal rightIcon="arrow-right">
@@ -243,12 +243,12 @@ export default function DashboardPage() {
           </div>
         </Card>
 
-        {/* Incident Status */}
-        <Card elevation={Elevation.TWO} className="p-4">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold flex items-center gap-2">
-              <Icon icon="th-list" className="text-sda-accent-blue" />
-              Incident Status
+         {/* Incident Status */}
+         <Card elevation={Elevation.TWO} className="p-4 bg-sda-bg-secondary">
+           <div className="flex items-center justify-between mb-4">
+             <h2 className="text-lg font-semibold flex items-center gap-2">
+               <Icon icon="th-list" className="text-sda-accent-blue" />
+               Incident Status
             </h2>
             <Link href="/incidents">
               <Button minimal rightIcon="arrow-right">
@@ -283,11 +283,11 @@ export default function DashboardPage() {
           )}
         </Card>
 
-        {/* Quick Actions */}
-        <Card elevation={Elevation.TWO} className="p-4">
-          <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
-            <Icon icon="lightning" className="text-sda-accent-purple" />
-            Quick Actions
+         {/* Quick Actions */}
+         <Card elevation={Elevation.TWO} className="p-4 bg-sda-bg-secondary">
+           <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+             <Icon icon="lightning" className="text-sda-accent-purple" />
+             Quick Actions
           </h2>
 
           <div className="grid grid-cols-2 gap-3">

@@ -87,6 +87,13 @@ services:
         condition: service_healthy
     networks:
       - sda-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
     command: >
       sh -c "./scripts/wait-for-it.sh postgres 5432 -- alembic upgrade head && 
              uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
@@ -146,12 +153,25 @@ services:
     container_name: sda-frontend
     environment:
       - NEXT_PUBLIC_API_URL=http://localhost:8000
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+      - /app/.next
     ports:
       - "3000:3000"
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     networks:
       - sda-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+    command: npm run dev
 
 volumes:
   postgres_data:

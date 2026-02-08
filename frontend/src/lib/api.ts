@@ -132,7 +132,7 @@ class ApiClient {
     options: RequestInit = {}
   ): Promise<T> {
     const baseUrl = this.baseUrl;
-    if (!baseUrl) {
+    if (baseUrl === undefined || baseUrl === null) {
       throw new Error('API base URL not configured. Set NEXT_PUBLIC_API_URL environment variable.');
     }
     const url = `${baseUrl}${endpoint}`;
@@ -1072,3 +1072,59 @@ export interface PositionReportCreate {
   is_simulated?: boolean;
 }
 
+
+// ============== Ground Station and Sensor Interfaces ==============
+
+export interface GroundStation {
+  id: string;
+  name: string;
+  code?: string;
+  latitude: number;
+  longitude: number;
+  altitude_m: number;
+  antenna_count: number;
+  frequency_bands: string[];
+  is_operational: boolean;
+  status_message?: string;
+  organization?: string;
+  country?: string;
+  description?: string;
+}
+
+export interface Sensor {
+  id: string;
+  name: string;
+  code?: string;
+  sensor_type: 'RADAR' | 'OPTICAL' | 'LASER';
+  latitude?: number;
+  longitude?: number;
+  altitude_m?: number;
+  min_elevation_deg: number;
+  max_range_km?: number;
+  accuracy_m?: number;
+  fov_deg?: number;
+  is_operational: boolean;
+  organization?: string;
+  country?: string;
+  ground_station_id?: string;
+  description?: string;
+}
+
+export interface SatelliteConnection {
+  satellite_id: string;
+  target_id: string;
+  target_type: 'ground_station' | 'sensor' | 'satellite';
+  connection_type: 'TRACKS' | 'COVERAGE' | 'CONJUNCTION' | 'COMMUNICATION';
+  confidence: number;
+  metadata: {
+    elevation_deg?: number;
+    distance_km?: number;
+    ground_station_name?: string;
+    sensor_name?: string;
+    sensor_type?: string;
+    other_satellite_id?: string;
+    other_satellite_name?: string;
+    miss_distance_km?: number;
+    risk_level?: string;
+  };
+}

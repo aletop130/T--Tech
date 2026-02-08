@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef, useCallback } from 'react';
 import dynamic from 'next/dynamic';
-import { Card, Elevation, Spinner, Tag, Icon, Button, Checkbox, Intent } from '@blueprintjs/core';
+import { Spinner, Tag, Icon, Button, Checkbox, Intent } from '@blueprintjs/core';
 import { api, GroundStation, Satellite, ConjunctionEvent, PositionReport } from '@/lib/api';
 import * as Cesium from 'cesium';
 import { CesiumViewer } from '@/components/CesiumMap/CesiumViewer';
@@ -12,6 +12,9 @@ import { GroundVehicleLayer } from '@/components/CesiumMap/GroundVehicleLayer';
 import { MilitaryVehicleLayer } from '@/components/CesiumMap/MilitaryVehicleLayer';
 import { ConjunctionLayer } from '@/components/CesiumMap/ConjunctionLayer';
 import { SatelliteInfoCard } from '@/components/CesiumMap/SatelliteInfoCard';
+import { GroundStationInfoCard } from '@/components/CesiumMap/GroundStationInfoCard';
+import { GroundVehicleInfoCard } from '@/components/CesiumMap/GroundVehicleInfoCard';
+import { ConjunctionInfoCard } from '@/components/CesiumMap/ConjunctionInfoCard';
 import { SolarSystemLayer } from '@/components/CesiumMap/SolarSystemLayer';
 import { PlanetInfoBox } from '@/components/CesiumMap/PlanetInfoBox';
 import { PLANETS, type CelestialBody } from '@/lib/solarSystem/data';
@@ -114,6 +117,8 @@ export default function MapPage() {
   const [fetchIntent, setFetchIntent] = useState<Intent>(Intent.SUCCESS);
   const [selectedStation, setSelectedStation] = useState<GroundStation | null>(null);
   const [selectedSatellite, setSelectedSatellite] = useState<Satellite | null>(null);
+  const [selectedVehicle, setSelectedVehicle] = useState<PositionReport | null>(null);
+  const [selectedConjunction, setSelectedConjunction] = useState<ConjunctionEvent | null>(null);
   const [loadingSatellite, setLoadingSatellite] = useState(false);
   const [showOrbits, setShowOrbits] = useState(true);
   const [showCoverage, setShowCoverage] = useState(true);
@@ -122,7 +127,7 @@ export default function MapPage() {
   const [vehicleDisplayMode, setVehicleDisplayMode] = useState<'points' | '3d'>('points');
   const [showTerrain, setShowTerrain] = useState(false);
   const [terrainAvailable, setTerrainAvailable] = useState(false);
-  const [viewMode, setViewMode] = useState<'earth' | 'solar'>('solar');
+  const [viewMode, setViewMode] = useState<'earth' | 'solar'>('earth');
   const [focusedBody, setFocusedBody] = useState<string | null>(null);
   const [managingPlanet, setManagingPlanet] = useState<string | null>(null);
   const [showSolarLabels, setShowSolarLabels] = useState(true);
@@ -391,6 +396,16 @@ export default function MapPage() {
     setViewer(cesiumViewer);
     cesiumController.initialize(cesiumViewer);
 
+    cesiumViewer.camera.flyTo({
+      destination: Cesium.Cartesian3.fromDegrees(12.5674, 41.8719, 8000000),
+      orientation: {
+        heading: Cesium.Math.toRadians(0),
+        pitch: Cesium.Math.toRadians(-90),
+        roll: 0,
+      },
+      duration: 0,
+    });
+
     cesiumViewer.selectedEntityChanged.addEventListener((selectedEntity) => {
       if (selectedEntity && selectedEntity.position) {
         // Check if entity has valid position before flying
@@ -401,7 +416,7 @@ export default function MapPage() {
               duration: 2,
               offset: new Cesium.HeadingPitchRange(
                 Cesium.Math.toRadians(0),
-                Cesium.Math.toRadians(-45),
+                Cesium.Math.toRadians(-90),
                 10000
               )
             });
@@ -432,6 +447,9 @@ export default function MapPage() {
         ),
       });
       setSelectedStation(station);
+      setSelectedSatellite(null);
+      setSelectedVehicle(null);
+      setSelectedConjunction(null);
     }
   };
 
@@ -449,6 +467,9 @@ export default function MapPage() {
   const flyToSatellite = (satellite: Satellite) => {
     setLoadingSatellite(true);
     setSelectedSatellite(satellite);
+    setSelectedStation(null);
+    setSelectedVehicle(null);
+    setSelectedConjunction(null);
     
     const orbit = orbits.find((o) => o.satellite_id === satellite.id);
     
@@ -545,125 +566,232 @@ export default function MapPage() {
   }, []);
 
   return (
-    <div className="h-full flex flex-col">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-4">
-        <h1 className="text-2xl font-bold text-sda-text-primary flex items-center gap-2">
-          <Icon icon="globe" className="text-sda-accent-cyan" />
-          3D Globe View
-        </h1>
-        <div className="flex items-center gap-4">
+    <div className="h-full w-full relative overflow-hidden">
+      {/* Map - Full Background */}
+      <div className="absolute inset-0 z-0">
+        {loading ? (
+          <div className="flex items-center justify-center h-full">
+            <Spinner size={40} />
+          </div>
+        ) : (
+          <div className="w-full h-full">
+            <DynamicCesiumViewer
+              className="w-full h-full"
+              onViewerReady={handleViewerReady}
+            />
+            {viewer && (
+              <>
+                {viewMode === 'earth' ? (
+                  <>
+                    <SatelliteLayer
+                      viewer={viewer}
+                      satellites={satellites}
+                      orbits={orbits}
+                      showOrbits={showOrbits}
+                    />
+                    <GroundStationLayer
+                      viewer={viewer}
+                      stations={groundStations}
+                      showCoverage={showCoverage}
+                    />
+                    {showGroundVehicles && vehicleDisplayMode === 'points' && (
+                      <GroundVehicleLayer
+                        viewer={viewer}
+                        vehicles={groundVehicles}
+                        show={showGroundVehicles}
+                      />
+                    )}
+                    {showGroundVehicles && vehicleDisplayMode === '3d' && (
+                      <MilitaryVehicleLayer
+                        viewer={viewer}
+                        vehicles={groundVehicles}
+                        show={showGroundVehicles}
+                      />
+                    )}
+                    {showConjunctions && (
+                      <ConjunctionLayer
+                        viewer={viewer}
+                        conjunctions={conjunctions}
+                        satellitePositions={satellitePositionsRef.current}
+                      />
+                    )}
+                    {selectedSatellite && (
+                      <SatelliteInfoCard
+                        satellite={selectedSatellite}
+                        orbit={orbits.find((o) => o.satellite_id === selectedSatellite.id)}
+                        onClose={() => setSelectedSatellite(null)}
+                      />
+                    )}
+                    {selectedStation && (
+                      <GroundStationInfoCard
+                        station={selectedStation}
+                        onClose={() => setSelectedStation(null)}
+                      />
+                    )}
+                    {selectedVehicle && (
+                      <GroundVehicleInfoCard
+                        vehicle={selectedVehicle}
+                        onClose={() => setSelectedVehicle(null)}
+                      />
+                    )}
+                    {selectedConjunction && (
+                      <ConjunctionInfoCard
+                        conjunction={selectedConjunction}
+                        onClose={() => setSelectedConjunction(null)}
+                      />
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <SolarSystemLayer
+                      viewer={viewer}
+                      showOrbits={showOrbits}
+                      showLabels={showSolarLabels}
+                      focusedBody={focusedBody}
+                      onBodyClick={(bodyId) => {
+                        setFocusedBody(bodyId);
+                        setShowPlanetInfo(true);
+                      }}
+                      simulationTime={solarSimulationTime}
+                    />
+                    {showPlanetInfo && focusedBody && (
+                      <PlanetInfoBox
+                        planet={PLANETS.find(p => p.id === focusedBody)!}
+                        onManage={() => handleManagePlanet(focusedBody)}
+                        onClose={handleClosePlanetInfo}
+                        onBackToOverview={handleBackToOverview}
+                      />
+                    )}
+                  </>
+                )}
+              </>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Unified Control Bar */}
+      <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20 bg-sda-bg-secondary/60 backdrop-blur-sm rounded-lg border border-sda-border-default px-4 py-2 shadow-lg">
+        {/* Row 1: Title + Counters + View Buttons */}
+        <div className="flex items-center gap-4 mb-2">
+          <h1 className="text-lg font-bold text-sda-text-primary flex items-center gap-2">
+            <Icon icon="globe" className="text-sda-accent-cyan" />
+            3D Globe View
+          </h1>
           <div className="flex items-center gap-2">
             <Tag minimal intent="primary">Allied: {satellites.filter(isAlliedSatellite).length}</Tag>
             <Tag minimal intent="danger">Enemy: {satellites.filter(isEnemySatellite).length}</Tag>
           </div>
-          <Button
-            intent={viewMode === 'earth' ? Intent.PRIMARY : Intent.NONE}
-            onClick={() => {
-              setViewMode('earth');
-              setFocusedBody('earth');
-            }}
-            icon="globe"
-            minimal
-          >
-            Earth
-          </Button>
-          <Button
-            intent={viewMode === 'solar' ? Intent.PRIMARY : Intent.NONE}
-            onClick={() => {
-              setViewMode('solar');
-              setFocusedBody(null);
-              // Reset selected satellite when switching to solar view
-              setSelectedSatellite(null);
-            }}
-            icon="globe-network"
-            minimal
-          >
-            Solar System
-          </Button>
-          <Button
-            intent={Intent.PRIMARY}
-            loading={fetchingFamous}
-            onClick={fetchFamousSatellites}
-            icon="satellite"
-            minimal
-          >
-            Refresh
-          </Button>
-        </div>
-      </div>
-
-      {/* Fetch message */}
-      {fetchMessage && (
-        <div className={`mb-4 p-3 rounded ${fetchIntent === Intent.SUCCESS ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-          {fetchMessage}
-        </div>
-      )}
-
-      {/* Legend and Toggles */}
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-6 text-sm">
-          <div className="flex items-center gap-2">
-            <span className="w-3 h-3 rounded-full bg-blue-500"></span>
-            <span>Allied Forces</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="w-3 h-3 rounded-full bg-red-500"></span>
-            <span>Enemy Forces</span>
+          <div className="flex items-center gap-2 ml-auto">
+            <Button
+              intent={viewMode === 'earth' ? Intent.PRIMARY : Intent.NONE}
+              onClick={() => {
+                setViewMode('earth');
+                setFocusedBody('earth');
+                if (viewer) {
+                  viewer.camera.flyTo({
+                    destination: Cesium.Cartesian3.fromDegrees(12.5674, 41.8719, 8000000),
+                    orientation: {
+                      heading: Cesium.Math.toRadians(0),
+                      pitch: Cesium.Math.toRadians(-90),
+                      roll: 0,
+                    },
+                    duration: 1.5,
+                  });
+                }
+              }}
+              icon="globe"
+              minimal
+              small
+            >
+              Earth
+            </Button>
+            <Button
+              intent={viewMode === 'solar' ? Intent.PRIMARY : Intent.NONE}
+              onClick={() => {
+                setViewMode('solar');
+                setFocusedBody(null);
+                setSelectedSatellite(null);
+              }}
+              icon="globe-network"
+              minimal
+              small
+            >
+              Solar
+            </Button>
+            <Button
+              intent={Intent.PRIMARY}
+              loading={fetchingFamous}
+              onClick={fetchFamousSatellites}
+              icon="satellite"
+              minimal
+              small
+            >
+              Refresh
+            </Button>
           </div>
         </div>
-        <div className="flex items-center gap-4">
+
+        {/* Row 2: Toggles */}
+        <div className="flex items-center gap-4 text-sm">
           {viewMode === 'earth' ? (
             <>
-              <Checkbox
-                checked={showOrbits}
-                onChange={(e) => setShowOrbits(e.currentTarget.checked)}
-                label="Show Orbits"
-              />
-              <Checkbox
-                checked={showCoverage}
-                onChange={(e) => setShowCoverage(e.currentTarget.checked)}
-                label="Ground Coverage"
-              />
-              <Checkbox
-                checked={showGroundVehicles}
-                onChange={(e) => setShowGroundVehicles(e.currentTarget.checked)}
-                label="Ground Vehicles"
-              />
-              {showGroundVehicles && (
-                <div className="flex flex-col gap-1 ml-4">
-                  <label className="text-xs text-gray-400">Vehicle Display:</label>
-                  <div className="flex gap-2">
+              <div className="flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-blue-500"></span>
+                <span className="text-sda-text-secondary">Allied</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-red-500"></span>
+                <span className="text-sda-text-secondary">Enemy</span>
+              </div>
+              <div className="border-l border-sda-border-default pl-4 flex items-center gap-3">
+                <Checkbox
+                  checked={showOrbits}
+                  onChange={(e) => setShowOrbits(e.currentTarget.checked)}
+                  label="Orbits"
+                  labelElement={<span className="text-xs text-sda-text-secondary">Orbits</span>}
+                />
+                <Checkbox
+                  checked={showCoverage}
+                  onChange={(e) => setShowCoverage(e.currentTarget.checked)}
+                  label="Coverage"
+                  labelElement={<span className="text-xs text-sda-text-secondary">Coverage</span>}
+                />
+                <Checkbox
+                  checked={showGroundVehicles}
+                  onChange={(e) => setShowGroundVehicles(e.currentTarget.checked)}
+                  label="Vehicles"
+                  labelElement={<span className="text-xs text-sda-text-secondary">Vehicles</span>}
+                />
+                {showGroundVehicles && (
+                  <div className="flex items-center gap-1 ml-2">
                     <button
-                      className={`px-2 py-1 text-xs rounded ${
+                      className={`px-2 py-0.5 text-xs rounded ${
                         vehicleDisplayMode === 'points'
                           ? 'bg-blue-600 text-white'
-                          : 'bg-gray-700 text-gray-300'
+                          : 'bg-sda-bg-tertiary text-sda-text-secondary'
                       }`}
                       onClick={() => setVehicleDisplayMode('points')}
                     >
                       Points
                     </button>
                     <button
-                      className={`px-2 py-1 text-xs rounded ${
+                      className={`px-2 py-0.5 text-xs rounded ${
                         vehicleDisplayMode === '3d'
                           ? 'bg-blue-600 text-white'
-                          : 'bg-gray-700 text-gray-300'
+                          : 'bg-sda-bg-tertiary text-sda-text-secondary'
                       }`}
                       onClick={() => setVehicleDisplayMode('3d')}
                     >
-                      3D Models
+                      3D
                     </button>
                   </div>
-                </div>
-              )}
-              <div className="flex flex-col gap-1">
-                <label className="text-xs text-gray-400">Terrain:</label>
+                )}
                 <button
-                  className={`px-2 py-1 text-xs rounded ${
+                  className={`px-2 py-0.5 text-xs rounded ${
                     showTerrain
                       ? 'bg-green-600 text-white'
-                      : 'bg-gray-700 text-gray-300'
+                      : 'bg-sda-bg-tertiary text-sda-text-secondary'
                   }`}
                   onClick={() => {
                     setShowTerrain(!showTerrain);
@@ -672,473 +800,337 @@ export default function MapPage() {
                     }
                   }}
                 >
-                  {showTerrain ? 'ON' : 'OFF'}
+                  Terrain: {showTerrain ? 'ON' : 'OFF'}
                 </button>
+                <Checkbox
+                  checked={showConjunctions}
+                  onChange={(e) => setShowConjunctions(e.currentTarget.checked)}
+                  label="Conj"
+                  labelElement={<span className="text-xs text-sda-text-secondary">Conj</span>}
+                />
               </div>
-              <Checkbox
-                checked={showConjunctions}
-                onChange={(e) => setShowConjunctions(e.currentTarget.checked)}
-                label="Conjunctions"
-              />
             </>
           ) : (
             <>
-              <Checkbox
-                checked={showOrbits}
-                onChange={(e) => setShowOrbits(e.currentTarget.checked)}
-                label="Show Orbits"
-              />
-              <Checkbox
-                checked={showSolarLabels}
-                onChange={(e) => setShowSolarLabels(e.currentTarget.checked)}
-                label="Show Labels"
-              />
+              <div className="flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-blue-500"></span>
+                <span className="text-sda-text-secondary">Allied</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-red-500"></span>
+                <span className="text-sda-text-secondary">Enemy</span>
+              </div>
+              <div className="border-l border-sda-border-default pl-4 flex items-center gap-3">
+                <Checkbox
+                  checked={showOrbits}
+                  onChange={(e) => setShowOrbits(e.currentTarget.checked)}
+                  label="Orbits"
+                  labelElement={<span className="text-xs text-sda-text-secondary">Orbits</span>}
+                />
+                <Checkbox
+                  checked={showSolarLabels}
+                  onChange={(e) => setShowSolarLabels(e.currentTarget.checked)}
+                  label="Labels"
+                  labelElement={<span className="text-xs text-sda-text-secondary">Labels</span>}
+                />
+              </div>
             </>
           )}
         </div>
       </div>
 
-      <div className="flex-1 flex gap-4 min-h-0 overflow-hidden">
-        {/* Map */}
-        <Card elevation={Elevation.TWO} className="flex-1 overflow-hidden relative" style={{ minHeight: '400px' }}>
-          {loading ? (
-            <div className="flex items-center justify-center h-full">
-              <Spinner size={40} />
-            </div>
-          ) : (
-            <div className="w-full h-full" style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}>
-              <DynamicCesiumViewer
-                className="w-full h-full"
-                onViewerReady={handleViewerReady}
-              />
-              {viewer && (
-                <>
-                  {viewMode === 'earth' ? (
-                    <>
-                      <SatelliteLayer
-                        viewer={viewer}
-                        satellites={satellites}
-                        orbits={orbits}
-                        showOrbits={showOrbits}
-                      />
-                      <GroundStationLayer
-                        viewer={viewer}
-                        stations={groundStations}
-                        showCoverage={showCoverage}
-                      />
-                      {showGroundVehicles && vehicleDisplayMode === 'points' && (
-                        <GroundVehicleLayer
-                          viewer={viewer}
-                          vehicles={groundVehicles}
-                          show={showGroundVehicles}
-                        />
-                      )}
-                      {showGroundVehicles && vehicleDisplayMode === '3d' && (
-                        <MilitaryVehicleLayer
-                          viewer={viewer}
-                          vehicles={groundVehicles}
-                          show={showGroundVehicles}
-                        />
-                      )}
-                      {showConjunctions && (
-                        <ConjunctionLayer
-                          viewer={viewer}
-                          conjunctions={conjunctions}
-                          satellitePositions={satellitePositionsRef.current}
-                        />
-                      )}
-                      {/* Satellite Info Card */}
-                      {selectedSatellite && (
-                        <SatelliteInfoCard
-                          satellite={selectedSatellite}
-                          orbit={orbits.find((o) => o.satellite_id === selectedSatellite.id)}
-                          onClose={() => setSelectedSatellite(null)}
-                        />
-                      )}
-                    </>
-                  ) : (
-                    <>
-                      <SolarSystemLayer
-                        viewer={viewer}
-                        showOrbits={showOrbits}
-                        showLabels={showSolarLabels}
-                        focusedBody={focusedBody}
-                        onBodyClick={(bodyId) => {
-                          setFocusedBody(bodyId);
-                          setShowPlanetInfo(true);
-                        }}
-                        simulationTime={solarSimulationTime}
-                      />
-                      {showPlanetInfo && focusedBody && (
-                        <PlanetInfoBox
-                          planet={PLANETS.find(p => p.id === focusedBody)!}
-                          onManage={() => handleManagePlanet(focusedBody)}
-                          onClose={handleClosePlanetInfo}
-                          onBackToOverview={handleBackToOverview}
-                        />
-                      )}
-                    </>
-                  )}
-                </>
-              )}
-            </div>
-          )}
-        </Card>
-
-        {/* Right Panel - Satellites or Solar System */}
-        <Card elevation={Elevation.TWO} className="w-80 flex flex-col overflow-hidden" style={{ minWidth: '320px' }}>
-          {viewMode === 'earth' ? (
-            <>
-              <div className="p-3 border-b border-sda-border-default bg-sda-bg-secondary">
-                <span className="text-sm font-semibold text-sda-text-primary flex items-center gap-2">
-                  <Icon icon="satellite" className="text-sda-accent-cyan" />
-                  Satellites ({satellites.length})
-                </span>
-                <div className="flex items-center gap-3 mt-2 text-xs text-sda-text-muted">
-                  <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-blue-500"></span> Allied</span>
-                  <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-500"></span> Enemy</span>
-                </div>
-              </div>
-              <div className="flex-1 overflow-auto p-3">
-                {/* Allied Satellites Folder */}
-                <div className="mb-3">
-                  <div className="flex items-center gap-2 mb-1">
-                    <Icon icon="folder-close" className="text-blue-500" size={14} />
-                    <span className="text-sm font-semibold text-blue-500 flex items-center gap-1">
-                      <span className="w-2 h-2 rounded-full bg-blue-500"></span>
-                      Allied Forces
-                    </span>
-                    <Tag minimal intent="primary" className="ml-auto">{satellites.filter(isAlliedSatellite).length}</Tag>
-                  </div>
-                  <div className="space-y-1 ml-4 border-l-2 border-blue-500 pl-2">
-                    {satellites.filter(isAlliedSatellite).slice(0, 10).map((sat) => (
-                      <div
-                        key={sat.id}
-                        className={`p-2 text-sm hover:bg-sda-bg-tertiary rounded cursor-pointer ${
-                          selectedSatellite?.id === sat.id ? 'bg-sda-bg-tertiary' : ''
-                        }`}
-                        onClick={() => flyToSatellite(sat)}
-                      >
-                        <div className="flex items-center justify-between">
-                          <span className="font-medium truncate max-w-[120px]">{sat.name}</span>
-                          {loadingSatellite && selectedSatellite?.id === sat.id ? (
-                            <Spinner size={16} />
-                          ) : (
-                            <Tag minimal intent="primary">{sat.norad_id}</Tag>
-                          )}
-                        </div>
-                      </div>
-                    ))}
+      {/* Panels Container */}
+      <div className="absolute inset-0 z-10 pointer-events-none">
+        {/* Left Panel - Elements */}
+        <div className="absolute left-4 top-32 bottom-4 w-72 pointer-events-auto bg-sda-bg-secondary/60 backdrop-blur-sm rounded-lg border border-sda-border-default px-4 py-2 shadow-lg flex flex-col overflow-hidden">
+          <div className="flex flex-col h-full">
+            {viewMode === 'earth' ? (
+              <>
+                <div className="p-3 border-b border-sda-border-default">
+                  <span className="text-sm font-semibold text-sda-text-primary flex items-center gap-2">
+                    <Icon icon="satellite" className="text-sda-accent-cyan" />
+                    Elements ({satellites.length})
+                  </span>
+                  <div className="flex items-center gap-3 mt-2 text-xs text-sda-text-muted">
+                    <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-blue-500"></span> Allied</span>
+                    <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-500"></span> Enemy</span>
                   </div>
                 </div>
-
-                {/* Enemy Satellites Folder */}
-                <div>
-                  <div className="flex items-center gap-2 mb-1">
-                    <Icon icon="folder-close" className="text-red-500" size={14} />
-                    <span className="text-sm font-semibold text-red-500 flex items-center gap-1">
-                      <span className="w-2 h-2 rounded-full bg-red-500"></span>
-                      Enemy Forces
-                    </span>
-                    <Tag minimal intent="danger" className="ml-auto">{satellites.filter(isEnemySatellite).length}</Tag>
-                  </div>
-                  <div className="space-y-1 ml-4 border-l-2 border-red-500 pl-2">
-                    {satellites.filter(isEnemySatellite).slice(0, 10).map((sat) => (
-                      <div
-                        key={sat.id}
-                        className={`p-2 text-sm hover:bg-sda-bg-tertiary rounded cursor-pointer ${
-                          selectedSatellite?.id === sat.id ? 'bg-sda-bg-tertiary' : ''
-                        }`}
-                        onClick={() => flyToSatellite(sat)}
-                      >
-                        <div className="flex items-center justify-between">
-                          <span className="font-medium truncate max-w-[120px]">{sat.name}</span>
-                          {loadingSatellite && selectedSatellite?.id === sat.id ? (
-                            <Spinner size={16} />
-                          ) : (
-                            <Tag minimal intent="danger">{sat.norad_id}</Tag>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Ground Stations */}
-                <div className="mt-4 pt-4 border-t border-sda-border-default">
-                  <h4 className="text-sm font-semibold text-sda-text-secondary mb-2 flex items-center gap-2">
-                    <Icon icon="globe" className="text-sda-accent-cyan" />
-                    Ground Stations ({groundStations.length})
-                  </h4>
-                  <div className="space-y-1 max-h-40 overflow-auto">
-                    {groundStations.map((station) => (
-                      <div
-                        key={station.id}
-                        className={`p-2 text-sm hover:bg-sda-bg-tertiary rounded cursor-pointer ${
-                          selectedStation?.id === station.id ? 'bg-sda-bg-tertiary' : ''
-                        }`}
-                        onClick={() => flyToStation(station)}
-                      >
-                        <div className="flex items-center justify-between">
-                          <span className="font-medium">{station.name}</span>
-                          <Tag
-                            intent={station.is_operational ? 'success' : 'danger'}
-                            minimal
-                          >
-                            {station.is_operational ? 'ON' : 'OFF'}
-                          </Tag>
-                        </div>
-                        <div className="text-xs text-sda-text-muted mt-1">
-                          {station.code && `${station.code} • `}
-                          {station.country}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Ground Vehicles */}
-                <div className="mt-4 pt-4 border-t border-sda-border-default">
-                  <h4 className="text-sm font-semibold text-sda-text-secondary mb-2 flex items-center gap-2">
-                    <Icon icon="truck" className="text-sda-accent-cyan" />
-                    Ground Vehicles ({groundVehicles.length})
-                  </h4>
-                  <div className="space-y-1 max-h-40 overflow-auto">
-                    {groundVehicles.map((vehicle) => (
-                      <div
-                        key={vehicle.id}
-                        className="p-2 text-sm hover:bg-sda-bg-tertiary rounded"
-                      >
-                        <div className="flex items-center justify-between">
-                          <span className="font-medium">{vehicle.entity_id}</span>
-                          <Tag intent="warning" minimal>
-                            {vehicle.heading_deg?.toFixed(0)}°
-                          </Tag>
-                        </div>
-                        <div className="text-xs text-sda-text-muted mt-1">
-                          {vehicle.latitude.toFixed(4)}°, {vehicle.longitude.toFixed(4)}° • {vehicle.velocity_magnitude_ms?.toFixed(1)} m/s
-                        </div>
-                      </div>
-                    ))}
-                    {groundVehicles.length === 0 && (
-                      <div className="text-xs text-sda-text-muted italic">
-                        No ground vehicles tracked
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Conjunctions */}
-                {showConjunctions && conjunctions.length > 0 && (
-                  <div className="mt-4 pt-4 border-t border-sda-border-default">
-                    <h4 className="text-sm font-semibold text-sda-text-secondary mb-2 flex items-center gap-2">
-                      <Icon icon="warning-sign" className="text-sda-accent-cyan" />
-                      Conjunctions ({conjunctions.length})
-                    </h4>
-                    <div className="space-y-1 max-h-32 overflow-auto">
-                      {conjunctions.slice(0, 5).map((conj) => (
+                <div className="flex-1 overflow-auto p-3">
+                  {/* Allied Satellites Folder */}
+                  <div className="mb-3">
+                    <div className="flex items-center gap-2 mb-1">
+                      <Icon icon="folder-close" className="text-blue-500" size={14} />
+                      <span className="text-sm font-semibold text-blue-500 flex items-center gap-1">
+                        <span className="w-2 h-2 rounded-full bg-blue-500"></span>
+                        Allied Forces
+                      </span>
+                      <Tag minimal intent="primary" className="ml-auto">{satellites.filter(isAlliedSatellite).length}</Tag>
+                    </div>
+                    <div className="space-y-1 ml-4 border-l-2 border-blue-500 pl-2">
+                      {satellites.filter(isAlliedSatellite).slice(0, 10).map((sat) => (
                         <div
-                          key={conj.id}
-                          className="p-2 text-sm bg-sda-bg-tertiary rounded"
+                          key={sat.id}
+                          className={`p-2 text-sm hover:bg-sda-bg-tertiary rounded cursor-pointer ${
+                            selectedSatellite?.id === sat.id ? 'bg-sda-bg-tertiary' : ''
+                          }`}
+                          onClick={() => flyToSatellite(sat)}
                         >
                           <div className="flex items-center justify-between">
-                            <span className="font-medium">Risk: {conj.risk_level}</span>
-                            <Tag
-                              intent={
-                                conj.risk_level === 'high' || conj.risk_level === 'critical'
-                                  ? 'danger'
-                                  : 'warning'
-                              }
-                              minimal
-                            >
-                              {conj.miss_distance_km.toFixed(1)} km
-                            </Tag>
-                          </div>
-                          <div className="text-xs text-sda-text-muted mt-1">
-                            TCA: {new Date(conj.tca).toLocaleString()}
+                            <span className="font-medium truncate max-w-[120px]">{sat.name}</span>
+                            {loadingSatellite && selectedSatellite?.id === sat.id ? (
+                              <Spinner size={16} />
+                            ) : (
+                              <Tag minimal intent="primary">{sat.norad_id}</Tag>
+                            )}
                           </div>
                         </div>
                       ))}
                     </div>
                   </div>
-                )}
-              </div>
-            </>
-          ) : managingPlanet ? (
-            <>
-              <div className="p-3 border-b border-sda-border-default bg-sda-bg-secondary">
-                <span className="text-sm font-semibold text-sda-text-primary flex items-center gap-2">
-                  <Icon icon="cog" className="text-sda-accent-cyan" />
-                  {PLANETS.find(p => p.id === managingPlanet)?.name} Management
-                </span>
-                <div className="text-xs text-sda-text-muted mt-1">
-                  Managing satellite operations
-                </div>
-                <div className="mt-2 flex items-center gap-2">
-                  <Button
-                    small
-                    minimal
-                    intent={Intent.DANGER}
-                    onClick={() => setManagingPlanet(null)}
-                    icon="cross"
-                  >
-                    Exit Management
-                  </Button>
-                  <Button
-                    small
-                    minimal
-                    intent={Intent.PRIMARY}
-                    onClick={handleBackToOverview}
-                    icon="zoom-out"
-                    className="ml-auto"
-                  >
-                    Back to Overview
-                  </Button>
-                </div>
-              </div>
-              <div className="flex-1 overflow-auto p-3">
-                <div className="text-center py-8">
-                  <Icon icon="globe" size={40} className="text-sda-accent-cyan mb-3" />
-                  <h4 className="text-sm font-semibold text-sda-text-primary mb-2">
-                    {PLANETS.find(p => p.id === managingPlanet)?.name}
-                  </h4>
-                  <p className="text-xs text-sda-text-secondary mb-4">
-                    Planet management interface for {PLANETS.find(p => p.id === managingPlanet)?.name}.
-                    Satellite tracking and ground station management for this planet would appear here.
-                  </p>
-                  <div className="p-3 bg-sda-bg-tertiary rounded mb-3">
-                    <h5 className="text-xs font-semibold text-sda-text-primary mb-2">Quick Actions</h5>
-                    <Button small minimal icon="satellite" className="mb-1 w-full text-left">
-                      Track Natural Satellites
-                    </Button>
-                    <Button small minimal icon="search" className="mb-1 w-full text-left">
-                      Scan for Objects
-                    </Button>
-                    <Button small minimal icon="timeline-events" className="mb-1 w-full text-left">
-                      Orbital Analysis
-                    </Button>
-                  </div>
-                  <Tag intent={Intent.WARNING} minimal>
-                    Coming Soon
-                  </Tag>
-                </div>
-              </div>
-            </>
-          ) : (
-            <>
-              <div className="p-3 border-b border-sda-border-default bg-sda-bg-secondary">
-                <span className="text-sm font-semibold text-sda-text-primary flex items-center gap-2">
-                  <Icon icon="globe-network" className="text-sda-accent-cyan" />
-                  Solar System
-                </span>
-                <div className="text-xs text-sda-text-muted mt-1">
-                  Click a planet to focus view
-                </div>
-                {focusedBody && (
-                  <div className="mt-2 flex items-center gap-2">
-                    <span className="text-xs text-sda-text-secondary">
-                      Focused: <span className="font-semibold capitalize">{focusedBody}</span>
-                    </span>
-                    <Button
-                      small
-                      minimal
-                      intent={Intent.PRIMARY}
-                      onClick={handleBackToOverview}
-                      icon="zoom-out"
-                      className="ml-auto"
-                    >
-                      Reset View
-                    </Button>
-                  </div>
-                )}
-              </div>
-              <div className="flex-1 overflow-auto p-3">
-                {/* Sun */}
-                <div className="mb-4">
-                  <div
-                    className={`flex items-center gap-2 p-2 rounded cursor-pointer ${
-                      focusedBody === 'sun' ? 'bg-sda-bg-tertiary' : 'hover:bg-sda-bg-tertiary'
-                    }`}
-                    onClick={() => {
-                      setFocusedBody('sun');
-                      setShowPlanetInfo(true);
-                    }}
-                  >
-                    <span className="w-4 h-4 rounded-full" style={{ backgroundColor: '#FDB813' }}></span>
-                    <span className="font-medium">Sun</span>
-                  </div>
-                </div>
 
-                {/* Inner Planets */}
-                <div className="mb-4">
-                  <h4 className="text-xs font-semibold text-sda-text-muted mb-2 uppercase">Inner Planets</h4>
-                  {PLANETS.filter(p => ['mercury', 'venus', 'earth', 'mars'].includes(p.id)).map(planet => (
+                  {/* Enemy Satellites Folder */}
+                  <div>
+                    <div className="flex items-center gap-2 mb-1">
+                      <Icon icon="folder-close" className="text-red-500" size={14} />
+                      <span className="text-sm font-semibold text-red-500 flex items-center gap-1">
+                        <span className="w-2 h-2 rounded-full bg-red-500"></span>
+                        Enemy Forces
+                      </span>
+                      <Tag minimal intent="danger" className="ml-auto">{satellites.filter(isEnemySatellite).length}</Tag>
+                    </div>
+                    <div className="space-y-1 ml-4 border-l-2 border-red-500 pl-2">
+                      {satellites.filter(isEnemySatellite).slice(0, 10).map((sat) => (
+                        <div
+                          key={sat.id}
+                          className={`p-2 text-sm hover:bg-sda-bg-tertiary rounded cursor-pointer ${
+                            selectedSatellite?.id === sat.id ? 'bg-sda-bg-tertiary' : ''
+                          }`}
+                          onClick={() => flyToSatellite(sat)}
+                        >
+                          <div className="flex items-center justify-between">
+                            <span className="font-medium truncate max-w-[120px]">{sat.name}</span>
+                            {loadingSatellite && selectedSatellite?.id === sat.id ? (
+                              <Spinner size={16} />
+                            ) : (
+                              <Tag minimal intent="danger">{sat.norad_id}</Tag>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Ground Stations */}
+                  <div className="mt-4 pt-4 border-t border-sda-border-default">
+                    <h4 className="text-sm font-semibold text-sda-text-secondary mb-2 flex items-center gap-2">
+                      <Icon icon="globe" className="text-sda-accent-cyan" />
+                      Ground Stations ({groundStations.length})
+                    </h4>
+                    <div className="space-y-1 max-h-40 overflow-auto">
+                      {groundStations.map((station) => (
+                        <div
+                          key={station.id}
+                          className={`p-2 text-sm hover:bg-sda-bg-tertiary rounded cursor-pointer ${
+                            selectedStation?.id === station.id ? 'bg-sda-bg-tertiary' : ''
+                          }`}
+                          onClick={() => flyToStation(station)}
+                        >
+                          <div className="flex items-center justify-between">
+                            <span className="font-medium">{station.name}</span>
+                            <Tag
+                              intent={station.is_operational ? 'success' : 'danger'}
+                              minimal
+                            >
+                              {station.is_operational ? 'ON' : 'OFF'}
+                            </Tag>
+                          </div>
+                          <div className="text-xs text-sda-text-muted mt-1">
+                            {station.code && `${station.code} • `}
+                            {station.country}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Ground Vehicles */}
+                  <div className="mt-4 pt-4 border-t border-sda-border-default">
+                    <h4 className="text-sm font-semibold text-sda-text-secondary mb-2 flex items-center gap-2">
+                      <Icon icon="truck" className="text-sda-accent-cyan" />
+                      Vehicles ({groundVehicles.length})
+                    </h4>
+                    <div className="space-y-1 max-h-40 overflow-auto">
+                      {groundVehicles.map((vehicle) => (
+                        <div
+                          key={vehicle.id}
+                          className="p-2 text-sm hover:bg-sda-bg-tertiary rounded cursor-pointer"
+                          onClick={() => {
+                            setSelectedVehicle(vehicle);
+                            setSelectedSatellite(null);
+                            setSelectedStation(null);
+                            setSelectedConjunction(null);
+                          }}
+                        >
+                          <div className="flex items-center justify-between">
+                            <span className="font-medium">{vehicle.entity_id}</span>
+                            <Tag intent="warning" minimal>
+                              {vehicle.heading_deg?.toFixed(0)}°
+                            </Tag>
+                          </div>
+                          <div className="text-xs text-sda-text-muted mt-1">
+                            {vehicle.latitude.toFixed(4)}°, {vehicle.longitude.toFixed(4)}° • {vehicle.velocity_magnitude_ms?.toFixed(1)} m/s
+                          </div>
+                        </div>
+                      ))}
+                      {groundVehicles.length === 0 && (
+                        <div className="text-xs text-sda-text-muted italic">
+                          No ground vehicles tracked
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Conjunctions */}
+                  {showConjunctions && conjunctions.length > 0 && (
+                    <div className="mt-4 pt-4 border-t border-sda-border-default">
+                      <h4 className="text-sm font-semibold text-sda-text-secondary mb-2 flex items-center gap-2">
+                        <Icon icon="warning-sign" className="text-sda-accent-cyan" />
+                        Conjunctions ({conjunctions.length})
+                      </h4>
+                      <div className="space-y-1 max-h-32 overflow-auto">
+                        {conjunctions.slice(0, 5).map((conj) => (
+                          <div
+                            key={conj.id}
+                            className="p-2 text-sm bg-sda-bg-tertiary rounded cursor-pointer hover:bg-sda-bg-secondary transition-colors"
+                            onClick={() => {
+                              setSelectedConjunction(conj);
+                              setSelectedSatellite(null);
+                              setSelectedStation(null);
+                              setSelectedVehicle(null);
+                            }}
+                          >
+                            <div className="flex items-center justify-between">
+                              <span className="font-medium">Risk: {conj.risk_level}</span>
+                              <Tag
+                                intent={
+                                  conj.risk_level === 'high' || conj.risk_level === 'critical'
+                                    ? 'danger'
+                                    : 'warning'
+                                }
+                                minimal
+                              >
+                                {conj.miss_distance_km.toFixed(1)} km
+                              </Tag>
+                            </div>
+                            <div className="text-xs text-sda-text-muted mt-1">
+                              TCA: {new Date(conj.tca).toLocaleString()}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="p-3 border-b border-sda-border-default bg-sda-bg-secondary">
+                  <span className="text-sm font-semibold text-sda-text-primary flex items-center gap-2">
+                    <Icon icon="globe-network" className="text-sda-accent-cyan" />
+                    Solar System
+                  </span>
+                  <div className="text-xs text-sda-text-muted mt-1">
+                    Click a planet to focus view
+                  </div>
+                  {focusedBody && (
+                    <div className="mt-2 flex items-center gap-2">
+                      <span className="text-xs text-sda-text-secondary">
+                        Focused: <span className="font-semibold capitalize">{focusedBody}</span>
+                      </span>
+                      <Button
+                        small
+                        minimal
+                        intent={Intent.PRIMARY}
+                        onClick={handleBackToOverview}
+                        icon="zoom-out"
+                        className="ml-auto"
+                      >
+                        Reset
+                      </Button>
+                    </div>
+                  )}
+                </div>
+                <div className="flex-1 overflow-auto p-3">
+                  <div className="mb-4">
                     <div
-                      key={planet.id}
                       className={`flex items-center gap-2 p-2 rounded cursor-pointer ${
-                        focusedBody === planet.id ? 'bg-sda-bg-tertiary' : 'hover:bg-sda-bg-tertiary'
+                        focusedBody === 'sun' ? 'bg-sda-bg-tertiary' : 'hover:bg-sda-bg-tertiary'
                       }`}
                       onClick={() => {
-                        setFocusedBody(planet.id);
+                        setFocusedBody('sun');
                         setShowPlanetInfo(true);
                       }}
                     >
-                      <span className="w-3 h-3 rounded-full" style={{ backgroundColor: planet.color }}></span>
-                      <span className="text-sm">{planet.name}</span>
-                      <span className="text-xs text-sda-text-muted ml-auto">{planet.distanceAU?.toFixed(2) || 0} AU</span>
+                      <span className="w-4 h-4 rounded-full" style={{ backgroundColor: '#FDB813' }}></span>
+                      <span className="font-medium">Sun</span>
                     </div>
-                  ))}
+                  </div>
+                  <div className="mb-4">
+                    <h4 className="text-xs font-semibold text-sda-text-muted mb-2 uppercase">Inner Planets</h4>
+                    {PLANETS.filter(p => ['mercury', 'venus', 'earth', 'mars'].includes(p.id)).map(planet => (
+                      <div
+                        key={planet.id}
+                        className={`flex items-center gap-2 p-2 rounded cursor-pointer ${
+                          focusedBody === planet.id ? 'bg-sda-bg-tertiary' : 'hover:bg-sda-bg-tertiary'
+                        }`}
+                        onClick={() => {
+                          setFocusedBody(planet.id);
+                          setShowPlanetInfo(true);
+                        }}
+                      >
+                        <span className="w-3 h-3 rounded-full" style={{ backgroundColor: planet.color }}></span>
+                        <span className="text-sm">{planet.name}</span>
+                        <span className="text-xs text-sda-text-muted ml-auto">{planet.distanceAU?.toFixed(2) || 0} AU</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="mb-4">
+                    <h4 className="text-xs font-semibold text-sda-text-muted mb-2 uppercase">Outer Planets</h4>
+                    {PLANETS.filter(p => ['jupiter', 'saturn', 'uranus', 'neptune'].includes(p.id)).map(planet => (
+                      <div
+                        key={planet.id}
+                        className={`flex items-center gap-2 p-2 rounded cursor-pointer ${
+                          focusedBody === planet.id ? 'bg-sda-bg-tertiary' : 'hover:bg-sda-bg-tertiary'
+                        }`}
+                        onClick={() => {
+                          setFocusedBody(planet.id);
+                          setShowPlanetInfo(true);
+                        }}
+                      >
+                        <span className="w-3 h-3 rounded-full" style={{ backgroundColor: planet.color }}></span>
+                        <span className="text-sm">{planet.name}</span>
+                        <span className="text-xs text-sda-text-muted ml-auto">{planet.distanceAU?.toFixed(2) || 0} AU</span>
+                      </div>
+                    ))}
+                  </div>
+                  {showPlanetInfo && focusedBody && focusedBody !== 'sun' && (
+                    <PlanetInfoBox
+                      planet={PLANETS.find(p => p.id === focusedBody)!}
+                      onManage={() => handleManagePlanet(focusedBody)}
+                      onClose={handleClosePlanetInfo}
+                      onBackToOverview={handleBackToOverview}
+                    />
+                  )}
                 </div>
+              </>
+            )}
+          </div>
+        </div>
 
-                {/* Outer Planets */}
-                <div className="mb-4">
-                  <h4 className="text-xs font-semibold text-sda-text-muted mb-2 uppercase">Outer Planets</h4>
-                  {PLANETS.filter(p => ['jupiter', 'saturn', 'uranus', 'neptune'].includes(p.id)).map(planet => (
-                    <div
-                      key={planet.id}
-                      className={`flex items-center gap-2 p-2 rounded cursor-pointer ${
-                        focusedBody === planet.id ? 'bg-sda-bg-tertiary' : 'hover:bg-sda-bg-tertiary'
-                      }`}
-                      onClick={() => {
-                        setFocusedBody(planet.id);
-                        setShowPlanetInfo(true);
-                      }}
-                    >
-                      <span className="w-3 h-3 rounded-full" style={{ backgroundColor: planet.color }}></span>
-                      <span className="text-sm">{planet.name}</span>
-                      <span className="text-xs text-sda-text-muted ml-auto">{planet.distanceAU?.toFixed(1) || 0} AU</span>
-                    </div>
-                  ))}
-                </div>
-
-                {/* Dwarf Planets */}
-                <div>
-                  <h4 className="text-xs font-semibold text-sda-text-muted mb-2 uppercase">Dwarf Planets</h4>
-                  {PLANETS.filter(p => p.id === 'pluto').map(planet => (
-                    <div
-                      key={planet.id}
-                      className={`flex items-center gap-2 p-2 rounded cursor-pointer ${
-                        focusedBody === planet.id ? 'bg-sda-bg-tertiary' : 'hover:bg-sda-bg-tertiary'
-                      }`}
-                      onClick={() => {
-                        setFocusedBody(planet.id);
-                        setShowPlanetInfo(true);
-                      }}
-                    >
-                      <span className="w-3 h-3 rounded-full" style={{ backgroundColor: planet.color }}></span>
-                      <span className="text-sm">{planet.name}</span>
-                      <span className="text-xs text-sda-text-muted ml-auto">{planet.distanceAU?.toFixed(1) || 0} AU</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </>
-          )}
-        </Card>
-
-        {/* AI Chat Panel */}
-        <Card elevation={Elevation.TWO} className="w-96 flex flex-col overflow-hidden" style={{ minWidth: '380px' }}>
-          <div className="flex items-center justify-between p-3 border-b border-sda-border-default bg-sda-bg-secondary">
+        {/* Right Panel - AI Chat */}
+        <div className="absolute right-4 top-24 bottom-4 w-96 pointer-events-auto bg-sda-bg-secondary/60 backdrop-blur-sm rounded-lg border border-sda-border-default px-4 py-2 shadow-lg flex flex-col overflow-hidden">
+          <div className="flex items-center justify-between p-3 border-b border-sda-border-default">
             <span className="text-sm font-semibold text-sda-text-primary flex items-center gap-2">
               <Icon icon="chat" className="text-sda-accent-cyan" />
               AI Assistant
@@ -1147,8 +1139,19 @@ export default function MapPage() {
           <div className="flex-1 overflow-hidden">
             <AgentChat useStreaming={true} />
           </div>
-        </Card>
+        </div>
       </div>
+
+      {/* Fetch message toast */}
+      {fetchMessage && (
+        <div className={`absolute bottom-6 left-1/2 -translate-x-1/2 z-30 p-3 rounded shadow-lg ${
+          fetchIntent === Intent.SUCCESS 
+            ? 'bg-green-500/90 text-white' 
+            : 'bg-red-500/90 text-white'
+        }`}>
+          {fetchMessage}
+        </div>
+      )}
     </div>
   );
 }

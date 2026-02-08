@@ -56,7 +56,7 @@ export function PlanetInfoBox({ planet, onManage, onClose, onBackToOverview }: P
           </div>
           <div className="flex justify-between text-sm">
             <span className="text-sda-text-muted">Type:</span>
-            <Tag minimal intent={planet.type === 'star' ? Intent.WARNING : Intent.NONE} className="text-xs">
+            <Tag minimal intent={Intent.NONE} className="text-xs">
               {planet.type.charAt(0).toUpperCase() + planet.type.slice(1).replace('_', ' ')}
             </Tag>
           </div>
@@ -67,16 +67,14 @@ export function PlanetInfoBox({ planet, onManage, onClose, onBackToOverview }: P
         </p>
 
         <div className="flex gap-2">
-          {planet.id !== 'sun' && (
-            <Button
-              intent={Intent.PRIMARY}
-              icon="cog"
-              onClick={onManage}
-              className="flex-1"
-            >
-              Manage
-            </Button>
-          )}
+          <Button
+            intent={Intent.PRIMARY}
+            icon="cog"
+            onClick={onManage}
+            className="flex-1"
+          >
+            Manage
+          </Button>
           <Button
             intent={Intent.NONE}
             icon="zoom-out"

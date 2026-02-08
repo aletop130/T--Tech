@@ -682,3 +682,129 @@ class OntologyService:
         
         return results[:limit]
 
+
+
+# ============== Additional Helper Methods ==============
+
+    async def get_ground_station_by_code(self, code: str, tenant_id: str) -> Optional[GroundStation]:
+        """Get ground station by code."""
+        stmt = select(GroundStation).where(
+            and_(
+                GroundStation.tenant_id == tenant_id,
+                GroundStation.code == code
+            )
+        )
+        result = await self.db.execute(stmt)
+        return result.scalar_one_or_none()
+
+    async def get_sensor_by_code(self, code: str, tenant_id: str) -> Optional[Sensor]:
+        """Get sensor by code."""
+        stmt = select(Sensor).where(
+            and_(
+                Sensor.tenant_id == tenant_id,
+                Sensor.code == code
+            )
+        )
+        result = await self.db.execute(stmt)
+        return result.scalar_one_or_none()
+
+    async def calculate_satellite_connections(
+        self,
+        tenant_id: str,
+        satellite_id: Optional[str] = None,
+    ) -> list[dict]:
+        """Calculate connections between satellites and other entities."""
+        results = []
+        
+        # Get all active satellites
+        satellite_stmt = select(Satellite).where(
+            and_(
+                Satellite.tenant_id == tenant_id,
+                Satellite.is_active == True
+            )
+        )
+        sat_result = await self.db.execute(satellite_stmt)
+        satellites = list(sat_result.scalars().all())
+        
+        if satellite_id:
+            satellites = [s for s in satellites if s.id == satellite_id]
+        
+        if not satellites:
+            return results
+        
+        # Get ground stations
+        gs_stmt = select(GroundStation).where(
+            and_(
+                GroundStation.tenant_id == tenant_id,
+                GroundStation.is_operational == True
+            )
+        )
+        gs_result = await self.db.execute(gs_stmt)
+        ground_stations = list(gs_result.scalars().all())
+        
+        # Get sensors
+        sensor_stmt = select(Sensor).where(
+            and_(
+                Sensor.tenant_id == tenant_id,
+                Sensor.is_operational == True
+            )
+        )
+        sensor_result = await self.db.execute(sensor_stmt)
+        sensors = list(sensor_result.scalars().all())
+        
+        # Calculate ground station connections
+        for gs in ground_stations:
+            for sat in satellites:
+                # Simplified: assume coverage if satellite is active and GS is operational
+                # In production, would calculate actual visibility based on orbital parameters
+                results.append({
+                    "satellite_id": sat.id,
+                    "target_id": gs.id,
+                    "target_type": "ground_station",
+                    "connection_type": "COVERAGE",
+                    "confidence": 0.8,
+                    "metadata": {
+                        "elevation_deg": 45.0,
+                        "distance_km": 2000.0,
+                        "ground_station_name": gs.name,
+                    }
+                })
+        
+        # Calculate sensor connections
+        for sensor in sensors:
+            for sat in satellites:
+                # Simplified: assume tracking if satellite is active and sensor is operational
+                results.append({
+                    "satellite_id": sat.id,
+                    "target_id": sensor.id,
+                    "target_type": "sensor",
+                    "connection_type": "TRACKS",
+                    "confidence": 0.9,
+                    "metadata": {
+                        "sensor_name": sensor.name,
+                        "sensor_type": sensor.sensor_type,
+                        "distance_km": 10000.0,
+                    }
+                })
+        
+        # Calculate conjunction connections (simplified - all satellites have low probability)
+        for i, sat1 in enumerate(satellites):
+            for sat2 in satellites[i+1:]:
+                # Random conjunction chance for demo purposes
+                import random
+                if random.random() < 0.1:  # 10% chance of conjunction
+                    results.append({
+                        "satellite_id": sat1.id,
+                        "target_id": sat2.id,
+                        "target_type": "satellite",
+                        "connection_type": "CONJUNCTION",
+                        "confidence": 0.3 + random.random() * 0.5,
+                        "metadata": {
+                            "other_satellite_id": sat2.id,
+                            "other_satellite_name": sat2.name,
+                            "miss_distance_km": 5.0 + random.random() * 10,
+                            "risk_level": "high",
+                        }
+                    })
+        
+        return results

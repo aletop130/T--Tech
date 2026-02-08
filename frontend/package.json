@@ -26,6 +26,8 @@
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-leaflet": "^4.2.1",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1",
     "resium": "^1.19.0",
     "satellite.js": "^5.0.0",
     "swr": "^2.2.4",

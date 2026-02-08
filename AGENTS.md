@@ -1,3 +1,28 @@
+## CODING RULES
+## Tool contract: write()
+
+Before calling `write`, you MUST validate arguments:
+
+- `filePath`: required, must be a non-empty string.
+- `content`: required, must be a string and MUST NOT be undefined.
+- If either is missing/undefined/empty -> DO NOT call `write`. Regenerate the arguments first.
+
+### Output hygiene
+- Do not print “← Write …” or any other pseudo-tool syntax.
+- Tool calls must be emitted only with fully-specified arguments.
+- Do not use placeholders like “…”, “TODO”, “content omitted”. Always provide full file content.
+
+### Write policy
+- Use `write` only for:
+  1) creating a new file, or
+  2) fully replacing an existing file.
+- For partial modifications, prefer `edit/patch` tools.
+- Always include a quick debug line before each write:
+  - `WRITE_TARGET="<filePath>"`
+  - `WRITE_CONTENT_LENGTH=<number>`
+
+
+
 # AGENTS.md - SDA Platform Development Guide
 Every fix you do, restart frontend and backend 
 ## Project Overview
@@ -5,6 +30,8 @@ Every fix you do, restart frontend and backend
 Space Domain Awareness (SDA) platform with a FastAPI Python backend and Next.js + React + TypeScript frontend. All services run in Docker containers with hot-reload support.
 
 ## Docker Development Workflow
+
+**Note:** Opencode should not automatically start Docker containers; the user must run `docker-compose up` manually.
 
 ```bash
 # Start all services

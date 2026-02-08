@@ -23,16 +23,20 @@ export function SatelliteLayer({
   const cleanupRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
-    if (!viewer) return;
+    if (!viewer || viewer.isDestroyed()) return;
 
     if (cleanupRef.current) {
       cleanupRef.current();
       cleanupRef.current = null;
     }
 
-    if (!viewer.entities) {
+    if (!viewer?.entities) {
       const interval = setInterval(() => {
-        if (viewer.entities) {
+        if (viewer?.isDestroyed()) {
+          clearInterval(interval);
+          return;
+        }
+        if (viewer?.entities) {
           clearInterval(interval);
         }
       }, 50);
@@ -133,7 +137,7 @@ export function SatelliteLayer({
     });
 
     cleanupRef.current = () => {
-      if (viewer && viewer.entities) {
+      if (viewer && !viewer.isDestroyed() && viewer.entities) {
         currentEntities.forEach((id) => {
           try {
             const entity = viewer.entities.getById(id);

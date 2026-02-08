@@ -4,6 +4,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { Button, InputGroup, Card, Elevation, Tag, Spinner, Icon, Collapse, Divider } from '@blueprintjs/core';
 import { cesiumController, CesiumAction } from '@/lib/cesium/controller';
 import { SSEChatClient } from '@/lib/sse-client';
+import { MarkdownMessage } from './MarkdownMessage';
 
 interface ChatDisplayMessage {
   id: string;
@@ -275,9 +276,9 @@ export function AgentChat({ onSendMessage, initialMessages = [], useStreaming = 
     setInput(prompt);
   };
 
-  return (
-    <div className="flex flex-col h-full bg-sda-bg-secondary">
-      <div className="p-3 border-b border-sda-border-default">
+   return (
+     <div className="flex flex-col h-full glass-panel">
+       <div className="p-3 border-b border-sda-border-default/50">
         <h2 className="text-lg font-semibold text-sda-text-primary flex items-center gap-2">
           <Icon icon="chat" className="text-sda-accent-cyan" />
           AI Assistant
@@ -306,15 +307,19 @@ export function AgentChat({ onSendMessage, initialMessages = [], useStreaming = 
                 message.role === 'user' ? 'justify-end' : 'justify-start'
               }`}
             >
-              <div
-                className={`max-w-[85%] rounded-lg px-3 py-2 ${
-                  message.role === 'user'
-                    ? 'bg-sda-accent-blue text-white'
-                    : 'bg-sda-bg-tertiary text-sda-text-primary'
-                }`}
-              >
-                <div className="text-sm whitespace-pre-wrap">
-                  {message.content}
+               <div
+                 className={`max-w-[85%] rounded-lg px-3 py-2 ${
+                   message.role === 'user'
+                     ? 'bg-sda-bg-tertiary text-sda-accent-blue'
+                     : 'bg-sda-bg-secondary text-sda-text-primary'
+                 }`}
+               >
+                <div className="text-sm">
+                  {message.role === 'assistant' ? (
+                    <MarkdownMessage content={message.content} />
+                  ) : (
+                    <div className="whitespace-pre-wrap">{message.content}</div>
+                  )}
                   {message.isStreaming && (
                     <span className="inline-block w-2 h-4 ml-1 bg-sda-accent-cyan animate-pulse" />
                   )}
@@ -336,13 +341,13 @@ export function AgentChat({ onSendMessage, initialMessages = [], useStreaming = 
                 >
                   Tools ({message.toolCalls.length})
                 </Button>
-                <Collapse isOpen={expandedTools.has(message.id)}>
-                  <Card elevation={Elevation.ONE} className="mt-2 p-2 bg-sda-bg-tertiary">
-                    {message.toolCalls.map((toolCall, idx) => (
-                      <div
-                        key={idx}
-                        className="text-xs text-sda-text-secondary py-1 border-b border-sda-border-subtle last:border-0 font-mono"
-                      >
+                 <Collapse isOpen={expandedTools.has(message.id)}>
+                   <Card elevation={Elevation.ONE} className="mt-2 p-2 glass-panel">
+                     {message.toolCalls.map((toolCall, idx) => (
+                       <div
+                         key={idx}
+                         className="text-xs text-sda-text-secondary py-1 border-b border-sda-border-default last:border-0 font-mono"
+                       >
                         {formatToolCall(toolCall)}
                       </div>
                     ))}
@@ -362,13 +367,13 @@ export function AgentChat({ onSendMessage, initialMessages = [], useStreaming = 
                 >
                   Actions ({message.actions.length})
                 </Button>
-                <Collapse isOpen={expandedActions.has(message.id)}>
-                  <Card elevation={Elevation.ONE} className="mt-2 p-2 bg-sda-bg-tertiary">
-                    {message.actions.map((action, idx) => (
-                      <div
-                        key={idx}
-                        className="text-xs text-sda-text-secondary py-1 border-b border-sda-border-subtle last:border-0"
-                      >
+                 <Collapse isOpen={expandedActions.has(message.id)}>
+                   <Card elevation={Elevation.ONE} className="mt-2 p-2 glass-panel">
+                     {message.actions.map((action, idx) => (
+                       <div
+                         key={idx}
+                         className="text-xs text-sda-text-secondary py-1 border-b border-sda-border-default last:border-0"
+                       >
                         {formatAction(action)}
                       </div>
                     ))}
@@ -379,9 +384,9 @@ export function AgentChat({ onSendMessage, initialMessages = [], useStreaming = 
           </div>
         ))}
 
-        {isLoading && !streamingText && (
-          <div className="flex justify-start">
-            <div className="bg-sda-bg-tertiary rounded-lg px-3 py-2 flex items-center gap-2">
+         {isLoading && !streamingText && (
+           <div className="flex justify-start">
+             <div className="glass-panel rounded-lg px-3 py-2 flex items-center gap-2">
               <Spinner size={16} />
               <span className="text-sm text-sda-text-muted">AI is thinking...</span>
             </div>

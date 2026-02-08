@@ -1,11 +1,8 @@
-/** @type {import('next').NextConfig} */
-const nextConfig = {
-  reactStrictMode: true,
-  turbopack: {},
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
-  transpilePackages: [
+ /** @type {import('next').NextConfig} */
+ const nextConfig = {
+   reactStrictMode: true,
+   turbopack: {},
+   transpilePackages: [
     "@blueprintjs/core",
     "@blueprintjs/icons",
     "@blueprintjs/select",

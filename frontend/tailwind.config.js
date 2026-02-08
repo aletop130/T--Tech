@@ -6,22 +6,22 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        // Palantir-inspired dark theme
         sda: {
           bg: {
-            primary: '#0d1117',
-            secondary: '#161b22',
-            tertiary: '#21262d',
-            elevated: '#30363d',
+            primary: '#050505',
+            secondary: '#0a0a0a',
+            tertiary: '#141414',
+            elevated: '#1f1f1f',
+            sidebar: '#0f0f0f',
           },
           border: {
-            default: '#30363d',
-            muted: '#21262d',
+            default: '#2a2a2a',
+            muted: '#1a1a1a',
           },
           text: {
-            primary: '#e6edf3',
-            secondary: '#8b949e',
-            muted: '#6e7681',
+            primary: '#f0f0f0',
+            secondary: '#a0a0a0',
+            muted: '#606060',
           },
           accent: {
             blue: '#2f81f7',
@@ -37,10 +37,10 @@ module.exports = {
       fontFamily: {
         sans: ['var(--font-ibm-plex-sans)', 'IBM Plex Sans', 'system-ui', 'sans-serif'],
         mono: ['var(--font-ibm-plex-mono)', 'IBM Plex Mono', 'monospace'],
+        code: ['"Google Sans Code"', 'monospace'],
       },
     },
   },
   plugins: [],
   darkMode: 'class',
 };
-

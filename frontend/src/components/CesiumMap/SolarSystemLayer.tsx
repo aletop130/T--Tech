@@ -18,16 +18,8 @@ export interface SolarSystemLayerProps {
 
 // Simple color materials as fallback
 const BODY_COLORS: Record<string, string> = {
-  sun: '#FDB813',
-  mercury: '#8C8C8C',
-  venus: '#E6E6B8',
   earth: '#2233FF',
   mars: '#FF4500',
-  jupiter: '#D4A373',
-  saturn: '#F4D03F',
-  uranus: '#4FD0E7',
-  neptune: '#4169E1',
-  pluto: '#D2B48C',
 };
 
 export function SolarSystemLayer({
@@ -49,32 +41,11 @@ export function SolarSystemLayer({
     return Cesium.Color.fromCssColorString(colorHex);
   }, []);
 
-  // Calculate view distance based on planet size and type
+  // Calculate view distance based on planet size
   const getViewDistance = useCallback((bodyId: string, radius: number): number => {
-    // Sun: 4x radius
-    if (bodyId === 'sun') {
+    // Earth and Mars: 4x radius
+    if (bodyId === 'earth' || bodyId === 'mars') {
       return radius * 4;
-    }
-    
-    // Pluto: 4x radius
-    if (bodyId === 'pluto') {
-      return radius * 4;
-    }
-    
-    // Inner planets (Mercury, Venus, Earth, Mars): 3-5x radius
-    const innerPlanets = ['mercury', 'venus', 'earth', 'mars'];
-    if (innerPlanets.includes(bodyId)) {
-      return radius * 4;
-    }
-    
-    // Outer planets (Jupiter, Saturn, Uranus, Neptune): 5-8x radius
-    const outerPlanets = ['jupiter', 'saturn', 'uranus', 'neptune'];
-    if (outerPlanets.includes(bodyId)) {
-      // Larger planets get a bit more distance
-      if (bodyId === 'jupiter' || bodyId === 'saturn') {
-        return radius * 6;
-      }
-      return radius * 5;
     }
     
     // Default
@@ -90,18 +61,9 @@ export function SolarSystemLayer({
   ): { position: Cesium.Cartesian3; heading: number; pitch: number } => {
     const viewDistance = getViewDistance(bodyId, bodyRadius);
     
-    // Direction from Sun to body (for planets other than Sun)
-    // For Sun, use a default direction
-    let direction: Cesium.Cartesian3;
-    
-    if (bodyId === 'sun') {
-      // View Sun from positive Z, slight angle
-      direction = new Cesium.Cartesian3(0.3, 0.5, 1.0);
-    } else {
-      // For planets, view from direction toward the Sun (opposite side from Sun)
-      // This shows the lit side
-      direction = Cesium.Cartesian3.negate(bodyPosition, new Cesium.Cartesian3());
-    }
+    // For planets, view from direction toward the origin (opposite side from center)
+    // This shows the lit side
+    let direction = Cesium.Cartesian3.negate(bodyPosition, new Cesium.Cartesian3());
     
     // Normalize the direction
     direction = Cesium.Cartesian3.normalize(direction, new Cesium.Cartesian3());
@@ -139,7 +101,8 @@ export function SolarSystemLayer({
   // Initialize solar system
   useEffect(() => {
     if (!viewer || isSetupRef.current) return;
-    
+    if (!viewer?.entities) return;
+
     console.log('[SolarSystem] Initializing...');
     isSetupRef.current = true;
 
@@ -152,59 +115,35 @@ export function SolarSystemLayer({
 
     // Clear any existing entities
     planetEntitiesRef.current.forEach(entity => {
-      if (viewer.entities.contains(entity)) {
-        viewer.entities.remove(entity);
+      if (viewer?.entities.contains(entity)) {
+        viewer?.entities.remove(entity);
       }
     });
     orbitEntitiesRef.current.forEach(entity => {
-      if (viewer.entities.contains(entity)) {
-        viewer.entities.remove(entity);
+      if (viewer?.entities.contains(entity)) {
+        viewer?.entities.remove(entity);
       }
     });
     planetEntitiesRef.current.clear();
     orbitEntitiesRef.current = [];
 
-    // Get maximum distance for camera positioning
-    const maxDistance = calculateScaledDistance(39.48); // Pluto
+    // Get maximum distance for camera positioning (Mars is the furthest at 1.52 AU)
+    const maxDistance = calculateScaledDistance(1.52);
     console.log('[SolarSystem] Max distance:', maxDistance);
 
-    // Create Sun at origin
-    const sunRadius = calculateScaledRadius(696340, true);
-    console.log('[SolarSystem] Sun radius:', sunRadius);
-    
-    const sun = viewer.entities.add({
-      position: Cesium.Cartesian3.ZERO,
-      name: 'Sun',
-      ellipsoid: {
-        radii: new Cesium.Cartesian3(sunRadius, sunRadius, sunRadius),
-        material: createBodyMaterial('sun'),
-        outlineColor: Cesium.Color.YELLOW,
-        outlineWidth: 2,
-      },
-      label: showLabels ? {
-        text: 'Sun',
-        font: 'bold 16px sans-serif',
-        fillColor: Cesium.Color.YELLOW,
-        outlineColor: Cesium.Color.BLACK,
-        outlineWidth: 3,
-        verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
-        pixelOffset: new Cesium.Cartesian2(0, -sunRadius - 50),
-        showBackground: true,
-        backgroundColor: Cesium.Color.BLACK.withAlpha(0.7),
-      } : undefined,
-    });
-    planetEntitiesRef.current.set('sun', sun);
+    // Filter out the sun for positioning
+    const nonSunPlanets = PLANETS.filter(p => p.id !== 'sun');
 
     // Create planets
-    const nonSunPlanets = PLANETS.filter(p => p.id !== 'sun');
-    nonSunPlanets.forEach((planet, index) => {
+    PLANETS.forEach((planet, index) => {
       if (!planet.distanceAU) return;
       
       const distance = calculateScaledDistance(planet.distanceAU);
       const radius = calculateScaledRadius(planet.radiusKm);
       
-      // Spread planets evenly in a circle around the Sun
-      const angle = (index / nonSunPlanets.length) * Math.PI * 2;
+      // Find index among non-sun planets for angle calculation
+      const nonSunIndex = nonSunPlanets.findIndex(p => p.id === planet.id);
+      const angle = (nonSunIndex >= 0 ? nonSunIndex : 0 / nonSunPlanets.length) * Math.PI * 2;
       const x = Math.cos(angle) * distance;
       const z = Math.sin(angle) * distance;
       const position = new Cesium.Cartesian3(x, 0, z);
@@ -346,7 +285,7 @@ export function SolarSystemLayer({
 
     // Get body info for radius calculation
     const body = PLANETS.find(b => b.id === focusedBody);
-    const radius = body ? calculateScaledRadius(body.radiusKm, body.id === 'sun') : 500000;
+    const radius = body ? calculateScaledRadius(body.radiusKm) : 500000;
     
     console.log(`[SolarSystem] Body: ${body?.name}, Radius: ${radius}`);
 

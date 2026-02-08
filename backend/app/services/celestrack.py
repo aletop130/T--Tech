@@ -654,3 +654,131 @@ def get_celestrack_service() -> CelesTrackService:
     The service should be properly closed after use.
     """
     return CelesTrackService()
+
+
+# Ground Stations around the world
+GROUND_STATIONS = [
+    {
+        "name": "White Sands",
+        "code": "WS",
+        "latitude": 32.24,
+        "longitude": -106.38,
+        "altitude_m": 1450,
+        "antenna_count": 3,
+        "frequency_bands": ["S", "X", "Ka"],
+        "is_operational": True,
+        "organization": "NASA",
+        "country": "USA",
+    },
+    {
+        "name": "Svalbard",
+        "code": "SV",
+        "latitude": 78.22,
+        "longitude": 15.33,
+        "altitude_m": 520,
+        "antenna_count": 2,
+        "frequency_bands": ["S", "X"],
+        "is_operational": True,
+        "organization": "KSAT",
+        "country": "Norway",
+    },
+]
+
+# Sensor networks
+SENSORS = [
+    {
+        "name": "Space Surveillance Telescope",
+        "code": "SST",
+        "sensor_type": "OPTICAL",
+        "latitude": 32.24,
+        "longitude": -106.38,
+        "max_range_km": 36000,
+        "fov_deg": 5,
+        "is_operational": True,
+        "organization": "Space Force",
+        "country": "USA",
+    },
+]
+
+# Helper functions
+async def create_ground_stations_if_missing(ontology_service, tenant_id: str, user_id: Optional[str] = None):
+    """Create ground stations in the database if they don't exist."""
+    from app.db.models.ontology import GroundStation
+    from sqlalchemy import select
+    
+    created = 0
+    for gs_data in GROUND_STATIONS:
+        # Check if ground station with this name already exists
+        stmt = select(GroundStation).where(
+            and_(
+                GroundStation.tenant_id == tenant_id,
+                GroundStation.name == gs_data["name"]
+            )
+        )
+        result = await ontology_service.db.execute(stmt)
+        existing = result.scalar_one_or_none()
+        
+        if not existing:
+            await ontology_service.create_ground_station(gs_data, tenant_id, user_id)
+            created += 1
+    
+    if created:
+        logger.info("Created ground stations", count=created)
+    
+    return created
+
+
+async def create_sensors_if_missing(ontology_service, tenant_id: str, user_id: Optional[str] = None):
+    """Create sensors in the database if they don't exist."""
+    from app.db.models.ontology import Sensor
+    from sqlalchemy import select
+    
+    created = 0
+    for sensor_data in SENSORS:
+        # Check if sensor with this name already exists
+        stmt = select(Sensor).where(
+            and_(
+                Sensor.tenant_id == tenant_id,
+                Sensor.name == sensor_data["name"]
+            )
+        )
+        result = await ontology_service.db.execute(stmt)
+        existing = result.scalar_one_or_none()
+        
+        if not existing:
+            await ontology_service.create_sensor(sensor_data, tenant_id, user_id)
+            created += 1
+    
+    if created:
+        logger.info("Created sensors", count=created)
+    
+    return created
+
+async def create_ground_stations_if_missing(ontology_service, tenant_id: str, user_id: Optional[str] = None):
+    """Create ground stations in the database if they don't exist."""
+    created = 0
+    for gs_data in GROUND_STATIONS:
+        existing = await ontology_service.get_ground_station_by_code(gs_data["code"], tenant_id)
+        if not existing:
+            await ontology_service.create_ground_station(gs_data, tenant_id, user_id)
+            created += 1
+    
+    if created:
+        logger.info("Created ground stations", count=created)
+    
+    return created
+
+
+async def create_sensors_if_missing(ontology_service, tenant_id: str, user_id: Optional[str] = None):
+    """Create sensors in the database if they don't exist."""
+    created = 0
+    for sensor_data in SENSORS:
+        existing = await ontology_service.get_sensor_by_code(sensor_data["code"], tenant_id)
+        if not existing:
+            await ontology_service.create_sensor(sensor_data, tenant_id, user_id)
+            created += 1
+    
+    if created:
+        logger.info("Created sensors", count=created)
+    
+    return created

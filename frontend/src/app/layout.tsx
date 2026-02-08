@@ -26,7 +26,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className={`dark ${ibmPlexSans.variable} ${ibmPlexMono.variable}`}>
-      <body className="font-sans bp5-dark">
+      <body className="font-sans bp5-dark bg-sda-bg-primary">
         {children}
       </body>
     </html>

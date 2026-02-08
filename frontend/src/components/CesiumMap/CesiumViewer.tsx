@@ -28,7 +28,7 @@ const ViewerConfig = memo(function ViewerConfig({ onViewerReady, showTerrain }: 
   const { viewer } = useCesium();
   const isConfiguredRef = useRef(false);
 
-  const handleReady = useCallback(() => {
+  const handleReady = useCallback(async () => {
     if (viewer && !isConfiguredRef.current) {
       viewer.scene.globe.enableLighting = true;
       viewer.scene.globe.dynamicAtmosphereLighting = true;
@@ -40,7 +40,7 @@ const ViewerConfig = memo(function ViewerConfig({ onViewerReady, showTerrain }: 
       try {
         if (showTerrain) {
           if (process.env.NEXT_PUBLIC_CESIUM_ION_TOKEN) {
-            const terrainProvider = await Cesium.createWorldTerrain();
+            const terrainProvider = await Cesium.createWorldTerrainAsync();
             viewer.scene.globe.terrainProvider = terrainProvider;
             viewer.scene.globe.depthTestAgainstTerrain = true;
             console.log('Cesium World Terrain loaded');
@@ -142,21 +142,21 @@ export const CesiumViewer = memo(function CesiumViewer({ className, onViewerRead
 
   return (
     <div className={className} style={{ width: '100%', height: '100%' }}>
-      <Viewer
-        full
-        timeline={true}
-        animation={true}
-        vrButton={false}
-        geocoder={true}
-        homeButton={true}
-        infoBox={false}
-        sceneModePicker={true}
-        baseLayerPicker={false}
-        navigationHelpButton={false}
-        selectionIndicator={false}
-        creditContainer={creditContainerRef.current ?? undefined}
-        skyBox={false}
-      >
+       <Viewer
+         full
+         timeline={false}
+         animation={false}
+         vrButton={false}
+         geocoder={true}
+         homeButton={true}
+         infoBox={false}
+         sceneModePicker={true}
+         baseLayerPicker={false}
+         navigationHelpButton={false}
+         selectionIndicator={false}
+         creditContainer={creditContainerRef.current ?? undefined}
+         skyBox={false}
+       >
         <ViewerConfig onViewerReady={onViewerReady} />
       </Viewer>
     </div>
