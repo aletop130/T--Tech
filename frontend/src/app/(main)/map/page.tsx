@@ -710,6 +710,7 @@ export default function MapPage() {
               <DynamicCesiumViewer
                 className="w-full h-full"
                 onViewerReady={handleViewerReady}
+                showTerrain={showTerrain}
               />
               {viewer && (
                 <>
