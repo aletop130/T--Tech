@@ -9,6 +9,7 @@ from app.api.v1 import (
     ai,
     audit,
     search,
+    operations,
 )
 
 api_router = APIRouter()
@@ -53,5 +54,11 @@ api_router.include_router(
     search.router,
     prefix="/search",
     tags=["Search"],
+)
+
+api_router.include_router(
+    operations.router,
+    prefix="/operations",
+    tags=["Operations"],
 )
 

@@ -3,11 +3,13 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import dynamic from 'next/dynamic';
 import { Card, Elevation, Spinner, Tag, Icon, Button, Checkbox, Intent } from '@blueprintjs/core';
-import { api, GroundStation, Satellite, ConjunctionEvent } from '@/lib/api';
+import { api, GroundStation, Satellite, ConjunctionEvent, PositionReport } from '@/lib/api';
 import * as Cesium from 'cesium';
 import { CesiumViewer } from '@/components/CesiumMap/CesiumViewer';
 import { SatelliteLayer } from '@/components/CesiumMap/SatelliteLayer';
 import { GroundStationLayer } from '@/components/CesiumMap/GroundStationLayer';
+import { GroundVehicleLayer } from '@/components/CesiumMap/GroundVehicleLayer';
+import { MilitaryVehicleLayer } from '@/components/CesiumMap/MilitaryVehicleLayer';
 import { ConjunctionLayer } from '@/components/CesiumMap/ConjunctionLayer';
 import { SatelliteInfoCard } from '@/components/CesiumMap/SatelliteInfoCard';
 import { SolarSystemLayer } from '@/components/CesiumMap/SolarSystemLayer';
@@ -102,6 +104,7 @@ export default function MapPage() {
   const [viewer, setViewer] = useState<Cesium.Viewer | null>(null);
   const [groundStations, setGroundStations] = useState<GroundStation[]>([]);
   const [satellites, setSatellites] = useState<Satellite[]>([]);
+  const [groundVehicles, setGroundVehicles] = useState<PositionReport[]>([]);
   const [conjunctions, setConjunctions] = useState<ConjunctionEvent[]>([]);
   const [orbits, setOrbits] = useState<OrbitData[]>([]);
   const [loading, setLoading] = useState(true);
@@ -115,6 +118,10 @@ export default function MapPage() {
   const [showOrbits, setShowOrbits] = useState(true);
   const [showCoverage, setShowCoverage] = useState(true);
   const [showConjunctions, setShowConjunctions] = useState(true);
+  const [showGroundVehicles, setShowGroundVehicles] = useState(true);
+  const [vehicleDisplayMode, setVehicleDisplayMode] = useState<'points' | '3d'>('points');
+  const [showTerrain, setShowTerrain] = useState(false);
+  const [terrainAvailable, setTerrainAvailable] = useState(false);
   const [viewMode, setViewMode] = useState<'earth' | 'solar'>('solar');
   const [focusedBody, setFocusedBody] = useState<string | null>(null);
   const [managingPlanet, setManagingPlanet] = useState<string | null>(null);
@@ -220,10 +227,11 @@ export default function MapPage() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [stationsData, satellitesWithOrbits, conjunctionsData] = await Promise.all([
+      const [stationsData, satellitesWithOrbits, conjunctionsData, vehiclesData] = await Promise.all([
         api.getGroundStations({ page_size: 100 }),
         api.getSatellitesWithOrbits(),
         api.getConjunctions({ page_size: 50, is_actionable: true }),
+        api.getGroundVehicles().catch(() => ({ items: [] })),
       ]);
 
       setGroundStations(stationsData.items);
@@ -231,6 +239,7 @@ export default function MapPage() {
       const satellitesWithMockData = mockSatelliteMetadata(satellitesWithOrbits);
       setSatellites(satellitesWithMockData);
       setConjunctions(conjunctionsData.items);
+      setGroundVehicles(vehiclesData.items);
 
       // Generate orbit positions from TLE if available
       const generatedOrbits: OrbitData[] = satellitesWithOrbits.map((sat) => {
@@ -617,6 +626,56 @@ export default function MapPage() {
                 label="Ground Coverage"
               />
               <Checkbox
+                checked={showGroundVehicles}
+                onChange={(e) => setShowGroundVehicles(e.currentTarget.checked)}
+                label="Ground Vehicles"
+              />
+              {showGroundVehicles && (
+                <div className="flex flex-col gap-1 ml-4">
+                  <label className="text-xs text-gray-400">Vehicle Display:</label>
+                  <div className="flex gap-2">
+                    <button
+                      className={`px-2 py-1 text-xs rounded ${
+                        vehicleDisplayMode === 'points'
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-gray-700 text-gray-300'
+                      }`}
+                      onClick={() => setVehicleDisplayMode('points')}
+                    >
+                      Points
+                    </button>
+                    <button
+                      className={`px-2 py-1 text-xs rounded ${
+                        vehicleDisplayMode === '3d'
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-gray-700 text-gray-300'
+                      }`}
+                      onClick={() => setVehicleDisplayMode('3d')}
+                    >
+                      3D Models
+                    </button>
+                  </div>
+                </div>
+              )}
+              <div className="flex flex-col gap-1">
+                <label className="text-xs text-gray-400">Terrain:</label>
+                <button
+                  className={`px-2 py-1 text-xs rounded ${
+                    showTerrain
+                      ? 'bg-green-600 text-white'
+                      : 'bg-gray-700 text-gray-300'
+                  }`}
+                  onClick={() => {
+                    setShowTerrain(!showTerrain);
+                    if (!terrainAvailable && !showTerrain) {
+                      alert('Terrain requires CESIUM_ION_TOKEN in environment variables');
+                    }
+                  }}
+                >
+                  {showTerrain ? 'ON' : 'OFF'}
+                </button>
+              </div>
+              <Checkbox
                 checked={showConjunctions}
                 onChange={(e) => setShowConjunctions(e.currentTarget.checked)}
                 label="Conjunctions"
@@ -667,6 +726,20 @@ export default function MapPage() {
                         stations={groundStations}
                         showCoverage={showCoverage}
                       />
+                      {showGroundVehicles && vehicleDisplayMode === 'points' && (
+                        <GroundVehicleLayer
+                          viewer={viewer}
+                          vehicles={groundVehicles}
+                          show={showGroundVehicles}
+                        />
+                      )}
+                      {showGroundVehicles && vehicleDisplayMode === '3d' && (
+                        <MilitaryVehicleLayer
+                          viewer={viewer}
+                          vehicles={groundVehicles}
+                          show={showGroundVehicles}
+                        />
+                      )}
                       {showConjunctions && (
                         <ConjunctionLayer
                           viewer={viewer}
@@ -821,6 +894,37 @@ export default function MapPage() {
                         </div>
                       </div>
                     ))}
+                  </div>
+                </div>
+
+                {/* Ground Vehicles */}
+                <div className="mt-4 pt-4 border-t border-sda-border-default">
+                  <h4 className="text-sm font-semibold text-sda-text-secondary mb-2 flex items-center gap-2">
+                    <Icon icon="truck" className="text-sda-accent-cyan" />
+                    Ground Vehicles ({groundVehicles.length})
+                  </h4>
+                  <div className="space-y-1 max-h-40 overflow-auto">
+                    {groundVehicles.map((vehicle) => (
+                      <div
+                        key={vehicle.id}
+                        className="p-2 text-sm hover:bg-sda-bg-tertiary rounded"
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="font-medium">{vehicle.entity_id}</span>
+                          <Tag intent="warning" minimal>
+                            {vehicle.heading_deg?.toFixed(0)}°
+                          </Tag>
+                        </div>
+                        <div className="text-xs text-sda-text-muted mt-1">
+                          {vehicle.latitude.toFixed(4)}°, {vehicle.longitude.toFixed(4)}° • {vehicle.velocity_magnitude_ms?.toFixed(1)} m/s
+                        </div>
+                      </div>
+                    ))}
+                    {groundVehicles.length === 0 && (
+                      <div className="text-xs text-sda-text-muted italic">
+                        No ground vehicles tracked
+                      </div>
+                    )}
                   </div>
                 </div>
 

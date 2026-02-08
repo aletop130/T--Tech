@@ -20,6 +20,7 @@ const navItems: NavItem[] = [
   { icon: 'timeline-events', label: 'Timeline', href: '/timeline' },
   { icon: 'globe', label: 'Map', href: '/map' },
   { icon: 'warning-sign', label: 'Incidents', href: '/incidents' },
+  { icon: 'flows', label: 'Operations', href: '/operations' },
   { icon: 'import', label: 'Ingestion', href: '/ingestion' },
   { icon: 'cog', label: 'Admin', href: '/admin' },
 ];

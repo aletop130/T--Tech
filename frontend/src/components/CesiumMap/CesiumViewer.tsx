@@ -21,9 +21,10 @@ if (typeof window !== 'undefined') {
 interface CesiumViewerProps {
   className?: string;
   onViewerReady?: (viewer: Cesium.Viewer) => void;
+  showTerrain?: boolean;
 }
 
-const ViewerConfig = memo(function ViewerConfig({ onViewerReady }: { onViewerReady?: (viewer: Cesium.Viewer) => void }) {
+const ViewerConfig = memo(function ViewerConfig({ onViewerReady, showTerrain }: { onViewerReady?: (viewer: Cesium.Viewer) => void; showTerrain?: boolean }) {
   const { viewer } = useCesium();
   const isConfiguredRef = useRef(false);
 
@@ -33,8 +34,23 @@ const ViewerConfig = memo(function ViewerConfig({ onViewerReady }: { onViewerRea
       viewer.scene.globe.dynamicAtmosphereLighting = true;
       viewer.scene.globe.dynamicAtmosphereLightingFromSun = true;
       viewer.scene.globe.show = true;
-      viewer.scene.globe.depthTestAgainstTerrain = false;
+      viewer.scene.globe.depthTestAgainstTerrain = true;
       viewer.scene.backgroundColor = Cesium.Color.fromCssColorString('#0a0a0f');
+
+      try {
+        if (showTerrain) {
+          if (process.env.NEXT_PUBLIC_CESIUM_ION_TOKEN) {
+            const terrainProvider = await Cesium.createWorldTerrain();
+            viewer.scene.globe.terrainProvider = terrainProvider;
+            viewer.scene.globe.depthTestAgainstTerrain = true;
+            console.log('Cesium World Terrain loaded');
+          } else {
+            console.warn('No CESIUM_ION_TOKEN - terrain not available');
+          }
+        }
+      } catch (error) {
+        console.warn('Could not load terrain:', error);
+      }
       if (viewer.scene.skyAtmosphere) {
         viewer.scene.skyAtmosphere.show = true;
         viewer.scene.skyAtmosphere.hueShift = -0.02;
