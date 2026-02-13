@@ -19,6 +19,7 @@ import { SolarSystemLayer } from '@/components/CesiumMap/SolarSystemLayer';
 import { PlanetInfoBox } from '@/components/CesiumMap/PlanetInfoBox';
 import { PLANETS, type CelestialBody } from '@/lib/solarSystem/data';
 import { AgentChat } from '@/components/Chat/AgentChat';
+import { UnifiedAlertsPanel } from '@/components/ProximityAlertPanel/UnifiedAlertsPanel';
 import { cesiumController } from '@/lib/cesium/controller';
 
 // Dynamically import Cesium to avoid SSR issues
@@ -676,7 +677,7 @@ export default function MapPage() {
         <div className="flex items-center gap-4 mb-2">
           <h1 className="text-lg font-bold text-sda-text-primary flex items-center gap-2">
             <Icon icon="globe" className="text-sda-accent-cyan" />
-            3D Globe View
+            3D Glove View
           </h1>
           <div className="flex items-center gap-2">
             <Tag minimal intent="primary">Allied: {satellites.filter(isAlliedSatellite).length}</Tag>
@@ -1128,16 +1129,33 @@ export default function MapPage() {
           </div>
         </div>
 
-        {/* Right Panel - AI Chat */}
-        <div className="absolute right-4 top-24 bottom-4 w-96 pointer-events-auto bg-sda-bg-secondary/60 backdrop-blur-sm rounded-lg border border-sda-border-default px-4 py-2 shadow-lg flex flex-col overflow-hidden">
-          <div className="flex items-center justify-between p-3 border-b border-sda-border-default">
-            <span className="text-sm font-semibold text-sda-text-primary flex items-center gap-2">
-              <Icon icon="chat" className="text-sda-accent-cyan" />
-              AI Assistant
-            </span>
-          </div>
-          <div className="flex-1 overflow-hidden">
-            <AgentChat useStreaming={true} />
+        {/* Right Panel - Alerts & AI Chat */}
+        <div className="absolute right-4 top-24 bottom-4 w-96 pointer-events-auto flex flex-col gap-4">
+          {/* Unified Alerts Panel */}
+          {viewMode === 'earth' && (
+            <div className="h-80 bg-sda-bg-secondary/60 backdrop-blur-sm rounded-lg border border-sda-border-default shadow-lg overflow-hidden">
+              <UnifiedAlertsPanel 
+                onAlertClick={(alert) => {
+                  const sat = satellites.find(s => s.name === alert.primary_satellite_name);
+                  if (sat) {
+                    flyToSatellite(sat);
+                  }
+                }}
+              />
+            </div>
+          )}
+          
+          {/* AI Chat Panel */}
+          <div className="flex-1 bg-sda-bg-secondary/60 backdrop-blur-sm rounded-lg border border-sda-border-default px-4 py-2 shadow-lg flex flex-col overflow-hidden min-h-0">
+            <div className="flex items-center justify-between p-2 border-b border-sda-border-default">
+              <span className="text-sm font-semibold text-sda-text-primary flex items-center gap-2">
+                <Icon icon="chat" className="text-sda-accent-cyan" />
+                AI Assistant
+              </span>
+            </div>
+            <div className="flex-1 overflow-hidden">
+              <AgentChat useStreaming={true} />
+            </div>
           </div>
         </div>
       </div>

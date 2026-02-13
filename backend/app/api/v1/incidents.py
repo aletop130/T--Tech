@@ -77,6 +77,62 @@ async def get_incident_stats(
     return await service.get_stats(user.tenant_id)
 
 
+@router.get("/cyber", response_model=PaginatedResponse[IncidentResponse])
+async def list_cyber_incidents(
+    user: Annotated[TokenData, Depends(get_current_user)],
+    service: Annotated[IncidentService, Depends(get_incident_service)],
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=200),
+    severity: Optional[str] = Query(None),
+    status: Optional[str] = Query(None),
+):
+    """List cyber attack incidents."""
+    incidents, total = await service.list_incidents(
+        tenant_id=user.tenant_id,
+        incident_type="cyber",
+        severity=severity,
+        status=status,
+        page=page,
+        page_size=page_size,
+    )
+    
+    return PaginatedResponse(
+        items=incidents,
+        total=total,
+        page=page,
+        page_size=page_size,
+        pages=(total + page_size - 1) // page_size,
+    )
+
+
+@router.get("/maneuvers", response_model=PaginatedResponse[IncidentResponse])
+async def list_maneuver_incidents(
+    user: Annotated[TokenData, Depends(get_current_user)],
+    service: Annotated[IncidentService, Depends(get_incident_service)],
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=200),
+    severity: Optional[str] = Query(None),
+    status: Optional[str] = Query(None),
+):
+    """List maneuver detection incidents (proximity-related)."""
+    incidents, total = await service.list_incidents(
+        tenant_id=user.tenant_id,
+        incident_type="proximity",
+        severity=severity,
+        status=status,
+        page=page,
+        page_size=page_size,
+    )
+    
+    return PaginatedResponse(
+        items=incidents,
+        total=total,
+        page=page,
+        page_size=page_size,
+        pages=(total + page_size - 1) // page_size,
+    )
+
+
 @router.get("/{incident_id}", response_model=IncidentDetail)
 async def get_incident(
     incident_id: Annotated[str, Path()],
@@ -156,4 +212,3 @@ async def add_comment(
         tenant_id=user.tenant_id,
         user_id=user.sub,
     )
-

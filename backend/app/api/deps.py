@@ -18,6 +18,13 @@ from app.services.ai import AIService
 security = HTTPBearer(auto_error=False)
 
 
+async def get_tenant_id(
+    x_tenant_id: Annotated[str, Header(alias="X-Tenant-ID")] = "default",
+) -> str:
+    """Get tenant ID from header."""
+    return x_tenant_id
+
+
 async def get_current_user(
     credentials: Annotated[
         Optional[HTTPAuthorizationCredentials],

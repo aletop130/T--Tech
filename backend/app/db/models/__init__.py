@@ -9,7 +9,7 @@ from app.db.models.ontology import (
     ConjunctionEvent,
     ObjectRelation,
 )
-from app.db.models.incidents import Incident, IncidentComment
+from app.db.models.incidents import Incident, IncidentComment, ProximityEvent
 from app.db.models.ingestion import IngestionRun, DataQualityCheck
 from app.db.models.audit import AuditEvent
 from app.db.models.users import User, Tenant
@@ -37,6 +37,7 @@ __all__ = [
     "ObjectRelation",
     "Incident",
     "IncidentComment",
+    "ProximityEvent",
     "IngestionRun",
     "DataQualityCheck",
     "AuditEvent",

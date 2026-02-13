@@ -24,6 +24,10 @@ celery_app.conf.update(
 )
 
 celery_app.conf.beat_schedule = {
+    "run-proximity-detection": {
+        "task": "app.tasks.run_proximity_detection",
+        "schedule": 300.0,  # Every 5 minutes
+    },
     "run-conjunction-analysis": {
         "task": "app.tasks.run_conjunction_analysis",
         "schedule": 3600.0,  # Every hour
@@ -31,6 +35,14 @@ celery_app.conf.beat_schedule = {
     "fetch-space-weather": {
         "task": "app.tasks.fetch_space_weather",
         "schedule": 1800.0,  # Every 30 minutes
+    },
+    "simulate-cyber-attacks": {
+        "task": "app.tasks.simulate_cyber_attacks",
+        "schedule": 300.0,  # Every 5 minutes
+    },
+    "detect-maneuvers": {
+        "task": "app.tasks.detect_maneuvers",
+        "schedule": 300.0,  # Every 5 minutes
     },
 }
 

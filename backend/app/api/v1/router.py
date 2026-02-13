@@ -10,6 +10,7 @@ from app.api.v1 import (
     audit,
     search,
     operations,
+    proximity,
 )
 
 api_router = APIRouter()
@@ -60,5 +61,11 @@ api_router.include_router(
     operations.router,
     prefix="/operations",
     tags=["Operations"],
+)
+
+api_router.include_router(
+    proximity.router,
+    prefix="/proximity",
+    tags=["Proximity Detection"],
 )
 

@@ -95,6 +95,72 @@ export interface ConjunctionEvent {
   is_actionable: boolean;
 }
 
+export interface Position3D {
+  x: number;
+  y: number;
+  z: number;
+}
+
+export interface SatelliteInfo {
+  id: string;
+  name: string;
+  norad_id: number;
+  country?: string;
+  operator?: string;
+  is_active: boolean;
+}
+
+export interface ProximityEvent {
+  id: string;
+  primary_satellite_id: string;
+  secondary_satellite_id: string;
+  primary_satellite?: SatelliteInfo;
+  secondary_satellite?: SatelliteInfo;
+  start_time: string;
+  end_time?: string;
+  last_updated: string;
+  min_distance_km: number;
+  current_distance_km?: number;
+  approach_velocity_kms?: number;
+  tca?: string;
+  predicted_tca?: string;
+  alert_level: 'info' | 'warning' | 'critical';
+  status: 'active' | 'monitoring' | 'resolved' | 'escalated';
+  is_hostile: boolean;
+  threat_score?: number;
+  threat_assessment?: string;
+  warning_threshold_km: number;
+  critical_threshold_km: number;
+  primary_position?: Position3D;
+  secondary_position?: Position3D;
+  relative_velocity?: Position3D;
+  incident_id?: string;
+  scenario_id?: string;
+  is_simulated: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProximityAlert {
+  event_id: string;
+  primary_satellite_name: string;
+  secondary_satellite_name: string;
+  distance_km: number;
+  alert_level: 'info' | 'warning' | 'critical';
+  is_hostile: boolean;
+  threat_score?: number;
+  timestamp: string;
+  predicted_tca?: string;
+}
+
+export interface ProximityConfig {
+  warning_threshold_km: number;
+  critical_threshold_km: number;
+  check_interval_seconds: number;
+  prediction_horizon_hours: number;
+  enable_auto_incident_creation: boolean;
+}
+
 export interface SpaceWeatherEvent {
   id: string;
   event_type: string;
@@ -230,6 +296,36 @@ class ApiClient {
       method: 'POST',
       body: JSON.stringify({ status, comment }),
     });
+  }
+
+  // Cyber Incidents
+  async getCyberIncidents(params?: {
+    page?: number;
+    page_size?: number;
+    severity?: string;
+    status?: string;
+  }): Promise<PaginatedResponse<Incident>> {
+    const searchParams = new URLSearchParams();
+    if (params?.page) searchParams.set('page', params.page.toString());
+    if (params?.page_size) searchParams.set('page_size', params.page_size.toString());
+    if (params?.severity) searchParams.set('severity', params.severity);
+    if (params?.status) searchParams.set('status', params.status);
+    return this._fetch(`/api/v1/incidents/cyber?${searchParams}`);
+  }
+
+  // Maneuver Incidents
+  async getManeuverIncidents(params?: {
+    page?: number;
+    page_size?: number;
+    severity?: string;
+    status?: string;
+  }): Promise<PaginatedResponse<Incident>> {
+    const searchParams = new URLSearchParams();
+    if (params?.page) searchParams.set('page', params.page.toString());
+    if (params?.page_size) searchParams.set('page_size', params.page_size.toString());
+    if (params?.severity) searchParams.set('severity', params.severity);
+    if (params?.status) searchParams.set('status', params.status);
+    return this._fetch(`/api/v1/incidents/maneuvers?${searchParams}`);
   }
 
   // Conjunctions
@@ -659,6 +755,62 @@ class ApiClient {
 
   async getGroundVehicles(): Promise<{ items: PositionReport[]; total: number }> {
     return this._fetch('/api/v1/operations/positions/ground-vehicles');
+  }
+
+  // Proximity Detection
+  async runProximityDetection(satelliteIds?: string[]): Promise<{
+    run_id: string;
+    timestamp: string;
+    satellites_checked: number;
+    pairs_checked: number;
+    events_detected: number;
+    events_created: number;
+    events_updated: number;
+    duration_ms: number;
+  }> {
+    return this._fetch('/api/v1/proximity/detect', {
+      method: 'POST',
+      body: JSON.stringify({ satellite_ids: satelliteIds }),
+    });
+  }
+
+  async getProximityEvents(params?: {
+    alert_level?: string;
+    status?: string;
+    is_hostile?: boolean;
+    satellite_id?: string;
+    scenario_id?: string;
+    page?: number;
+    page_size?: number;
+  }): Promise<PaginatedResponse<ProximityEvent>> {
+    const searchParams = new URLSearchParams();
+    if (params?.alert_level) searchParams.set('alert_level', params.alert_level);
+    if (params?.status) searchParams.set('status', params.status);
+    if (params?.is_hostile !== undefined) searchParams.set('is_hostile', params.is_hostile.toString());
+    if (params?.satellite_id) searchParams.set('satellite_id', params.satellite_id);
+    if (params?.scenario_id) searchParams.set('scenario_id', params.scenario_id);
+    if (params?.page) searchParams.set('page', params.page.toString());
+    if (params?.page_size) searchParams.set('page_size', params.page_size.toString());
+    return this._fetch(`/api/v1/proximity/events?${searchParams}`);
+  }
+
+  async getProximityEvent(id: string): Promise<ProximityEvent> {
+    return this._fetch(`/api/v1/proximity/events/${id}`);
+  }
+
+  async getActiveProximityAlerts(): Promise<ProximityAlert[]> {
+    return this._fetch('/api/v1/proximity/alerts/active');
+  }
+
+  async getProximityConfig(): Promise<ProximityConfig> {
+    return this._fetch('/api/v1/proximity/config');
+  }
+
+  async updateProximityConfig(config: ProximityConfig): Promise<ProximityConfig> {
+    return this._fetch('/api/v1/proximity/config', {
+      method: 'POST',
+      body: JSON.stringify(config),
+    });
   }
 }
 

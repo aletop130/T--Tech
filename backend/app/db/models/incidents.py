@@ -3,9 +3,11 @@ from datetime import datetime
 from typing import Optional
 
 from sqlalchemy import (
+    Boolean,
     Column,
     DateTime,
     Enum as SQLEnum,
+    Float,
     ForeignKey,
     Integer,
     String,
@@ -44,7 +46,24 @@ class IncidentType(str, enum.Enum):
     ANOMALY = "anomaly"
     CYBER = "cyber"
     PHYSICAL = "physical"
+    PROXIMITY = "proximity"
+    HOSTILE_APPROACH = "hostile_approach"
     OTHER = "other"
+
+
+class ProximityAlertLevel(str, enum.Enum):
+    """Proximity alert levels."""
+    INFO = "info"
+    WARNING = "warning"
+    CRITICAL = "critical"
+
+
+class ProximityEventStatus(str, enum.Enum):
+    """Proximity event status."""
+    ACTIVE = "active"
+    MONITORING = "monitoring"
+    RESOLVED = "resolved"
+    ESCALATED = "escalated"
 
 
 class Incident(Base, AuditMixin):
@@ -126,4 +145,82 @@ class IncidentComment(Base, AuditMixin):
     action_data = Column(JSON, nullable=True)
     
     incident = relationship("Incident", back_populates="comments")
+
+
+class ProximityEvent(Base, AuditMixin):
+    """Proximity event / hostile approach between satellites."""
+    __tablename__ = "proximity_events"
+    
+    id = Column(String(50), primary_key=True, default=generate_uuid)
+    
+    # Satellites involved
+    primary_satellite_id = Column(
+        String(50), ForeignKey("satellites.id"), nullable=False, index=True
+    )
+    secondary_satellite_id = Column(
+        String(50), ForeignKey("satellites.id"), nullable=False, index=True
+    )
+    
+    # Event timing
+    start_time = Column(DateTime, nullable=False, index=True)
+    end_time = Column(DateTime, nullable=True)
+    last_updated = Column(DateTime, default=datetime.utcnow)
+    
+    # Distance metrics
+    min_distance_km = Column(Float, nullable=False)
+    current_distance_km = Column(Float, nullable=True)
+    approach_velocity_kms = Column(Float, nullable=True)
+    
+    # Time of closest approach
+    tca = Column(DateTime, nullable=True)
+    predicted_tca = Column(DateTime, nullable=True)
+    
+    # Alert level
+    alert_level = Column(
+        String(20), 
+        default='info'
+    )
+    
+    # Status
+    status = Column(
+        String(20),
+        default='active'
+    )
+    
+    # Is this a hostile approach (enemy satellite approaching allied)
+    is_hostile = Column(Boolean, default=False)
+    
+    # Threat assessment
+    threat_score = Column(Float, nullable=True)  # 0-100
+    threat_assessment = Column(Text, nullable=True)
+    
+    # Screening configuration used
+    warning_threshold_km = Column(Float, default=10.0)
+    critical_threshold_km = Column(Float, default=1.0)
+    
+    # Position data at detection (JSON with ECI coordinates)
+    primary_position = Column(JSON, nullable=True)
+    secondary_position = Column(JSON, nullable=True)
+    relative_velocity = Column(JSON, nullable=True)  # [vx, vy, vz] km/s
+    
+    # Related incident (auto-created for critical events)
+    incident_id = Column(
+        String(50), ForeignKey("incidents.id"), nullable=True, index=True
+    )
+    
+    # Scenario context (for replay)
+    scenario_id = Column(String(50), nullable=True, index=True)
+    is_simulated = Column(Boolean, default=False)
+    
+    # Relationships
+    primary_satellite = relationship(
+        "Satellite",
+        foreign_keys=[primary_satellite_id],
+        back_populates="proximity_events_primary"
+    )
+    secondary_satellite = relationship(
+        "Satellite",
+        foreign_keys=[secondary_satellite_id],
+        back_populates="proximity_events_secondary"
+    )
 

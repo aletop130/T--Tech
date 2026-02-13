@@ -44,10 +44,10 @@ const ViewerConfig = memo(function ViewerConfig({ onViewerReady, showTerrain }: 
             viewer.scene.globe.terrainProvider = terrainProvider;
             terrainLoadedRef.current = true;
             console.log('Cesium World Terrain loaded');
-          }).catch((err: any) => {
-            console.warn('Failed to load terrain:', err);
-          });
+          }
         }
+      } catch (err: any) {
+        console.warn('Failed to load terrain:', err);
       }
 
       if (viewer.scene.skyAtmosphere) {

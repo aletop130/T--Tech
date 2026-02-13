@@ -273,9 +273,9 @@ def upgrade() -> None:
         sa.Column('tenant_id', sa.String(50), nullable=False),
         sa.Column('title', sa.String(200), nullable=False),
         sa.Column('description', sa.Text()),
-        sa.Column('incident_type', sa.String(50), nullable=False),
-        sa.Column('severity', sa.String(20), default='medium'),
-        sa.Column('status', sa.String(20), default='open'),
+        sa.Column('incident_type', postgresql.ENUM('CONJUNCTION', 'SPACE_WEATHER', 'RF_INTERFERENCE', 'ANOMALY', 'CYBER', 'PHYSICAL', 'PROXIMITY', 'HOSTILE_APPROACH', 'OTHER', name='incidenttype'), nullable=False),
+        sa.Column('severity', postgresql.ENUM('INFO', 'LOW', 'MEDIUM', 'HIGH', 'CRITICAL', name='incidentseverity'), default='MEDIUM'),
+        sa.Column('status', postgresql.ENUM('OPEN', 'INVESTIGATING', 'MITIGATING', 'RESOLVED', 'CLOSED', name='incidentstatus'), default='OPEN'),
         sa.Column('detected_at', sa.DateTime()),
         sa.Column('acknowledged_at', sa.DateTime()),
         sa.Column('resolved_at', sa.DateTime()),
@@ -407,6 +407,11 @@ def downgrade() -> None:
     op.drop_table('conjunction_events')
     op.drop_table('space_weather_events')
     op.drop_table('rf_links')
+    
+    # Drop enum types
+    postgresql.ENUM(name='incidentstatus').drop(op.get_bind())
+    postgresql.ENUM(name='incidentseverity').drop(op.get_bind())
+    postgresql.ENUM(name='incidenttype').drop(op.get_bind())
     op.drop_table('sensors')
     op.drop_table('ground_stations')
     op.drop_table('orbits')

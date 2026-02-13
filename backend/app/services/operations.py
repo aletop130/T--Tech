@@ -424,8 +424,8 @@ class CollisionDetectionService:
     def __init__(self, db: AsyncSession, audit: AuditService):
         self.db = db
         self.audit = audit
-        self.proximity_threshold_km = 1.0
-        self.collision_threshold_km = 0.1
+        self.proximity_threshold_km = 0.05
+        self.collision_threshold_km = 0.005
         self.prediction_window_minutes = 60
 
     async def detect_collisions(
@@ -558,11 +558,11 @@ class CollisionDetectionService:
 
     def _assess_risk(self, distance_km: float) -> CollisionRiskLevel:
         """Assess collision risk level based on distance."""
-        if distance_km < 0.01:
+        if distance_km < 0.001:
             return CollisionRiskLevel.CRITICAL
-        elif distance_km < 0.1:
+        elif distance_km < 0.01:
             return CollisionRiskLevel.HIGH
-        elif distance_km < 1.0:
+        elif distance_km < 0.1:
             return CollisionRiskLevel.MEDIUM
         else:
             return CollisionRiskLevel.LOW

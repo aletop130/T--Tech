@@ -18,6 +18,11 @@ from sqlalchemy import (
 from sqlalchemy.orm import relationship
 import enum
 
+# Forward reference for ProximityEvent
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from app.db.models.incidents import ProximityEvent
+
 from app.db.base import Base, AuditMixin, generate_uuid
 
 
@@ -120,6 +125,16 @@ class Satellite(Base, AuditMixin):
         "ConjunctionEvent",
         foreign_keys="ConjunctionEvent.secondary_object_id",
         back_populates="secondary_object",
+    )
+    proximity_events_primary = relationship(
+        "ProximityEvent",
+        foreign_keys="ProximityEvent.primary_satellite_id",
+        back_populates="primary_satellite",
+    )
+    proximity_events_secondary = relationship(
+        "ProximityEvent",
+        foreign_keys="ProximityEvent.secondary_satellite_id",
+        back_populates="secondary_satellite",
     )
     
     __table_args__ = (

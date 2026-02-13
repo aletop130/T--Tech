@@ -9,6 +9,8 @@ from app.db.models.incidents import (
     IncidentSeverity,
     IncidentStatus,
     IncidentType,
+    ProximityAlertLevel,
+    ProximityEventStatus,
 )
 
 
@@ -132,4 +134,135 @@ class IncidentStats(BaseSchema):
     open_count: int = 0
     critical_count: int = 0
     mttr_hours: Optional[float] = None  # Mean time to resolve
+
+
+# Proximity Event Schemas
+
+class Position3D(BaseSchema):
+    """3D position in ECI coordinates."""
+    x: float
+    y: float
+    z: float
+
+
+class ProximityEventCreate(BaseSchema):
+    """Schema for creating a proximity event."""
+    primary_satellite_id: str
+    secondary_satellite_id: str
+    start_time: datetime
+    min_distance_km: float
+    current_distance_km: Optional[float] = None
+    approach_velocity_kms: Optional[float] = None
+    predicted_tca: Optional[datetime] = None
+    alert_level: ProximityAlertLevel = ProximityAlertLevel.INFO
+    is_hostile: bool = False
+    threat_score: Optional[float] = Field(None, ge=0, le=100)
+    warning_threshold_km: float = 0.05
+    critical_threshold_km: float = 0.005
+    primary_position: Optional[Position3D] = None
+    secondary_position: Optional[Position3D] = None
+    relative_velocity: Optional[Position3D] = None
+    scenario_id: Optional[str] = None
+    is_simulated: bool = False
+
+
+class ProximityEventUpdate(BaseSchema):
+    """Schema for updating a proximity event."""
+    end_time: Optional[datetime] = None
+    current_distance_km: Optional[float] = None
+    min_distance_km: Optional[float] = None
+    tca: Optional[datetime] = None
+    alert_level: Optional[ProximityAlertLevel] = None
+    status: Optional[ProximityEventStatus] = None
+    threat_score: Optional[float] = Field(None, ge=0, le=100)
+    threat_assessment: Optional[str] = None
+
+
+class SatelliteInfo(BaseSchema):
+    """Basic satellite info for proximity events."""
+    id: str
+    name: str
+    norad_id: int
+    country: Optional[str] = None
+    operator: Optional[str] = None
+    is_active: bool = True
+
+
+class ProximityEventResponse(BaseSchema):
+    """Proximity event response schema."""
+    id: str
+    primary_satellite_id: str
+    secondary_satellite_id: str
+    primary_satellite: Optional[SatelliteInfo] = None
+    secondary_satellite: Optional[SatelliteInfo] = None
+    start_time: datetime
+    end_time: Optional[datetime] = None
+    last_updated: datetime
+    min_distance_km: float
+    current_distance_km: Optional[float] = None
+    approach_velocity_kms: Optional[float] = None
+    tca: Optional[datetime] = None
+    predicted_tca: Optional[datetime] = None
+    alert_level: ProximityAlertLevel
+    status: ProximityEventStatus
+    is_hostile: bool
+    threat_score: Optional[float] = None
+    threat_assessment: Optional[str] = None
+    warning_threshold_km: float
+    critical_threshold_km: float
+    primary_position: Optional[Position3D] = None
+    secondary_position: Optional[Position3D] = None
+    relative_velocity: Optional[Position3D] = None
+    incident_id: Optional[str] = None
+    scenario_id: Optional[str] = None
+    is_simulated: bool
+    created_at: datetime
+    updated_at: datetime
+
+
+class ProximityEventListParams(BaseSchema):
+    """Parameters for listing proximity events."""
+    alert_level: Optional[ProximityAlertLevel] = None
+    status: Optional[ProximityEventStatus] = None
+    is_hostile: Optional[bool] = None
+    satellite_id: Optional[str] = None
+    scenario_id: Optional[str] = None
+    start_time_from: Optional[datetime] = None
+    start_time_to: Optional[datetime] = None
+    page: int = Field(1, ge=1)
+    page_size: int = Field(50, ge=1, le=100)
+
+
+class ProximityDetectionConfig(BaseSchema):
+    """Configuration for proximity detection."""
+    warning_threshold_km: float = 10.0
+    critical_threshold_km: float = 1.0
+    check_interval_seconds: int = 60
+    prediction_horizon_hours: int = 24
+    enable_auto_incident_creation: bool = True
+
+
+class ProximityDetectionResult(BaseSchema):
+    """Result of a proximity detection run."""
+    run_id: str
+    timestamp: datetime
+    satellites_checked: int
+    pairs_checked: int
+    events_detected: int
+    events_created: int
+    events_updated: int
+    duration_ms: float
+
+
+class ProximityAlert(BaseSchema):
+    """Active proximity alert for real-time display."""
+    event_id: str
+    primary_satellite_name: str
+    secondary_satellite_name: str
+    distance_km: float
+    alert_level: ProximityAlertLevel
+    is_hostile: bool
+    threat_score: Optional[float] = None
+    timestamp: datetime
+    predicted_tca: Optional[datetime] = None
 

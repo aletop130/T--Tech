@@ -108,7 +108,7 @@ class ConjunctionAnalyzer:
         satellite_ids: Optional[list[str]] = None,
         start_time: Optional[datetime] = None,
         end_time: Optional[datetime] = None,
-        screening_volume_km: float = 10.0,
+        screening_volume_km: float = 0.5,
         user_id: Optional[str] = None,
     ) -> dict:
         """Run conjunction analysis for given satellites.
@@ -261,11 +261,11 @@ class ConjunctionAnalyzer:
     
     def _compute_risk_level(self, distance_km: float) -> ConjunctionRisk:
         """Compute risk level from miss distance."""
-        if distance_km < 0.1:
+        if distance_km < 0.001:
             return ConjunctionRisk.CRITICAL
-        elif distance_km < 1.0:
+        elif distance_km < 0.01:
             return ConjunctionRisk.HIGH
-        elif distance_km < 5.0:
+        elif distance_km < 0.1:
             return ConjunctionRisk.MEDIUM
         else:
             return ConjunctionRisk.LOW
