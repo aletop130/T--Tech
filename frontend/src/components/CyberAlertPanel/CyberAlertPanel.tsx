@@ -11,6 +11,7 @@ import {
   NonIdealState,
   Callout,
   Icon,
+  IconName,
 } from '@blueprintjs/core';
 import { api, Incident } from '@/lib/api';
 import { formatDistanceToNow } from '@/lib/utils';
@@ -62,7 +63,7 @@ export const CyberAlertPanel: React.FC<CyberAlertPanelProps> = ({
     }
   };
 
-  const getSeverityIcon = (severity: string): string => {
+  const getSeverityIcon = (severity: string): IconName => {
     switch (severity) {
       case 'critical':
         return 'error';
@@ -172,11 +173,10 @@ export const CyberAlertPanel: React.FC<CyberAlertPanelProps> = ({
                   <Tag 
                     intent={getSeverityIntent(alert.severity)} 
                     minimal 
-                    small
                   >
                     {alert.severity.toUpperCase()}
                   </Tag>
-                  <Tag minimal small>
+                  <Tag minimal>
                     {alert.status.toUpperCase()}
                   </Tag>
                 </div>

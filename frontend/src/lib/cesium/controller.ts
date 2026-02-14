@@ -33,6 +33,7 @@ class CesiumControllerClass {
   private viewer: Cesium.Viewer | null = null;
   private actionHandlers: Map<string, ActionHandler> = new Map();
   private eventListeners: Map<string, Set<(action: CesiumAction) => void>> = new Map();
+  private isFlying: boolean = false;
 
   initialize(viewer: Cesium.Viewer): void {
     this.viewer = viewer;
@@ -291,7 +292,7 @@ class CesiumControllerClass {
   }
 
   private handleFlyTo(payload: Record<string, unknown>): void {
-    if (!this.viewer) return;
+    if (!this.viewer || this.isFlying) return;
 
     const entityId = payload.entityId as string | undefined;
     const longitude = payload.longitude as number | undefined;
@@ -300,7 +301,13 @@ class CesiumControllerClass {
     const heading = payload.heading as number | undefined;
     const pitch = payload.pitch as number | undefined;
     const roll = payload.roll as number | undefined;
-    const duration = payload.duration as number || 2.0;
+    const duration = (payload.duration as number) || 1.5;
+
+    this.isFlying = true;
+
+    const completeFly = () => {
+      setTimeout(() => { this.isFlying = false; }, (duration || 1.5) * 1000 + 200);
+    };
 
     if (entityId) {
       const entity = this.viewer.entities.getById(entityId);
@@ -312,7 +319,7 @@ class CesiumControllerClass {
             Cesium.Math.toRadians(pitch || -45),
             altitude || 10000
           ),
-        });
+        }).then(completeFly);
         // Also select the entity to show info card
         this.viewer.selectedEntity = entity;
       }
@@ -329,22 +336,24 @@ class CesiumControllerClass {
           roll: Cesium.Math.toRadians(roll || 0),
         },
         duration,
-      });
+      }).then(completeFly);
     }
   }
 
   private handleFlyToCountry(payload: Record<string, unknown>): void {
-    if (!this.viewer) return;
+    if (!this.viewer || this.isFlying) return;
 
     const country = payload.country as string;
     const altitude = (payload.altitude as number) || 5000000; // Default 5000km for country view
-    const duration = (payload.duration as number) || 2.0;
+    const duration = (payload.duration as number) || 1.5;
 
     const coords = this.countryCoordinates[country];
     if (!coords) {
       console.warn(`Country coordinates not found for: ${country}`);
       return;
     }
+
+    this.isFlying = true;
 
     this.viewer.camera.flyTo({
       destination: Cesium.Cartesian3.fromDegrees(coords.lon, coords.lat, altitude),
@@ -354,20 +363,24 @@ class CesiumControllerClass {
         roll: 0,
       },
       duration,
+    }).then(() => {
+      setTimeout(() => { this.isFlying = false; }, duration * 1000 + 200);
     });
   }
 
   private async handleSearchLocation(payload: Record<string, unknown>): Promise<void> {
-    if (!this.viewer) return;
+    if (!this.viewer || this.isFlying) return;
 
     const query = payload.query as string;
     const altitude = (payload.altitude as number) || 50000;
-    const duration = (payload.duration as number) || 2.0;
+    const duration = (payload.duration as number) || 1.5;
 
     if (!query) {
       console.warn('Search query is empty');
       return;
     }
+
+    this.isFlying = true;
 
     try {
       // Use Nominatim (OpenStreetMap) for geocoding - free, no API key required
@@ -383,6 +396,7 @@ class CesiumControllerClass {
 
       if (!response.ok) {
         console.error('Geocoding failed:', response.statusText);
+        this.isFlying = false;
         return;
       }
 
@@ -390,6 +404,7 @@ class CesiumControllerClass {
       
       if (!data || data.length === 0) {
         console.warn(`Location not found: ${query}`);
+        this.isFlying = false;
         return;
       }
 
@@ -406,10 +421,13 @@ class CesiumControllerClass {
           roll: 0,
         },
         duration,
+      }).then(() => {
+        setTimeout(() => { this.isFlying = false; }, duration * 1000 + 200);
       });
 
     } catch (error) {
       console.error('Error searching location:', error);
+      this.isFlying = false;
     }
   }
 

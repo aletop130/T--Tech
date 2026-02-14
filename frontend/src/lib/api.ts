@@ -70,6 +70,7 @@ export interface GroundStation {
   is_operational: boolean;
   country?: string;
   organization?: string;
+  elevation_m?: number;
 }
 
 export interface Incident {
@@ -93,6 +94,9 @@ export interface ConjunctionEvent {
   risk_level: string;
   risk_score?: number;
   is_actionable: boolean;
+  object1_name?: string;
+  object2_name?: string;
+  collision_probability?: number;
 }
 
 export interface Position3D {
@@ -1048,6 +1052,7 @@ export interface PositionReport {
   entity_id: string;
   entity_type: EntityType;
   report_time: string;
+  timestamp?: string;
   latitude: number;
   longitude: number;
   altitude_m?: number;
@@ -1063,6 +1068,7 @@ export interface PositionReport {
   sensor_id?: string;
   is_simulated: boolean;
   created_at: string;
+  source?: string;
 }
 
 export interface TrajectoryPoint {

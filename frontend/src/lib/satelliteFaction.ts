@@ -20,7 +20,10 @@ export function isAlliedSatellite(sat: Satellite): boolean {
     name.includes('commlink') ||
     name.includes('weathereye') ||
     name.includes('navbeacon') ||
-    name.includes('eyeinsky')
+    name.includes('eyeinsky') ||
+    name.includes('reconsat') ||
+    name.includes('comsat') ||
+    sat.faction === 'allied'
   );
 }
 

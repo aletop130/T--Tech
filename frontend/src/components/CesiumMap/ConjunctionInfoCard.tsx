@@ -53,7 +53,7 @@ export function ConjunctionInfoCard({ conjunction, onClose }: ConjunctionInfoCar
           <div className="bg-sda-bg-secondary p-2 rounded">
             <span className="text-sda-text-secondary block">Relative Velocity</span>
             <span className="text-sda-text-primary font-mono">
-              {conjunction.relative_velocity_kps?.toFixed(4) || 'N/A'} km/s
+              {'N/A'} km/s
             </span>
           </div>
         </div>

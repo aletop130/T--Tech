@@ -21,6 +21,11 @@ import { PLANETS, type CelestialBody } from '@/lib/solarSystem/data';
 import { AgentChat } from '@/components/Chat/AgentChat';
 import { UnifiedAlertsPanel } from '@/components/ProximityAlertPanel/UnifiedAlertsPanel';
 import { cesiumController } from '@/lib/cesium/controller';
+import { SimulatedSatelliteLayer } from '@/components/CesiumMap/SimulatedSatelliteLayer';
+import { MilitarySymbolLayer } from '@/components/CesiumMap/MilitarySymbolLayer';
+import { MissionNarrative } from '@/components/Simulation/MissionNarrative';
+import { MissionHUD } from '@/components/Simulation/MissionHUD';
+import { useSARSimulation } from '@/lib/simulation/useSARSimulation';
 
 // Dynamically import Cesium to avoid SSR issues
 const DynamicCesiumViewer = dynamic(
@@ -134,6 +139,27 @@ export default function MapPage() {
   const [showSolarLabels, setShowSolarLabels] = useState(true);
   const [showPlanetInfo, setShowPlanetInfo] = useState(false);
   const [solarSimulationTime, setSolarSimulationTime] = useState(Date.now());
+  const [isSimulationMode, setIsSimulationMode] = useState(false);
+  
+  // SAR Simulation hook
+  const {
+    time: simTime,
+    isPlaying: simIsPlaying,
+    isComplete: simIsComplete,
+    isPaused: simIsPaused,
+    stepMode: simStepMode,
+    currentStep: simCurrentStep,
+    keyEvents: simKeyEvents,
+    totalDuration: simTotalDuration,
+    satellites: simSatellites,
+    groundUnits: simGroundUnits,
+    togglePlayPause: simTogglePlayPause,
+    resetSimulation: simReset,
+    toggleStepMode: simToggleStepMode,
+    nextStep: simNextStep,
+    prevStep: simPrevStep,
+  } = useSARSimulation(viewer, isSimulationMode);
+  
   const satellitePositionsRef = useRef<Map<string, Cesium.Cartesian3>>(new Map());
   const animationFrameRef = useRef<number | null>(null);
   const lastUpdateRef = useRef<number>(0);
@@ -584,32 +610,36 @@ export default function MapPage() {
               <>
                 {viewMode === 'earth' ? (
                   <>
-                    <SatelliteLayer
-                      viewer={viewer}
-                      satellites={satellites}
-                      orbits={orbits}
-                      showOrbits={showOrbits}
-                    />
-                    <GroundStationLayer
-                      viewer={viewer}
-                      stations={groundStations}
-                      showCoverage={showCoverage}
-                    />
-                    {showGroundVehicles && vehicleDisplayMode === 'points' && (
+                    {!isSimulationMode && (
+                      <SatelliteLayer
+                        viewer={viewer}
+                        satellites={satellites}
+                        orbits={orbits}
+                        showOrbits={showOrbits}
+                      />
+                    )}
+                    {!isSimulationMode && (
+                      <GroundStationLayer
+                        viewer={viewer}
+                        stations={groundStations}
+                        showCoverage={showCoverage}
+                      />
+                    )}
+                    {!isSimulationMode && showGroundVehicles && vehicleDisplayMode === 'points' && (
                       <GroundVehicleLayer
                         viewer={viewer}
                         vehicles={groundVehicles}
                         show={showGroundVehicles}
                       />
                     )}
-                    {showGroundVehicles && vehicleDisplayMode === '3d' && (
+                    {!isSimulationMode && showGroundVehicles && vehicleDisplayMode === '3d' && (
                       <MilitaryVehicleLayer
                         viewer={viewer}
                         vehicles={groundVehicles}
                         show={showGroundVehicles}
                       />
                     )}
-                    {showConjunctions && (
+                    {!isSimulationMode && showConjunctions && (
                       <ConjunctionLayer
                         viewer={viewer}
                         conjunctions={conjunctions}
@@ -641,6 +671,38 @@ export default function MapPage() {
                         onClose={() => setSelectedConjunction(null)}
                       />
                     )}
+                    
+                    {/* SAR Simulation Layers */}
+                    {isSimulationMode && (
+                      <>
+                        <SimulatedSatelliteLayer
+                          viewer={viewer}
+                          satellites={simSatellites.map(sat => ({
+                            id: sat.id,
+                            name: sat.name,
+                            type: sat.type,
+                            position: sat.initialPosition,
+                            status: sat.status as 'online' | 'degraded' | 'maneuvering' | 'offline',
+                            fuelPercent: sat.fuelPercent,
+                          }))}
+                          showManeuvers={true}
+                          showDataLinks={true}
+                        />
+                        <MilitarySymbolLayer
+                          viewer={viewer}
+                          units={simGroundUnits.map(unit => ({
+                            id: unit.id,
+                            name: unit.name,
+                            sidc: unit.sidc,
+                            position: unit.position,
+                            affiliation: unit.affiliation,
+                            status: unit.status,
+                            heading: unit.movements?.find(m => m.time <= simTime)?.heading,
+                            speed: unit.movements?.find(m => m.time <= simTime)?.speed,
+                          }))}
+                        />
+                      </>
+                    )}
                   </>
                 ) : (
                   <>
@@ -669,6 +731,27 @@ export default function MapPage() {
             )}
           </div>
         )}
+      </div>
+
+      {/* Simulation Mode Button - Top Left */}
+      <div className="absolute top-4 left-4 z-20">
+        <Button
+          intent={isSimulationMode ? Intent.DANGER : Intent.SUCCESS}
+          onClick={() => {
+            if (isSimulationMode) {
+              // Exit simulation
+              simReset();
+              setIsSimulationMode(false);
+            } else {
+              // Enter simulation
+              setIsSimulationMode(true);
+            }
+          }}
+          icon={isSimulationMode ? 'cross' : 'play'}
+          large
+        >
+          {isSimulationMode ? 'Exit Simulation' : 'Start SAR Simulation'}
+        </Button>
       </div>
 
       {/* Unified Control Bar */}
@@ -734,18 +817,19 @@ export default function MapPage() {
         </div>
 
         {/* Row 2: Toggles */}
-        <div className="flex items-center gap-4 text-sm">
-          {viewMode === 'earth' ? (
-            <>
-              <div className="flex items-center gap-1">
-                <span className="w-2 h-2 rounded-full bg-blue-500"></span>
-                <span className="text-sda-text-secondary">Allied</span>
-              </div>
-              <div className="flex items-center gap-1">
-                <span className="w-2 h-2 rounded-full bg-red-500"></span>
-                <span className="text-sda-text-secondary">Enemy</span>
-              </div>
-              <div className="border-l border-sda-border-default pl-4 flex items-center gap-3">
+        {!isSimulationMode && (
+          <div className="flex items-center gap-4 text-sm">
+            {viewMode === 'earth' ? (
+              <>
+                <div className="flex items-center gap-1">
+                  <span className="w-2 h-2 rounded-full bg-blue-500"></span>
+                  <span className="text-sda-text-secondary">Allied</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <span className="w-2 h-2 rounded-full bg-red-500"></span>
+                  <span className="text-sda-text-secondary">Enemy</span>
+                </div>
+                <div className="border-l border-sda-border-default pl-4 flex items-center gap-3">
                 <Checkbox
                   checked={showOrbits}
                   onChange={(e) => setShowOrbits(e.currentTarget.checked)}
@@ -838,14 +922,16 @@ export default function MapPage() {
             </>
           )}
         </div>
+        )}
       </div>
 
       {/* Panels Container */}
       <div className="absolute inset-0 z-10 pointer-events-none">
         {/* Left Panel - Elements */}
-        <div className="absolute left-4 top-32 bottom-4 w-72 pointer-events-auto bg-sda-bg-secondary/60 backdrop-blur-sm rounded-lg border border-sda-border-default px-4 py-2 shadow-lg flex flex-col overflow-hidden">
-          <div className="flex flex-col h-full">
-            {viewMode === 'earth' ? (
+        {!isSimulationMode && (
+          <div className="absolute left-4 top-32 bottom-4 w-72 pointer-events-auto bg-sda-bg-secondary/60 backdrop-blur-sm rounded-lg border border-sda-border-default px-4 py-2 shadow-lg flex flex-col overflow-hidden">
+            <div className="flex flex-col h-full">
+              {viewMode === 'earth' ? (
               <>
                 <div className="p-3 border-b border-sda-border-default">
                   <span className="text-sm font-semibold text-sda-text-primary flex items-center gap-2">
@@ -1128,6 +1214,7 @@ export default function MapPage() {
             )}
           </div>
         </div>
+        )}
 
         {/* Right Panel - Alerts & AI Chat */}
         <div className="absolute right-4 top-24 bottom-4 w-96 pointer-events-auto flex flex-col gap-4">
@@ -1169,6 +1256,46 @@ export default function MapPage() {
         }`}>
           {fetchMessage}
         </div>
+      )}
+      
+      {/* SAR Simulation UI */}
+      {isSimulationMode && (
+        <>
+          <MissionHUD
+            simulationTime={simTime}
+            totalDuration={simTotalDuration}
+            stepMode={simStepMode}
+            currentStep={simCurrentStep}
+            keyEvents={simKeyEvents}
+            satellites={simSatellites.map(s => ({
+              id: s.id,
+              name: s.name,
+              status: s.status,
+              fuelPercent: s.fuelPercent,
+            }))}
+            groundAssets={[
+              { id: 'phantom-6', name: 'Phantom-6 Team', status: simTime < 210 ? 'WAITING' : simTime < 240 ? 'EXTRACTING' : 'SECURED' },
+              { id: 'hms-defender', name: 'HMS Defender', status: 'OPERATIONAL' },
+              { id: 'seahawk', name: 'MH-60 Seahawk', status: simTime < 120 ? 'STANDBY' : simTime < 270 ? 'ACTIVE' : 'RTB' },
+            ]}
+            isPlaying={simIsPlaying}
+            isComplete={simIsComplete}
+            isPaused={simIsPaused}
+            onPlayPause={simTogglePlayPause}
+            onReset={() => {
+              simReset();
+              setIsSimulationMode(false);
+            }}
+            onToggleStepMode={simToggleStepMode}
+            onNextStep={simNextStep}
+            onPrevStep={simPrevStep}
+          />
+          <MissionNarrative
+            simulationTime={simTime}
+            isPlaying={simIsPlaying}
+            stepMode={simStepMode}
+          />
+        </>
       )}
     </div>
   );

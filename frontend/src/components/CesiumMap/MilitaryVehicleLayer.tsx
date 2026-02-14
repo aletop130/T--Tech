@@ -108,7 +108,6 @@ export function MilitaryVehicleLayer({
           topRadius: 0.3,
           bottomRadius: 0.4,
           material: Cesium.Color.DARKGRAY,
-          rotation: Cesium.Math.toRadians(90 - (vehicle.heading_deg || 0)),
         },
       });
       currentEntities.add(`vehicle-barrel-${vehicle.entity_id}`);
