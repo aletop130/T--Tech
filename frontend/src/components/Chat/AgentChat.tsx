@@ -115,7 +115,11 @@ export function AgentChat({ onSendMessage, initialMessages = [], useStreaming = 
               type: action.type as CesiumAction['type'],
               payload: action.payload,
             };
-            cesiumController.dispatch(cesiumAction);
+            try {
+              cesiumController.dispatch(cesiumAction);
+            } catch (error) {
+              console.warn('Cesium action failed (viewer not available):', error);
+            }
             setMessages((msgs) =>
               msgs.map((msg) =>
                 msg.id === assistantMessageId
@@ -171,7 +175,11 @@ export function AgentChat({ onSendMessage, initialMessages = [], useStreaming = 
         setMessages((prev) => [...prev, assistantMessage]);
         
         if (response.actions && response.actions.length > 0) {
-          cesiumController.dispatchAll(response.actions);
+          try {
+            cesiumController.dispatchAll(response.actions);
+          } catch (error) {
+            console.warn('Cesium actions failed (viewer not available):', error);
+          }
         }
         
         setIsLoading(false);

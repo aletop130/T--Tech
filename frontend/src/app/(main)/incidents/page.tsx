@@ -16,6 +16,7 @@ import {
 } from '@blueprintjs/core';
 import { api, Incident } from '@/lib/api';
 import { format } from 'date-fns';
+import { AgentChat } from '@/components/Chat/AgentChat';
 
 export default function IncidentsPage() {
   const [incidents, setIncidents] = useState<Incident[]>([]);
@@ -23,6 +24,8 @@ export default function IncidentsPage() {
   const [selectedIncident, setSelectedIncident] = useState<Incident | null>(null);
   const [statusFilter, setStatusFilter] = useState<string>('');
   const [severityFilter, setSeverityFilter] = useState<string>('');
+  const [aiChatOpen, setAiChatOpen] = useState(false);
+  const [aiChatIncident, setAiChatIncident] = useState<Incident | null>(null);
 
   const loadIncidents = useCallback(async () => {
     setLoading(true);
@@ -172,6 +175,34 @@ export default function IncidentsPage() {
         )}
       </Card>
 
+      {/* AI Chat Dialog */}
+      <Dialog
+        isOpen={aiChatOpen}
+        onClose={() => setAiChatOpen(false)}
+        title={`AI Assistant - ${aiChatIncident?.title || 'Incidents'}`}
+        className="bp5-dark"
+        style={{ width: 700, height: 650 }}
+      >
+        <div className={Classes.DIALOG_BODY} style={{ height: '100%', padding: 0 }}>
+          <div style={{ height: 550 }}>
+            <AgentChat
+              initialMessages={
+                aiChatIncident
+                  ? [
+                      {
+                        id: 'welcome',
+                        role: 'assistant',
+                        content: `I'm ready to help you with this **${aiChatIncident.severity}** incident: "${aiChatIncident.title}".\n\n**Status:** ${aiChatIncident.status} | **Type:** ${aiChatIncident.incident_type}\n\n${aiChatIncident.description || 'No description available.'}\n\nWhat would you like to know about this incident?`,
+                        timestamp: new Date().toISOString(),
+                      },
+                    ]
+                  : []
+              }
+            />
+          </div>
+        </div>
+      </Dialog>
+
       {/* Incident Detail Dialog */}
       <Dialog
         isOpen={!!selectedIncident}
@@ -241,7 +272,14 @@ export default function IncidentsPage() {
                   <Button icon="chat" outlined>
                     Comment
                   </Button>
-                  <Button icon="lightbulb" outlined>
+                  <Button
+                    icon="lightbulb"
+                    outlined
+                    onClick={() => {
+                      setAiChatIncident(selectedIncident);
+                      setAiChatOpen(true);
+                    }}
+                  >
                     Ask AI
                   </Button>
                 </div>

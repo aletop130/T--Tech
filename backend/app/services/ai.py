@@ -51,6 +51,7 @@ You can help with:
 - Conjunction event analysis and risk assessment
 - Space weather impact evaluation
 - Ground station operations
+- Incident analysis and management (you have access to active incidents)
 - General questions about space domain awareness
 
 When technical data IS requested and available, provide structured, actionable insights citing specific data."""
@@ -314,9 +315,10 @@ When technical data IS requested and available, provide structured, actionable i
         scene_state: Optional[dict[str, Any]] = None,
         tenant_id: Optional[str] = None,
         include_satellites: bool = True,
+        include_incidents: bool = True,
     ) -> AsyncGenerator[str, None]:
         """Stream chat with function calling support.
-        
+
         1. First call: Get tool calls (non-streaming)
         2. Emit tool calls as SSE action events
         3. Second call: Stream final response
@@ -324,13 +326,13 @@ When technical data IS requested and available, provide structured, actionable i
         if not self.client:
             yield f"data: {json.dumps({'type': 'error', 'error': 'AI service not configured'})}\n\n"
             return
-        
-        # Build system content with available satellites
+
+        # Build system content with available data
         system_content = self.SYSTEM_PROMPT
-        
+
         if scene_state:
             system_content += f"\n\nCurrent scene state:\n{json.dumps(scene_state, indent=2)}"
-        
+
         # Add satellite data to context if requested and tenant_id provided
         if include_satellites and tenant_id:
             try:
@@ -339,6 +341,15 @@ When technical data IS requested and available, provide structured, actionable i
                     system_content += f"\n\nAvailable satellites in system:\n{json.dumps(satellites_data, indent=2)}\n\nWhen user asks to view a satellite (e.g., 'show me ISS'), use cesium_fly_to with the entityId from the entityId field (format: 'satellite-<id>') matching the satellite name or NORAD ID."
             except Exception as e:
                 logger.warning(f"Failed to load satellites context: {e}")
+
+        # Add incident data to context if requested and tenant_id provided
+        if include_incidents and tenant_id:
+            try:
+                incidents_data = await self._get_incidents_context(tenant_id)
+                if incidents_data:
+                    system_content += f"\n\nRecent incidents (last 10):\n{json.dumps(incidents_data, indent=2)}\n\nYou have access to incident information and can help analyze incidents, suggest mitigation strategies, and correlate them with satellite and ground station data."
+            except Exception as e:
+                logger.warning(f"Failed to load incidents context: {e}")
         
         full_messages: list[dict[str, Any]] = [
             {"role": "system", "content": system_content}
@@ -439,7 +450,42 @@ When technical data IS requested and available, provide structured, actionable i
             logger.warning(f"Failed to get satellites for context: {e}")
         
         return satellites
-    
+
+    async def _get_incidents_context(self, tenant_id: str) -> list[dict]:
+        """Get recent incidents for context (limit to 10 latest)."""
+        incidents = []
+        try:
+            # Import here to avoid circular imports
+            from app.services.incidents import IncidentService
+            from app.services.audit import AuditService
+
+            audit_service = AuditService(self.db)
+            incident_service = IncidentService(self.db, audit_service)
+
+            # Get latest 10 incidents
+            incidents_list, _ = await incident_service.list_incidents(
+                tenant_id=tenant_id,
+                page_size=10,
+            )
+
+            for incident in incidents_list:
+                inc_data = {
+                    "id": incident.id,
+                    "title": incident.title,
+                    "severity": incident.severity.value if hasattr(incident.severity, 'value') else str(incident.severity),
+                    "status": incident.status.value if hasattr(incident.status, 'value') else str(incident.status),
+                    "type": incident.incident_type.value if hasattr(incident.incident_type, 'value') else str(incident.incident_type),
+                    "detected_at": incident.detected_at.isoformat() if incident.detected_at else None,
+                    "assigned_to": incident.assigned_to,
+                    "priority": incident.priority,
+                }
+                incidents.append(inc_data)
+
+        except Exception as e:
+            logger.warning(f"Failed to get incidents for context: {e}")
+
+        return incidents
+
     async def analyze_conjunction(
         self,
         request: ConjunctionAnalystRequest,

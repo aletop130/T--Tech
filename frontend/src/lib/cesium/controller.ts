@@ -180,10 +180,12 @@ class CesiumControllerClass {
     const layerId = payload.layerId as string;
     const data = payload.data as Cesium.CzmlDataSource | undefined;
 
-    if (data) {
+    if (data && this.viewer) {
       Cesium.CzmlDataSource.load(data).then(dataSource => {
-        this.viewer!.dataSources.add(dataSource);
-        (dataSource as any).layerId = layerId;
+        if (this.viewer) {
+          this.viewer.dataSources.add(dataSource);
+          (dataSource as any).layerId = layerId;
+        }
       }).catch(error => {
         console.error('Failed to load CZML:', error);
       });
@@ -419,8 +421,8 @@ class CesiumControllerClass {
     const showConjunctions = payload.showConjunctions as boolean | undefined;
     const showLabels = payload.showLabels as boolean | undefined;
 
-    if (showOrbits !== undefined) {
-      (this.viewer!.scene.globe as unknown as { showGroundOrbit?: boolean }).showGroundOrbit = showOrbits;
+    if (showOrbits !== undefined && this.viewer.scene && this.viewer.scene.globe) {
+      (this.viewer.scene.globe as unknown as { showGroundOrbit?: boolean }).showGroundOrbit = showOrbits;
     }
 
     if (showCoverage !== undefined) {
@@ -431,9 +433,9 @@ class CesiumControllerClass {
       this.toggleConjunctionLayers(showConjunctions);
     }
 
-    if (showLabels !== undefined) {
-      (this.viewer!.scene.globe as unknown as { showLabels?: boolean }).showLabels = showLabels;
-      this.viewer!.entities.values.forEach(entity => {
+    if (showLabels !== undefined && this.viewer.scene && this.viewer.scene.globe) {
+      (this.viewer.scene.globe as unknown as { showLabels?: boolean }).showLabels = showLabels;
+      this.viewer.entities.values.forEach(entity => {
         if (entity.label) {
           entity.label.show = new Cesium.ConstantProperty(showLabels);
         }
