@@ -1,7 +1,7 @@
 import * as Cesium from 'cesium';
 
 // Operation Guardian Angel - Fixed SAR Scenario
-// Duration: 5 minutes (300 seconds) at 10x speed = 30 seconds real-time
+// Duration: 4 hours (14400 seconds) at 120x speed = 2 minutes real-time
 
 export interface SimulationEntity {
   id: string;
@@ -53,17 +53,20 @@ export interface SimulationEvent {
 }
 
 // Scenario configuration
+// 4 hours of simulated mission time compressed into 2 minutes of real time
+// Scale factor: 14400 seconds sim / 120 seconds real = 120x speed
 export const GUARDIAN_ANGEL_SCENARIO = {
-  duration: 300, // 5 minutes
-  timeAcceleration: 0.5, // 0.5x speed - slower for better step control
+  duration: 14400, // 4 hours of mission time
+  timeAcceleration: 120, // 120x speed - 4 hours in 2 minutes real time
   
-  // Step duration in seconds (real time between steps)
-  stepDuration: 30,
+  // Step duration in seconds (real time between steps - narrative pauses)
+  stepDuration: 15, // ~15 seconds between narrative checkpoints
   
   // Key events where simulation should pause for dashboard description
-  keyEvents: [0, 30, 60, 120, 180, 210, 270, 300] as number[],
+  // Cinematic timing for clear action beats
+  keyEvents: [0, 1440, 2160, 2880, 3600, 7200, 7920, 10080, 14400] as number[],
   
-  // Satellites
+  // Satellites - Cinematic positioning for SAR mission
   satellites: [
     {
       id: 'reconsat-1',
@@ -74,16 +77,16 @@ export const GUARDIAN_ANGEL_SCENARIO = {
       fuelPercent: 100,
       maneuvers: [
         {
-          time: 45,
+          time: 2160, // 36 minutes - evasive burn after cyber attack
           type: 'evasive_burn' as const,
           deltaV: { radial: 0, tangential: 2.3, normal: 0 },
-          duration: 10,
+          duration: 480, // 8 minutes
         },
         {
-          time: 120,
+          time: 3600, // 1 hour - avoidance burn for collision threat
           type: 'avoidance_burn' as const,
           deltaV: { radial: 0.5, tangential: 0, normal: 1.2 },
-          duration: 5,
+          duration: 240, // 4 minutes
         },
       ],
     },
@@ -96,6 +99,16 @@ export const GUARDIAN_ANGEL_SCENARIO = {
       fuelPercent: 100,
       maneuvers: [],
     },
+    {
+      id: 'hostile-sat',
+      name: 'HostileSat-Alpha',
+      type: 'recon' as const,
+      initialPosition: Cesium.Cartesian3.fromDegrees(20.0, 35.0, 380000), // Will appear at 0:48
+      status: 'online' as const,
+      fuelPercent: 100,
+      maneuvers: [],
+      affiliation: 'hostile' as const, // Will be used to color it red
+    },
   ] as SimulatedSatelliteData[],
   
   // Ground units
@@ -107,7 +120,13 @@ export const GUARDIAN_ANGEL_SCENARIO = {
       sidc: 'SFGPUCVF--*****', // SAR team
       initialPosition: Cesium.Cartesian3.fromDegrees(14.32, 31.84, 0),
       affiliation: 'friendly' as const,
-      status: 'static' as const,
+      status: 'moving' as const,
+      movements: [
+        { time: 0, position: Cesium.Cartesian3.fromDegrees(14.32, 31.84, 0), heading: 0, speed: 0 }, // Waiting at location
+        { time: 10080, position: Cesium.Cartesian3.fromDegrees(14.32, 31.84, 50), heading: 225, speed: 0 }, // Board helicopter (lifted up)
+        { time: 12960, position: Cesium.Cartesian3.fromDegrees(14.0, 31.6, 100), heading: 225, speed: 50 }, // Flying back with helicopter
+        { time: 14400, position: Cesium.Cartesian3.fromDegrees(14.0, 31.6, 50), heading: 225, speed: 0 }, // Landed at HMS Defender
+      ],
     },
     {
       id: 'hms-defender',
@@ -125,11 +144,11 @@ export const GUARDIAN_ANGEL_SCENARIO = {
       affiliation: 'friendly' as const,
       status: 'moving' as const,
       movements: [
-        { time: 120, position: Cesium.Cartesian3.fromDegrees(14.0, 31.6, 100), heading: 45, speed: 50 },
-        { time: 180, position: Cesium.Cartesian3.fromDegrees(14.32, 31.84, 50), heading: 45, speed: 0 }, // Landing at extraction point
-        { time: 210, position: Cesium.Cartesian3.fromDegrees(14.32, 31.84, 50), heading: 225, speed: 50 }, // Takeoff with team
-        { time: 270, position: Cesium.Cartesian3.fromDegrees(14.0, 31.6, 100), heading: 225, speed: 50 }, // Return to HMS Defender
-        { time: 300, position: Cesium.Cartesian3.fromDegrees(14.0, 31.6, 50), heading: 225, speed: 0 }, // Landed on HMS Defender
+        { time: 5760, position: Cesium.Cartesian3.fromDegrees(14.0, 31.6, 100), heading: 45, speed: 50 }, // Launch at 1h 36m
+        { time: 8640, position: Cesium.Cartesian3.fromDegrees(14.32, 31.84, 50), heading: 45, speed: 0 }, // Landing at 2h 24m
+        { time: 10080, position: Cesium.Cartesian3.fromDegrees(14.32, 31.84, 50), heading: 225, speed: 50 }, // Takeoff at 2h 48m
+        { time: 12960, position: Cesium.Cartesian3.fromDegrees(14.0, 31.6, 100), heading: 225, speed: 50 }, // Return at 3h 36m
+        { time: 14400, position: Cesium.Cartesian3.fromDegrees(14.0, 31.6, 50), heading: 225, speed: 0 }, // Landed at 4h
       ],
     },
     
@@ -160,8 +179,8 @@ export const GUARDIAN_ANGEL_SCENARIO = {
       status: 'moving' as const,
       movements: [
         { time: 0, position: Cesium.Cartesian3.fromDegrees(14.35, 31.82, 0), heading: 90, speed: 5 },
-        { time: 180, position: Cesium.Cartesian3.fromDegrees(14.33, 31.83, 0), heading: 90, speed: 5 },
-        { time: 195, position: Cesium.Cartesian3.fromDegrees(14.33, 31.83, 0), heading: 0, speed: 0 }, // Eliminated
+        { time: 8640, position: Cesium.Cartesian3.fromDegrees(14.33, 31.83, 0), heading: 90, speed: 5 }, // 2h 24m
+        { time: 9360, position: Cesium.Cartesian3.fromDegrees(14.33, 31.83, 0), heading: 0, speed: 0 }, // Eliminated at 2h 36m
       ],
     },
     {
@@ -182,69 +201,79 @@ export const GUARDIAN_ANGEL_SCENARIO = {
     },
   ] as GroundUnitData[],
   
-  // Scripted events - Search and Rescue scenario
+  // Scripted events - CINEMATIC Search and Rescue scenario
   events: [
     {
       time: 0,
       type: 'mission_start',
       description: 'Operation Guardian Angel initiated - SAR mission to locate and extract isolated team',
-      cameraAction: { mode: 'satellite', targetId: 'reconsat-1', duration: 5 },
+      cameraAction: { mode: 'theater', duration: 5 },
     },
     {
-      time: 30,
+      time: 1440, // 24 minutes - CYBER ATTACK
       type: 'cyber_attack',
       targetId: 'reconsat-1',
-      description: 'Enemy ground station attempting to jam satellite communications',
-      cameraAction: { mode: 'satellite', targetId: 'reconsat-1', duration: 15 },
+      description: 'Enemy ground station attempting to jam ReconSat-1 communications',
+      cameraAction: { mode: 'theater', duration: 15 },
     },
     {
-      time: 60,
-      type: 'collision_threat',
+      time: 2160, // 36 minutes - EVASIVE BURN STARTS
+      type: 'maneuver_start',
       targetId: 'reconsat-1',
-      description: 'Hostile satellite on intercept course - evasive maneuvers in progress',
-      cameraAction: { mode: 'satellite', targetId: 'reconsat-1', duration: 15 },
+      description: 'ReconSat-1 initiating evasive orbital burn - Delta-V: 2.3 m/s',
+      cameraAction: { mode: 'maneuver_track', targetId: 'reconsat-1', duration: 12 },
     },
     {
-      time: 120,
+      time: 2880, // 48 minutes - HOSTILE SATELLITE APPEARS
+      type: 'hostile_contact',
+      targetId: 'hostile-sat',
+      description: 'Hostile satellite detected on intercept trajectory - Collision threat imminent',
+      cameraAction: { mode: 'threat_wide', duration: 15 },
+    },
+    {
+      time: 3600, // 1 hour - AVOIDANCE MANEUVER
+      type: 'collision_avoidance',
+      targetId: 'reconsat-1',
+      description: 'Executing avoidance maneuver - Increasing separation from hostile contact',
+      cameraAction: { mode: 'maneuver_track', targetId: 'reconsat-1', duration: 10 },
+    },
+    {
+      time: 7200, // 2 hours - GROUND OPS TRANSITION
       type: 'ground_ops_start',
-      description: 'Helicopter launched for extraction - proceeding to last known position',
-      cameraAction: { mode: 'ground', targetId: 'seahawk-1', duration: 10 },
+      description: 'Helicopter launched for extraction - Transitioning to ground operations',
+      cameraAction: { mode: 'transition_to_ground', targetId: 'seahawk-1', duration: 12 },
     },
     {
-      time: 180,
+      time: 7920, // 2h 12m - TARGET LOCATION
       type: 'target_location',
       targetId: 'phantom-6',
-      description: 'Visual contact established with isolated team - proceeding to extraction point',
+      description: 'Visual contact established with Phantom-6 team - Proceeding to extraction',
       cameraAction: { mode: 'ground', targetId: 'phantom-6', duration: 15 },
     },
     {
-      time: 210,
+      time: 10080, // 2h 48m - EXTRACTION
       type: 'extraction',
       targetId: 'phantom-6',
-      description: 'Team boarding helicopter - extraction in progress',
+      description: 'Team boarding helicopter - Extraction in progress',
       cameraAction: { mode: 'ground', targetId: 'phantom-6', duration: 10 },
     },
     {
-      time: 270,
-      type: 'evacuation',
-      description: 'Team extracted successfully - returning to HMS Defender',
-      cameraAction: { mode: 'split', duration: 10 },
-    },
-    {
-      time: 300,
+      time: 14400, // 4h - MISSION COMPLETE
       type: 'mission_complete',
-      description: 'Operation Guardian Angel complete - all personnel recovered safely',
-      cameraAction: { mode: 'satellite', duration: 5 },
+      description: 'Operation Guardian Angel complete - All personnel recovered safely',
+      cameraAction: { mode: 'theater', duration: 5 },
     },
   ] as SimulationEvent[],
   
-  // Camera sequence
+  // Camera sequence - CINEMATIC
+  // Fixed orbital view over theater, smooth tracking during action
   cameraSequence: [
-    { time: 0, mode: 'satellite' as const, targetId: 'reconsat-1', duration: 30 },
-    { time: 30, mode: 'satellite' as const, targetId: 'reconsat-1', duration: 90 },
-    { time: 120, mode: 'ground' as const, targetId: 'seahawk-1', duration: 90 },
-    { time: 210, mode: 'ground' as const, targetId: 'phantom-6', duration: 60 },
-    { time: 270, mode: 'split' as const, duration: 30 },
+    { time: 0, mode: 'theater' as const, duration: 2160 }, // 0-36m: Fixed theater view, slight satellite drift
+    { time: 2160, mode: 'maneuver_track' as const, targetId: 'reconsat-1', duration: 720 }, // 36m-48m: Track evasive burn
+    { time: 2880, mode: 'threat_wide' as const, duration: 720 }, // 48m-1h: Wide shot showing hostile approach
+    { time: 3600, mode: 'maneuver_track' as const, targetId: 'reconsat-1', duration: 3600 }, // 1h-2h: Track avoidance burn
+    { time: 7200, mode: 'transition_to_ground' as const, targetId: 'seahawk-1', duration: 720 }, // 2h-2h12m: Fly down transition
+    { time: 7920, mode: 'ground' as const, targetId: 'seahawk-1', duration: 6480 }, // 2h12m-4h: Ground operations
   ],
 };
 

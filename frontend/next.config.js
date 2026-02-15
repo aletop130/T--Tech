@@ -1,9 +1,9 @@
- /** @type {import('next').NextConfig} */
- const nextConfig = {
-   reactStrictMode: true,
-   turbopack: {},
-   transpilePackages: [
-    "@blueprintjs/core",
+/** @type {import('next').NextConfig} */
+const nextConfig = {
+  reactStrictMode: true,
+  turbopack: {},
+  transpilePackages: [
+   "@blueprintjs/core",
     "@blueprintjs/icons",
     "@blueprintjs/select",
     "@blueprintjs/table",
@@ -19,6 +19,42 @@
         fs: false,
         path: false,
         crypto: false,
+      };
+
+      // Optimize chunk splitting for Cesium
+      config.optimization = {
+        ...config.optimization,
+        splitChunks: {
+          ...config.optimization?.splitChunks,
+          chunks: 'all',
+          cacheGroups: {
+            ...config.optimization?.splitChunks?.cacheGroups,
+            // Separate Cesium into its own chunk
+            cesium: {
+              test: /[\\/]node_modules[\\/]cesium[\\/]/,
+              name: 'cesium',
+              priority: 20,
+              chunks: 'all',
+              reuseExistingChunk: true,
+            },
+            // Separate resium into its own chunk
+            resium: {
+              test: /[\\/]node_modules[\\/]resium[\\/]/,
+              name: 'resium',
+              priority: 15,
+              chunks: 'all',
+              reuseExistingChunk: true,
+            },
+            // Vendor chunk for other large libraries
+            vendor: {
+              test: /[\\/]node_modules[\\/](?!cesium|resium)/,
+              name: 'vendors',
+              priority: 10,
+              chunks: 'all',
+              reuseExistingChunk: true,
+            },
+          },
+        },
       };
     }
 

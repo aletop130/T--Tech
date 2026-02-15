@@ -13,6 +13,9 @@ import {
   Dialog,
   Classes,
   TextArea,
+  FormGroup,
+  InputGroup,
+  Intent,
 } from '@blueprintjs/core';
 import { api, Incident } from '@/lib/api';
 import { format } from 'date-fns';
@@ -26,6 +29,29 @@ export default function IncidentsPage() {
   const [severityFilter, setSeverityFilter] = useState<string>('');
   const [aiChatOpen, setAiChatOpen] = useState(false);
   const [aiChatIncident, setAiChatIncident] = useState<Incident | null>(null);
+  
+  // Create incident dialog
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [createLoading, setCreateLoading] = useState(false);
+  const [newIncident, setNewIncident] = useState({
+    title: '',
+    description: '',
+    incident_type: 'proximity',
+    severity: 'medium',
+  });
+  
+  // Assign dialog
+  const [assignDialogOpen, setAssignDialogOpen] = useState(false);
+  const [assignTo, setAssignTo] = useState('');
+  const [assignLoading, setAssignLoading] = useState(false);
+  
+  // Comment dialog
+  const [commentDialogOpen, setCommentDialogOpen] = useState(false);
+  const [commentContent, setCommentContent] = useState('');
+  const [commentLoading, setCommentLoading] = useState(false);
+  
+  // Action feedback
+  const [actionMessage, setActionMessage] = useState<{ text: string; intent: Intent } | null>(null);
 
   const loadIncidents = useCallback(async () => {
     setLoading(true);
@@ -68,6 +94,77 @@ export default function IncidentsPage() {
     return intents[status] || 'none';
   };
 
+  const handleCreateIncident = async () => {
+    if (!newIncident.title.trim()) return;
+    setCreateLoading(true);
+    try {
+      await api.createIncident(newIncident);
+      setCreateDialogOpen(false);
+      setNewIncident({ title: '', description: '', incident_type: 'proximity', severity: 'medium' });
+      setActionMessage({ text: 'Incident created successfully', intent: Intent.SUCCESS });
+      await loadIncidents();
+    } catch (error) {
+      setActionMessage({ text: error instanceof Error ? error.message : 'Failed to create incident', intent: Intent.DANGER });
+    } finally {
+      setCreateLoading(false);
+    }
+  };
+
+  const handleAcknowledge = async () => {
+    if (!selectedIncident) return;
+    try {
+      await api.updateIncidentStatus(selectedIncident.id, 'investigating', 'Acknowledged');
+      setActionMessage({ text: 'Incident acknowledged', intent: Intent.SUCCESS });
+      await loadIncidents();
+      // Update selected incident
+      const updated = incidents.find(i => i.id === selectedIncident.id);
+      if (updated) {
+        setSelectedIncident({ ...updated, status: 'investigating' });
+      }
+    } catch (error) {
+      setActionMessage({ text: error instanceof Error ? error.message : 'Failed to acknowledge', intent: Intent.DANGER });
+    }
+  };
+
+  const handleAssign = async () => {
+    if (!selectedIncident || !assignTo.trim()) return;
+    setAssignLoading(true);
+    try {
+      await api.assignIncident(selectedIncident.id, assignTo);
+      setAssignDialogOpen(false);
+      setAssignTo('');
+      setActionMessage({ text: 'Incident assigned successfully', intent: Intent.SUCCESS });
+      await loadIncidents();
+    } catch (error) {
+      setActionMessage({ text: error instanceof Error ? error.message : 'Failed to assign', intent: Intent.DANGER });
+    } finally {
+      setAssignLoading(false);
+    }
+  };
+
+  const handleAddComment = async () => {
+    if (!selectedIncident || !commentContent.trim()) return;
+    setCommentLoading(true);
+    try {
+      await api.addComment(selectedIncident.id, commentContent);
+      setCommentDialogOpen(false);
+      setCommentContent('');
+      setActionMessage({ text: 'Comment added successfully', intent: Intent.SUCCESS });
+    } catch (error) {
+      setActionMessage({ text: error instanceof Error ? error.message : 'Failed to add comment', intent: Intent.DANGER });
+    } finally {
+      setCommentLoading(false);
+    }
+  };
+
+  // Clear action message after 3 seconds
+  useEffect(() => {
+    if (actionMessage) {
+      const timer = setTimeout(() => setActionMessage(null), 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [actionMessage]);
+
   return (
     <div className="h-full flex flex-col">
       {/* Header */}
@@ -76,10 +173,19 @@ export default function IncidentsPage() {
           <Icon icon="warning-sign" className="text-sda-accent-yellow" />
           Incident Console
         </h1>
-        <Button icon="add" intent="primary">
+        <Button icon="add" intent="primary" onClick={() => setCreateDialogOpen(true)}>
           Create Incident
         </Button>
       </div>
+
+      {/* Action feedback */}
+      {actionMessage && (
+        <div className={`mb-4 p-3 rounded-md bg-sda-bg-secondary border border-sda-border-default`}>
+          <span className={actionMessage.intent === Intent.SUCCESS ? 'text-sda-accent-green' : 'text-sda-accent-red'}>
+            {actionMessage.text}
+          </span>
+        </div>
+      )}
 
       {/* Filters */}
       <div className="flex gap-3 mb-4">
@@ -260,16 +366,14 @@ export default function IncidentsPage() {
                   <Button
                     icon="endorsed"
                     intent="success"
-                    onClick={() => {
-                      // Update status
-                    }}
+                    onClick={handleAcknowledge}
                   >
                     Acknowledge
                   </Button>
-                  <Button icon="user" outlined>
+                  <Button icon="user" outlined onClick={() => setAssignDialogOpen(true)}>
                     Assign
                   </Button>
-                  <Button icon="chat" outlined>
+                  <Button icon="chat" outlined onClick={() => setCommentDialogOpen(true)}>
                     Comment
                   </Button>
                   <Button
@@ -287,6 +391,123 @@ export default function IncidentsPage() {
             </div>
           </div>
         )}
+      </Dialog>
+
+      {/* Create Incident Dialog */}
+      <Dialog
+        isOpen={createDialogOpen}
+        onClose={() => setCreateDialogOpen(false)}
+        title="Create Incident"
+        className="bp5-dark"
+        style={{ width: 500 }}
+      >
+        <div className={Classes.DIALOG_BODY}>
+          <FormGroup label="Title" labelFor="incident-title">
+            <InputGroup
+              id="incident-title"
+              value={newIncident.title}
+              onChange={(e) => setNewIncident({ ...newIncident, title: e.target.value })}
+              placeholder="Enter incident title"
+            />
+          </FormGroup>
+          <FormGroup label="Description" labelFor="incident-desc">
+            <TextArea
+              id="incident-desc"
+              fill
+              value={newIncident.description}
+              onChange={(e) => setNewIncident({ ...newIncident, description: e.target.value })}
+              placeholder="Enter incident description"
+            />
+          </FormGroup>
+          <FormGroup label="Type" labelFor="incident-type">
+            <HTMLSelect
+              id="incident-type"
+              fill
+              value={newIncident.incident_type}
+              onChange={(e) => setNewIncident({ ...newIncident, incident_type: e.target.value })}
+            >
+              <option value="proximity">Proximity</option>
+              <option value="cyber">Cyber</option>
+              <option value="maneuver">Maneuver</option>
+              <option value="equipment">Equipment</option>
+              <option value="other">Other</option>
+            </HTMLSelect>
+          </FormGroup>
+          <FormGroup label="Severity" labelFor="incident-severity">
+            <HTMLSelect
+              id="incident-severity"
+              fill
+              value={newIncident.severity}
+              onChange={(e) => setNewIncident({ ...newIncident, severity: e.target.value })}
+            >
+              <option value="critical">Critical</option>
+              <option value="high">High</option>
+              <option value="medium">Medium</option>
+              <option value="low">Low</option>
+              <option value="info">Info</option>
+            </HTMLSelect>
+          </FormGroup>
+        </div>
+        <div className={Classes.DIALOG_FOOTER}>
+          <Button onClick={() => setCreateDialogOpen(false)}>Cancel</Button>
+          <Button intent="primary" onClick={handleCreateIncident} loading={createLoading}>
+            Create Incident
+          </Button>
+        </div>
+      </Dialog>
+
+      {/* Assign Dialog */}
+      <Dialog
+        isOpen={assignDialogOpen}
+        onClose={() => setAssignDialogOpen(false)}
+        title="Assign Incident"
+        className="bp5-dark"
+        style={{ width: 400 }}
+      >
+        <div className={Classes.DIALOG_BODY}>
+          <FormGroup label="Assign to" labelFor="assign-to">
+            <InputGroup
+              id="assign-to"
+              value={assignTo}
+              onChange={(e) => setAssignTo(e.target.value)}
+              placeholder="Enter username or team name"
+            />
+          </FormGroup>
+        </div>
+        <div className={Classes.DIALOG_FOOTER}>
+          <Button onClick={() => setAssignDialogOpen(false)}>Cancel</Button>
+          <Button intent="primary" onClick={handleAssign} loading={assignLoading}>
+            Assign
+          </Button>
+        </div>
+      </Dialog>
+
+      {/* Comment Dialog */}
+      <Dialog
+        isOpen={commentDialogOpen}
+        onClose={() => setCommentDialogOpen(false)}
+        title="Add Comment"
+        className="bp5-dark"
+        style={{ width: 500 }}
+      >
+        <div className={Classes.DIALOG_BODY}>
+          <FormGroup label="Comment" labelFor="comment-content">
+            <TextArea
+              id="comment-content"
+              fill
+              value={commentContent}
+              onChange={(e) => setCommentContent(e.target.value)}
+              placeholder="Enter your comment"
+              rows={4}
+            />
+          </FormGroup>
+        </div>
+        <div className={Classes.DIALOG_FOOTER}>
+          <Button onClick={() => setCommentDialogOpen(false)}>Cancel</Button>
+          <Button intent="primary" onClick={handleAddComment} loading={commentLoading}>
+            Add Comment
+          </Button>
+        </div>
       </Dialog>
     </div>
   );

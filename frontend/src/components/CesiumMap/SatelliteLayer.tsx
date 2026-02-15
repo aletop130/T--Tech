@@ -1,11 +1,11 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
-import * as Cesium from 'cesium';
+import { useEffect, useRef, useState } from 'react';
+import { getCesium, type CesiumModule } from '@/lib/cesium/loader';
 import { Satellite } from '@/lib/api';
 
 interface SatelliteLayerProps {
-  viewer: Cesium.Viewer | null;
+  viewer: CesiumModule.Viewer | null;
   satellites: Satellite[];
   orbits: Array<{
     satellite_id: string;
@@ -21,9 +21,14 @@ export function SatelliteLayer({
   showOrbits = true,
 }: SatelliteLayerProps) {
   const cleanupRef = useRef<(() => void) | null>(null);
+  const [Cesium, setCesium] = useState<CesiumModule | null>(null);
 
   useEffect(() => {
-    if (!viewer || viewer.isDestroyed()) return;
+    getCesium().then(setCesium);
+  }, []);
+
+  useEffect(() => {
+    if (!viewer || !Cesium || viewer.isDestroyed()) return;
 
     if (cleanupRef.current) {
       cleanupRef.current();
@@ -147,7 +152,7 @@ export function SatelliteLayer({
       }
       currentEntities.clear();
     };
-  }, [viewer, satellites, orbits, showOrbits]);
+  }, [viewer, satellites, orbits, showOrbits, Cesium]);
 
   useEffect(() => {
     return () => {

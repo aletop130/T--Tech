@@ -8,8 +8,8 @@ import {
   getSatelliteStatus,
 } from './scenarioData';
 
-const STEP_DURATION = 30;
-const TIME_ACCELERATION = 1; // 1x speed - 1 real second = 1 sim second
+const STEP_DURATION = 1800; // 30 minutes of mission time between narrative steps
+const TIME_ACCELERATION = 120; // 120x speed - 4 hours mission in 2 minutes real time
 
 interface SimulationState {
   time: number;
@@ -24,7 +24,7 @@ interface SimulationState {
 export function useSARSimulation(viewer: Cesium.Viewer | null, isActive: boolean = false) {
   const [state, setState] = useState<SimulationState>({
     time: 0,
-    isPlaying: true, // Start automatically
+    isPlaying: false, // Don't start automatically - wait for user
     isPaused: false,
     isComplete: false,
     currentStep: 0,
@@ -35,27 +35,67 @@ export function useSARSimulation(viewer: Cesium.Viewer | null, isActive: boolean
   const animationRef = useRef<number | null>(null);
   const lastTimeRef = useRef<number>(0);
   const lastCameraTimeRef = useRef<number>(-1);
+  const hasInitializedCameraRef = useRef<boolean>(false);
 
-  // Get current satellite states with interpolated position
+  // Get current satellite states - CINEMATIC positioning
+  // Satellites staged for visibility over Mediterranean theater
   const getCurrentSatellites = useCallback(() => {
     return state.satellites.map((sat) => {
       const status = getSatelliteStatus(sat, state.time);
-      // Calculate approximate orbital position based on time
-      const orbitalPeriod = 90 * 60;
-      const timeOffset = (state.time / orbitalPeriod) * 2 * Math.PI;
+      
       const initialCart = Cesium.Cartographic.fromCartesian(sat.initialPosition);
-      const lonOffset = timeOffset * 20;
-      const newLon = Cesium.Math.toDegrees(initialCart.longitude) + lonOffset;
+      const initialLon = Cesium.Math.toDegrees(initialCart.longitude);
+      const initialLat = Cesium.Math.toDegrees(initialCart.latitude);
+      const altitude = initialCart.height;
+      
+      let newLon = initialLon;
+      let newLat = initialLat;
+      
+      // CINEMATIC positioning - satellites drift slowly in theater
+      if (sat.id === 'reconsat-1') {
+        // Main recon satellite - slight drift over mission area
+        // One gentle orbit over 4 hours = very slow drift
+        const driftAngle = (state.time / 14400) * 2 * Math.PI; // One orbit over mission
+        newLon = initialLon + Math.sin(driftAngle) * 2; // ±2° longitude drift
+        newLat = initialLat + Math.cos(driftAngle) * 1; // ±1° latitude drift
+      } else if (sat.id === 'comsat-2') {
+        // Comms satellite - offset position
+        const driftAngle = (state.time / 14400) * 2 * Math.PI + 1; // Phase offset
+        newLon = initialLon + Math.sin(driftAngle) * 2;
+        newLat = initialLat + Math.cos(driftAngle) * 1;
+      } else if (sat.id === 'hostile-sat') {
+        // Hostile satellite - appears at 0:48 (2880s), approaches from angle
+        if (state.time < 2880) {
+          // Before appearance, position off-screen
+          newLon = initialLon + 20;
+          newLat = initialLat + 10;
+        } else {
+          // After 0:48, moves into theater
+          const approachTime = Math.min((state.time - 2880) / 720, 1); // 12 minute approach
+          const startLon = initialLon + 15;
+          const startLat = initialLat + 8;
+          newLon = startLon - approachTime * 15; // Move toward ReconSat-1
+          newLat = startLat - approachTime * 8;
+        }
+      }
+      
+      // Apply maneuver offset during burn
+      const activeManeuver = sat.maneuvers?.find(
+        m => state.time >= m.time && state.time < m.time + m.duration
+      );
+      
+      if (activeManeuver) {
+        // During maneuver, show slight position offset
+        const progress = (state.time - activeManeuver.time) / activeManeuver.duration;
+        newLon += activeManeuver.deltaV.tangential * progress * 0.5;
+        newLat += activeManeuver.deltaV.normal * progress * 0.5;
+      }
       
       return {
         ...sat,
         status,
-        fuelPercent: Math.max(94, 100 - (state.time / 300) * 6),
-        currentPosition: Cesium.Cartesian3.fromDegrees(
-          newLon,
-          Cesium.Math.toDegrees(initialCart.latitude),
-          initialCart.height
-        ),
+        fuelPercent: Math.max(94, 100 - (state.time / 14400) * 6),
+        currentPosition: Cesium.Cartesian3.fromDegrees(newLon, newLat, altitude),
       };
     });
   }, [state.satellites, state.time]);
@@ -77,7 +117,7 @@ export function useSARSimulation(viewer: Cesium.Viewer | null, isActive: boolean
   const resetSimulation = useCallback(() => {
     setState({
       time: 0,
-      isPlaying: true,
+      isPlaying: false, // Don't auto-start on reset
       isPaused: false,
       isComplete: false,
       currentStep: 0,
@@ -86,6 +126,16 @@ export function useSARSimulation(viewer: Cesium.Viewer | null, isActive: boolean
     });
     lastTimeRef.current = 0;
     lastCameraTimeRef.current = -1;
+    hasInitializedCameraRef.current = false;
+  }, []);
+
+  // Start the simulation
+  const startSimulation = useCallback(() => {
+    setState((prev) => ({
+      ...prev,
+      isPlaying: true,
+      isPaused: false,
+    }));
   }, []);
 
   // Go to next step (continue simulation)
@@ -123,6 +173,8 @@ export function useSARSimulation(viewer: Cesium.Viewer | null, isActive: boolean
         cancelAnimationFrame(animationRef.current);
         animationRef.current = null;
       }
+      // Reset lastTimeRef so we don't count paused time when resuming
+      lastTimeRef.current = 0;
       return;
     }
 
@@ -177,43 +229,118 @@ export function useSARSimulation(viewer: Cesium.Viewer | null, isActive: boolean
     };
   }, [state.isPlaying, state.isPaused, state.isComplete]);
 
-  // Camera update - called when time changes (only when simulation is active)
+  // Initial camera setup when simulation becomes active
   useEffect(() => {
     if (!viewer || !isActive) return;
+    
+    // Reset camera initialization flag when simulation mode is activated
+    hasInitializedCameraRef.current = false;
+    
+    // Initial camera position focused on the first satellite
+    const currentSats = getCurrentSatellites();
+    const targetSat = currentSats[0];
+    
+    if (targetSat && targetSat.currentPosition) {
+      viewer.camera.lookAt(
+        targetSat.currentPosition,
+        new Cesium.HeadingPitchRange(
+          Cesium.Math.toRadians(0),
+          Cesium.Math.toRadians(-45),
+          300000 // 300km range to see satellite and its orbital path
+        )
+      );
+      hasInitializedCameraRef.current = true;
+    }
+  }, [viewer, isActive, getCurrentSatellites]);
+
+  // Camera update - CINEMATIC modes
+  useEffect(() => {
+    if (!viewer || !isActive) return;
+    if (!hasInitializedCameraRef.current) return;
+    if (!state.isPlaying) return;
     if (state.time === lastCameraTimeRef.current) return;
     lastCameraTimeRef.current = state.time;
 
-    // Find current camera sequence based on time
     const cameraSeq = GUARDIAN_ANGEL_SCENARIO.cameraSequence.find(
       (seq) => state.time >= seq.time && state.time < seq.time + seq.duration
     );
 
-    if (!cameraSeq) {
-      viewer.camera.setView({
-        destination: Cesium.Cartesian3.fromDegrees(14.0, 32.0, 500000),
-      });
-      return;
-    }
-
     const currentSats = getCurrentSatellites();
     const currentGround = getCurrentGroundUnits();
 
-    switch (cameraSeq.mode) {
-      case 'satellite': {
+    switch (cameraSeq?.mode) {
+      case 'theater': {
+        // Fixed theater view - camera stays over Mediterranean
+        viewer.camera.lookAt(
+          Cesium.Cartesian3.fromDegrees(14.5, 31.5, 0), // Center on mission area
+          new Cesium.HeadingPitchRange(
+            Cesium.Math.toRadians(0),
+            Cesium.Math.toRadians(-60),
+            400000 // 400km range - see entire theater
+          )
+        );
+        break;
+      }
+
+      case 'maneuver_track': {
+        // Track satellite during maneuver - smooth following
         const targetSat = cameraSeq.targetId 
           ? currentSats.find(s => s.id === cameraSeq.targetId)
           : currentSats[0];
         
-        if (targetSat && targetSat.currentPosition) {
-          // Look at the satellite from a better angle
+        if (targetSat?.currentPosition) {
           viewer.camera.lookAt(
             targetSat.currentPosition,
             new Cesium.HeadingPitchRange(
               Cesium.Math.toRadians(0),
-              Cesium.Math.toRadians(-30),
-              100000
+              Cesium.Math.toRadians(-40),
+              200000 // 200km - closer view during action
             )
           );
+        }
+        break;
+      }
+
+      case 'threat_wide': {
+        // Wide shot showing both satellites during threat
+        const reconSat = currentSats.find(s => s.id === 'reconsat-1');
+        const hostileSat = currentSats.find(s => s.id === 'hostile-sat');
+        
+        if (reconSat?.currentPosition && hostileSat?.currentPosition) {
+          // Look at midpoint between satellites
+          const midpoint = Cesium.Cartesian3.midpoint(
+            reconSat.currentPosition,
+            hostileSat.currentPosition,
+            new Cesium.Cartesian3()
+          );
+          viewer.camera.lookAt(
+            midpoint,
+            new Cesium.HeadingPitchRange(
+              Cesium.Math.toRadians(0),
+              Cesium.Math.toRadians(-50),
+              500000 // 500km - wide view to see both
+            )
+          );
+        }
+        break;
+      }
+
+      case 'transition_to_ground': {
+        // Smooth fly-down from orbit to ground
+        const targetUnit = cameraSeq.targetId
+          ? currentGround.find(u => u.id === cameraSeq.targetId)
+          : currentGround[0];
+        
+        if (targetUnit) {
+          viewer.camera.flyTo({
+            destination: targetUnit.position,
+            orientation: {
+              heading: Cesium.Math.toRadians(45),
+              pitch: Cesium.Math.toRadians(-45),
+              roll: 0,
+            },
+            duration: 2, // 2 second smooth transition
+          });
         }
         break;
       }
@@ -224,7 +351,6 @@ export function useSARSimulation(viewer: Cesium.Viewer | null, isActive: boolean
           : currentGround[0];
         
         if (targetUnit) {
-          // Look at ground unit from above with tilt
           viewer.camera.lookAt(
             targetUnit.position,
             new Cesium.HeadingPitchRange(
@@ -265,6 +391,7 @@ export function useSARSimulation(viewer: Cesium.Viewer | null, isActive: boolean
     togglePlayPause,
     resetSimulation,
     toggleStepMode,
+    startSimulation,
     nextStep,
     prevStep,
   };

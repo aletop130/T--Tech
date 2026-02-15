@@ -11,12 +11,25 @@ import {
   HTMLSelect,
   Spinner,
   NonIdealState,
+  Dialog,
+  Classes,
+  FormGroup,
+  Switch,
 } from '@blueprintjs/core';
-import { api, Satellite, GroundStation } from '@/lib/api';
-import { useRouter } from 'next/navigation';
+import { api, Satellite, GroundStation, SatelliteDetail } from '@/lib/api';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { format } from 'date-fns';
+import { SatelliteInfoCard } from '@/components/CesiumMap/SatelliteInfoCard';
 
 type ObjectType = 'satellite' | 'ground_station' | 'sensor';
+
+interface OrbitData {
+  satellite_id: string;
+  positions: Array<{ lat: number; lon: number; alt: number; time: string }>;
+  tle_line1?: string;
+  tle_line2?: string;
+  epoch?: string;
+}
 
 interface ObjectListItem {
   id: string;
@@ -26,8 +39,15 @@ interface ObjectListItem {
   metadata: Record<string, any>;
 }
 
+interface FilterState {
+  status: string;
+  country: string;
+  isActive: boolean;
+}
+
 export default function ExplorerPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   
   const [objectType, setObjectType] = useState<ObjectType>('satellite');
   const [searchQuery, setSearchQuery] = useState('');
@@ -35,7 +55,16 @@ export default function ExplorerPage() {
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
+  const [filterDialogOpen, setFilterDialogOpen] = useState(false);
+  const [filters, setFilters] = useState<FilterState>({
+    status: '',
+    country: '',
+    isActive: true,
+  });
   
+  const [selectedSatellite, setSelectedSatellite] = useState<SatelliteDetail | null>(null);
+  const [selectedSatelliteOrbit, setSelectedSatelliteOrbit] = useState<OrbitData | null>(null);
+  const [loadingSelected, setLoadingSelected] = useState(false);
   const pageSize = 20;
 
   const loadObjects = useCallback(async () => {
@@ -92,8 +121,41 @@ export default function ExplorerPage() {
     loadObjects();
   }, [loadObjects]);
 
-  const handleObjectClick = (item: ObjectListItem) => {
-    router.push(`/explorer/${item.type}/${item.id}`);
+  const handleObjectClick = async (item: ObjectListItem) => {
+    if (item.type === 'satellite') {
+      setLoadingSelected(true);
+      try {
+        const satData = await api.getSatellite(item.id);
+        setSelectedSatellite(satData);
+        
+        if (satData.latest_orbit) {
+          setSelectedSatelliteOrbit({
+            satellite_id: satData.id,
+            positions: [],
+            tle_line1: satData.latest_orbit.tle_line1,
+            tle_line2: satData.latest_orbit.tle_line2,
+            epoch: satData.latest_orbit.epoch,
+          });
+        } else {
+          setSelectedSatelliteOrbit(null);
+        }
+      } catch (error) {
+        console.error('Failed to load satellite details:', error);
+      } finally {
+        setLoadingSelected(false);
+      }
+    } else {
+      router.push(`/explorer/${item.type}/${item.id}`);
+    }
+  };
+
+  const handleViewOnMap = (satelliteId: string) => {
+    router.push(`/map?highlight=${satelliteId}`);
+  };
+
+  const handleCloseInfoCard = () => {
+    setSelectedSatellite(null);
+    setSelectedSatelliteOrbit(null);
   };
 
   const statusColor = (status: string) => {
@@ -134,11 +196,56 @@ export default function ExplorerPage() {
           onKeyDown={(e) => e.key === 'Enter' && loadObjects()}
           className="flex-1"
         />
-        <Button icon="filter" outlined>
+        <Button icon="filter" outlined onClick={() => setFilterDialogOpen(true)}>
           Filters
         </Button>
         <Button icon="refresh" onClick={loadObjects} />
       </div>
+
+      {/* Filter Dialog */}
+      <Dialog
+        isOpen={filterDialogOpen}
+        onClose={() => setFilterDialogOpen(false)}
+        title="Filters"
+        className="bp5-dark"
+        style={{ width: 400 }}
+      >
+        <div className={Classes.DIALOG_BODY}>
+          <FormGroup label="Status">
+            <HTMLSelect
+              fill
+              value={filters.status}
+              onChange={(e) => setFilters({ ...filters, status: e.target.value })}
+            >
+              <option value="">All</option>
+              <option value="active">Active</option>
+              <option value="inactive">Inactive</option>
+              <option value="operational">Operational</option>
+              <option value="offline">Offline</option>
+            </HTMLSelect>
+          </FormGroup>
+          <FormGroup label="Country">
+            <InputGroup
+              value={filters.country}
+              onChange={(e) => setFilters({ ...filters, country: e.target.value })}
+              placeholder="Filter by country"
+            />
+          </FormGroup>
+          <Switch
+            label="Show active only"
+            checked={filters.isActive}
+            onChange={(e) => setFilters({ ...filters, isActive: e.currentTarget.checked })}
+          />
+        </div>
+        <div className={Classes.DIALOG_FOOTER}>
+          <Button onClick={() => setFilters({ status: '', country: '', isActive: true })}>
+            Clear
+          </Button>
+          <Button intent="primary" onClick={() => { loadObjects(); setFilterDialogOpen(false); }}>
+            Apply Filters
+          </Button>
+        </div>
+      </Dialog>
 
       {/* Object List */}
       <Card elevation={Elevation.TWO} className="flex-1 overflow-hidden">
@@ -209,6 +316,29 @@ export default function ExplorerPage() {
           </div>
         )}
       </Card>
+
+      {/* Satellite Info Card */}
+      {selectedSatellite && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center pt-20 pointer-events-none">
+          <div className="pointer-events-auto">
+            <SatelliteInfoCard
+              satellite={selectedSatellite}
+              orbit={selectedSatelliteOrbit || undefined}
+              onClose={handleCloseInfoCard}
+            />
+            <div className="absolute -bottom-12 left-4">
+              <Button
+                intent="primary"
+                icon="globe"
+                onClick={() => handleViewOnMap(selectedSatellite.id)}
+                loading={loadingSelected}
+              >
+                View on Map
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Pagination */}
       <div className="flex items-center justify-between mt-4">

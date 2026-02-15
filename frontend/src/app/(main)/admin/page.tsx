@@ -1,8 +1,93 @@
 'use client';
 
-import { Card, Elevation, Icon, Button, Tag, Switch } from '@blueprintjs/core';
+import { useState, useEffect } from 'react';
+import { Card, Elevation, Icon, Button, Tag, Switch, Callout, Intent } from '@blueprintjs/core';
+import { api } from '@/lib/api';
 
 export default function AdminPage() {
+  const [loadingAction, setLoadingAction] = useState<string | null>(null);
+  const [actionResult, setActionResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [stats, setStats] = useState<{ satellites: number; open_incidents: number; incidents_24h: number; audit_logs_24h: number } | null>(null);
+
+  useEffect(() => {
+    loadStats();
+  }, []);
+
+  const loadStats = async () => {
+    try {
+      const data = await api.getAdminStats();
+      setStats(data);
+    } catch (error) {
+      console.error('Failed to load stats:', error);
+    }
+  };
+
+  const handleClearCache = async () => {
+    setLoadingAction('cache');
+    setActionResult(null);
+    try {
+      const result = await api.clearCache();
+      setActionResult(result);
+      await loadStats();
+    } catch (error) {
+      setActionResult({ success: false, message: error instanceof Error ? error.message : 'Failed to clear cache' });
+    } finally {
+      setLoadingAction(null);
+    }
+  };
+
+  const handleRunVacuum = async () => {
+    setLoadingAction('vacuum');
+    setActionResult(null);
+    try {
+      const result = await api.runDatabaseVacuum();
+      setActionResult(result);
+    } catch (error) {
+      setActionResult({ success: false, message: error instanceof Error ? error.message : 'Failed to run vacuum' });
+    } finally {
+      setLoadingAction(null);
+    }
+  };
+
+  const handleExportLogs = async () => {
+    setLoadingAction('export');
+    setActionResult(null);
+    try {
+      const blob = await api.exportAuditLogs({ format: 'csv' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `audit_logs_${new Date().toISOString().split('T')[0]}.csv`;
+      a.click();
+      window.URL.revokeObjectURL(url);
+      setActionResult({ success: true, message: 'Audit logs exported successfully' });
+    } catch (error) {
+      setActionResult({ success: false, message: error instanceof Error ? error.message : 'Failed to export logs' });
+    } finally {
+      setLoadingAction(null);
+    }
+  };
+
+  const handleDownloadReport = async () => {
+    setLoadingAction('report');
+    setActionResult(null);
+    try {
+      const report = await api.getSystemReport();
+      const blob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `system_report_${new Date().toISOString().split('T')[0]}.json`;
+      a.click();
+      window.URL.revokeObjectURL(url);
+      setActionResult({ success: true, message: 'System report downloaded successfully' });
+    } catch (error) {
+      setActionResult({ success: false, message: error instanceof Error ? error.message : 'Failed to download report' });
+    } finally {
+      setLoadingAction(null);
+    }
+  };
+
   return (
     <div className="h-full flex flex-col">
       {/* Header */}
@@ -139,17 +224,50 @@ export default function AdminPage() {
             Maintenance
           </h2>
 
+          {actionResult && (
+            <Callout
+              intent={actionResult.success ? Intent.SUCCESS : Intent.DANGER}
+              className="mb-4"
+            >
+              {actionResult.message}
+            </Callout>
+          )}
+
           <div className="space-y-3">
-            <Button icon="refresh" fill outlined>
+            <Button
+              icon="refresh"
+              fill
+              outlined
+              onClick={handleClearCache}
+              loading={loadingAction === 'cache'}
+            >
               Clear Cache
             </Button>
-            <Button icon="database" fill outlined>
+            <Button
+              icon="database"
+              fill
+              outlined
+              onClick={handleRunVacuum}
+              loading={loadingAction === 'vacuum'}
+            >
               Run Database Vacuum
             </Button>
-            <Button icon="export" fill outlined>
+            <Button
+              icon="export"
+              fill
+              outlined
+              onClick={handleExportLogs}
+              loading={loadingAction === 'export'}
+            >
               Export Audit Logs
             </Button>
-            <Button icon="download" fill outlined>
+            <Button
+              icon="download"
+              fill
+              outlined
+              onClick={handleDownloadReport}
+              loading={loadingAction === 'report'}
+            >
               Download System Report
             </Button>
           </div>

@@ -2,6 +2,7 @@
 from fastapi import APIRouter
 
 from app.api.v1 import (
+    admin,
     ontology,
     incidents,
     ingestion,
@@ -11,6 +12,7 @@ from app.api.v1 import (
     search,
     operations,
     proximity,
+    timeline,
 )
 
 api_router = APIRouter()
@@ -67,5 +69,17 @@ api_router.include_router(
     proximity.router,
     prefix="/proximity",
     tags=["Proximity Detection"],
+)
+
+api_router.include_router(
+    admin.router,
+    prefix="/admin",
+    tags=["Admin"],
+)
+
+api_router.include_router(
+    timeline.router,
+    prefix="/timeline",
+    tags=["Timeline"],
 )
 

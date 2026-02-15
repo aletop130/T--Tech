@@ -4,11 +4,11 @@
  */
 
 import { useEffect, useRef, useState, useCallback } from 'react';
-import * as Cesium from 'cesium';
-import { PLANETS, MAJOR_MOONS, calculateScaledDistance, calculateScaledRadius } from '@/lib/solarSystem/data';
+import { getCesium, type CesiumModule } from '@/lib/cesium/loader';
+import { PLANETS, calculateScaledDistance, calculateScaledRadius } from '@/lib/solarSystem/data';
 
 export interface SolarSystemLayerProps {
-  viewer: Cesium.Viewer | null;
+  viewer: CesiumModule.Viewer | null;
   showOrbits: boolean;
   showLabels: boolean;
   focusedBody: string | null;
@@ -29,17 +29,23 @@ export function SolarSystemLayer({
   focusedBody,
   onBodyClick,
 }: SolarSystemLayerProps) {
-  const planetEntitiesRef = useRef<Map<string, Cesium.Entity>>(new Map());
-  const orbitEntitiesRef = useRef<Cesium.Entity[]>([]);
+  const planetEntitiesRef = useRef<Map<string, CesiumModule.Entity>>(new Map());
+  const orbitEntitiesRef = useRef<CesiumModule.Entity[]>([]);
   const isSetupRef = useRef(false);
   const [isReady, setIsReady] = useState(false);
+  const [Cesium, setCesium] = useState<CesiumModule | null>(null);
   const currentBodyRef = useRef<string | null>(null);
 
+  useEffect(() => {
+    getCesium().then(setCesium);
+  }, []);
+
   // Create a simple colored ellipsoid material
-  const createBodyMaterial = useCallback((bodyId: string): Cesium.Color => {
+  const createBodyMaterial = useCallback((bodyId: string): CesiumModule.Color => {
+    if (!Cesium) return Cesium.Color.WHITE;
     const colorHex = BODY_COLORS[bodyId] || '#FFFFFF';
     return Cesium.Color.fromCssColorString(colorHex);
-  }, []);
+  }, [Cesium]);
 
   // Calculate view distance based on planet size
   const getViewDistance = useCallback((bodyId: string, radius: number): number => {
@@ -55,10 +61,13 @@ export function SolarSystemLayer({
   // Calculate camera position for viewing a body
   // Returns position at viewDistance from the body, looking at it from a good angle
   const calculateCameraPosition = useCallback((
-    bodyPosition: Cesium.Cartesian3,
+    bodyPosition: CesiumModule.Cartesian3,
     bodyId: string,
     bodyRadius: number
-  ): { position: Cesium.Cartesian3; heading: number; pitch: number } => {
+  ): { position: CesiumModule.Cartesian3; heading: number; pitch: number } => {
+    if (!Cesium) {
+      return { position: new Cesium.Cartesian3(0, 0, 0), heading: 0, pitch: 0 };
+    }
     const viewDistance = getViewDistance(bodyId, bodyRadius);
     
     // For planets, view from direction toward the origin (opposite side from center)
@@ -96,11 +105,11 @@ export function SolarSystemLayer({
       heading: heading,
       pitch: pitch,
     };
-  }, [getViewDistance]);
+  }, [Cesium, getViewDistance]);
 
   // Initialize solar system
   useEffect(() => {
-    if (!viewer || isSetupRef.current) return;
+    if (!viewer || !Cesium || isSetupRef.current) return;
     if (!viewer?.entities) return;
 
     console.log('[SolarSystem] Initializing...');
@@ -177,7 +186,7 @@ export function SolarSystemLayer({
 
       // Create orbit path
       if (showOrbits) {
-        const orbitPositions: Cesium.Cartesian3[] = [];
+        const orbitPositions: CesiumModule.Cartesian3[] = [];
         for (let i = 0; i <= 128; i++) {
           const orbitAngle = (i / 128) * Math.PI * 2;
           orbitPositions.push(new Cesium.Cartesian3(
@@ -242,11 +251,11 @@ export function SolarSystemLayer({
       currentBodyRef.current = null;
       setIsReady(false);
     };
-  }, [viewer, showOrbits, showLabels, createBodyMaterial]);
+  }, [viewer, showOrbits, showLabels, createBodyMaterial, Cesium]);
 
   // Handle camera navigation to planets
   useEffect(() => {
-    if (!viewer || !isReady) return;
+    if (!viewer || !isReady || !Cesium) return;
 
     // Reset to overview when focusedBody is null
     if (!focusedBody) {
@@ -309,19 +318,19 @@ export function SolarSystemLayer({
     });
 
     currentBodyRef.current = focusedBody;
-  }, [viewer, focusedBody, isReady, calculateCameraPosition]);
+  }, [viewer, focusedBody, isReady, calculateCameraPosition, Cesium]);
 
   // Handle planet clicks
   useEffect(() => {
-    if (!viewer || !onBodyClick) return;
+    if (!viewer || !onBodyClick || !Cesium) return;
 
     const handler = new Cesium.ScreenSpaceEventHandler(viewer.canvas);
     
-    handler.setInputAction((click: Cesium.ScreenSpaceEventHandler.PositionedEvent) => {
+    handler.setInputAction((click: CesiumModule.ScreenSpaceEventHandler.PositionedEvent) => {
       const pickedObject = viewer.scene.pick(click.position);
       
       if (Cesium.defined(pickedObject) && pickedObject.id instanceof Cesium.Entity) {
-        const entity = pickedObject.id as Cesium.Entity;
+        const entity = pickedObject.id as CesiumModule.Entity;
         if (entity.name) {
           const planet = PLANETS.find(p => p.name === entity.name);
           if (planet) {
@@ -335,7 +344,7 @@ export function SolarSystemLayer({
     return () => {
       handler.destroy();
     };
-  }, [viewer, onBodyClick]);
+  }, [viewer, onBodyClick, Cesium]);
 
   return null;
 }

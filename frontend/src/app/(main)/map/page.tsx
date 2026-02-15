@@ -2,9 +2,10 @@
 
 import { useEffect, useState, useRef, useCallback } from 'react';
 import dynamic from 'next/dynamic';
+import { useSearchParams } from 'next/navigation';
 import { Spinner, Tag, Icon, Button, Checkbox, Intent } from '@blueprintjs/core';
 import { api, GroundStation, Satellite, ConjunctionEvent, PositionReport } from '@/lib/api';
-import * as Cesium from 'cesium';
+import { getCesium, type CesiumModule } from '@/lib/cesium/loader';
 import { CesiumViewer } from '@/components/CesiumMap/CesiumViewer';
 import { SatelliteLayer } from '@/components/CesiumMap/SatelliteLayer';
 import { GroundStationLayer } from '@/components/CesiumMap/GroundStationLayer';
@@ -110,7 +111,8 @@ const mockSatelliteMetadata = (satellites: Satellite[]): Satellite[] => {
 };
 
 export default function MapPage() {
-  const [viewer, setViewer] = useState<Cesium.Viewer | null>(null);
+  const searchParams = useSearchParams();
+  const [viewer, setViewer] = useState<CesiumModule.Viewer | null>(null);
   const [groundStations, setGroundStations] = useState<GroundStation[]>([]);
   const [satellites, setSatellites] = useState<Satellite[]>([]);
   const [groundVehicles, setGroundVehicles] = useState<PositionReport[]>([]);
@@ -156,11 +158,12 @@ export default function MapPage() {
     togglePlayPause: simTogglePlayPause,
     resetSimulation: simReset,
     toggleStepMode: simToggleStepMode,
+    startSimulation: simStart,
     nextStep: simNextStep,
     prevStep: simPrevStep,
   } = useSARSimulation(viewer, isSimulationMode);
   
-  const satellitePositionsRef = useRef<Map<string, Cesium.Cartesian3>>(new Map());
+  const satellitePositionsRef = useRef<Map<string, CesiumModule.Cartesian3>>(new Map());
   const animationFrameRef = useRef<number | null>(null);
   const lastUpdateRef = useRef<number>(0);
 
@@ -178,11 +181,30 @@ export default function MapPage() {
     }
   }, []);
 
+  // Handle highlight parameter from explorer
+  useEffect(() => {
+    const highlightId = searchParams.get('highlight');
+    if (highlightId && satellites.length > 0 && viewer) {
+      const sat = satellites.find((s) => s.id === highlightId);
+      if (sat) {
+        flyToSatellite(sat);
+      }
+    }
+  }, [searchParams, satellites, viewer]);
+
   // Real-time position updates
   useEffect(() => {
     if (!satelliteReady || !satelliteModule || satellites.length === 0 || orbits.length === 0) return;
 
+    let Cesium: CesiumModule | null = null;
+    getCesium().then((mod) => { Cesium = mod; });
+
     const updatePositions = () => {
+      if (!Cesium) {
+        animationFrameRef.current = requestAnimationFrame(updatePositions);
+        return;
+      }
+
       const now = Date.now();
       // Update every 5 seconds to avoid too much computation
       if (now - lastUpdateRef.current < 5000) {
@@ -292,7 +314,8 @@ export default function MapPage() {
       
       setOrbits(generatedOrbits);
 
-      // Store satellite positions for conjunction layer
+      // Store satellite positions for conjunction layer - load Cesium dynamically
+      const Cesium = await getCesium();
       generatedOrbits.forEach((orbit) => {
         if (orbit.positions.length > 0) {
           const pos = orbit.positions[0];
@@ -419,9 +442,11 @@ export default function MapPage() {
     return positions;
   }, []);
 
-  const handleViewerReady = (cesiumViewer: Cesium.Viewer) => {
+  const handleViewerReady = async (cesiumViewer: CesiumModule.Viewer) => {
     setViewer(cesiumViewer);
-    cesiumController.initialize(cesiumViewer);
+    await cesiumController.initialize(cesiumViewer);
+
+    const Cesium = await getCesium();
 
     cesiumViewer.camera.flyTo({
       destination: Cesium.Cartesian3.fromDegrees(12.5674, 41.8719, 8000000),
@@ -464,8 +489,9 @@ export default function MapPage() {
     });
   };
 
-  const flyToStation = (station: GroundStation) => {
+  const flyToStation = async (station: GroundStation) => {
     if (viewer) {
+      const Cesium = await getCesium();
       viewer.camera.flyTo({
         destination: Cesium.Cartesian3.fromDegrees(
           station.longitude,
@@ -491,7 +517,7 @@ export default function MapPage() {
     }
   }, [focusedBody]);
 
-  const flyToSatellite = (satellite: Satellite) => {
+  const flyToSatellite = async (satellite: Satellite) => {
     setLoadingSatellite(true);
     setSelectedSatellite(satellite);
     setSelectedStation(null);
@@ -541,6 +567,7 @@ export default function MapPage() {
     const altitudeMeters = pos.alt * 1000 + 1000;
     
     try {
+      const Cesium = await getCesium();
       viewer.camera.flyTo({
         destination: Cesium.Cartesian3.fromDegrees(pos.lon, pos.lat, altitudeMeters),
         duration: 2,
@@ -681,12 +708,13 @@ export default function MapPage() {
                             id: sat.id,
                             name: sat.name,
                             type: sat.type,
-                            position: sat.initialPosition,
+                            position: sat.currentPosition || sat.initialPosition,
                             status: sat.status as 'online' | 'degraded' | 'maneuvering' | 'offline',
                             fuelPercent: sat.fuelPercent,
                           }))}
                           showManeuvers={true}
                           showDataLinks={true}
+                          simulationTime={simTime}
                         />
                         <MilitarySymbolLayer
                           viewer={viewer}
@@ -1261,6 +1289,32 @@ export default function MapPage() {
       {/* SAR Simulation UI */}
       {isSimulationMode && (
         <>
+          {/* Start Mission Button - Only show when simulation hasn't started */}
+          {!simIsPlaying && !simIsComplete && simTime === 0 && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+              <div className="bg-slate-900 border border-cyan-500 rounded-lg p-8 max-w-lg text-center shadow-2xl">
+                <h2 className="text-2xl font-bold text-cyan-400 mb-4">Operation Guardian Angel</h2>
+                <p className="text-slate-300 mb-6">
+                  Allied special forces team Phantom-6 has been isolated 45km southwest of Misrata.
+                  Your mission: Execute precision SAR operation using satellite overwatch and ground assets.
+                </p>
+                <div className="space-y-2 text-sm text-slate-400 mb-6">
+                  <p>Mission Duration: 4 hours (compressed to 2 minutes)</p>
+                  <p>Primary Asset: ReconSat-1</p>
+                  <p>Extraction Unit: MH-60 Seahawk</p>
+                </div>
+                <Button
+                  intent={Intent.SUCCESS}
+                  large
+                  onClick={simStart}
+                  icon="play"
+                  className="px-8 py-3 text-lg font-bold"
+                >
+                  START MISSION
+                </Button>
+              </div>
+            </div>
+          )}
           <MissionHUD
             simulationTime={simTime}
             totalDuration={simTotalDuration}

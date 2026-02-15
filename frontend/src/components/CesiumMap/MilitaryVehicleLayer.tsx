@@ -1,11 +1,11 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
-import * as Cesium from 'cesium';
+import { useEffect, useRef, useState } from 'react';
+import { getCesium, type CesiumModule } from '@/lib/cesium/loader';
 import { PositionReport } from '@/lib/api';
 
 interface MilitaryVehicleLayerProps {
-  viewer: Cesium.Viewer | null;
+  viewer: CesiumModule.Viewer | null;
   vehicles: PositionReport[];
   show?: boolean;
 }
@@ -16,9 +16,14 @@ export function MilitaryVehicleLayer({
   show = true,
 }: MilitaryVehicleLayerProps) {
   const cleanupRef = useRef<(() => void) | null>(null);
+  const [Cesium, setCesium] = useState<CesiumModule | null>(null);
 
   useEffect(() => {
-    if (!viewer) return;
+    getCesium().then(setCesium);
+  }, []);
+
+  useEffect(() => {
+    if (!viewer || !Cesium) return;
 
     if (cleanupRef.current) {
       cleanupRef.current();
@@ -123,7 +128,7 @@ export function MilitaryVehicleLayer({
         label: {
           text: vehicle.entity_id,
           font: 'bold 12px IBM Plex Sans',
-          fillColor: getFactionColor(vehicle.entity_id),
+          fillColor: getFactionColor(Cesium, vehicle.entity_id),
           outlineColor: Cesium.Color.BLACK,
           outlineWidth: 2,
           style: Cesium.LabelStyle.FILL_AND_OUTLINE,
@@ -148,7 +153,7 @@ export function MilitaryVehicleLayer({
           polyline: {
             positions: [position, arrowEnd],
             width: 4,
-            material: getFactionColor(vehicle.entity_id).withAlpha(0.9),
+            material: getFactionColor(Cesium, vehicle.entity_id).withAlpha(0.9),
           },
         });
         currentEntities.add(`vehicle-arrow-${vehicle.entity_id}`);
@@ -166,7 +171,7 @@ export function MilitaryVehicleLayer({
       }
       currentEntities.clear();
     };
-  }, [viewer, vehicles, show]);
+  }, [viewer, vehicles, show, Cesium]);
 
   useEffect(() => {
     return () => {
@@ -245,7 +250,7 @@ function getVehicleConfig(type: string): VehicleConfig {
   return configs[type] || configs.jeep;
 }
 
-function getFactionColor(entityId: string): Cesium.Color {
+function getFactionColor(Cesium: CesiumModule, entityId: string): CesiumModule.Color {
   const lowerId = entityId.toLowerCase();
   if (lowerId.includes('alpha') || lowerId.includes('friendly') || lowerId.includes('friend')) {
     return Cesium.Color.LIMEGREEN;

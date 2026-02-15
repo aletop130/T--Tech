@@ -1,11 +1,11 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
-import * as Cesium from 'cesium';
+import { useEffect, useRef, useState } from 'react';
+import { getCesium, type CesiumModule } from '@/lib/cesium/loader';
 import { PositionReport } from '@/lib/api';
 
 interface GroundVehicleLayerProps {
-  viewer: Cesium.Viewer | null;
+  viewer: CesiumModule.Viewer | null;
   vehicles: PositionReport[];
   show?: boolean;
 }
@@ -16,9 +16,14 @@ export function GroundVehicleLayer({
   show = true,
 }: GroundVehicleLayerProps) {
   const cleanupRef = useRef<(() => void) | null>(null);
+  const [Cesium, setCesium] = useState<CesiumModule | null>(null);
 
   useEffect(() => {
-    if (!viewer) return;
+    getCesium().then(setCesium);
+  }, []);
+
+  useEffect(() => {
+    if (!viewer || !Cesium) return;
 
     if (cleanupRef.current) {
       cleanupRef.current();
@@ -114,7 +119,7 @@ export function GroundVehicleLayer({
       }
       currentEntities.clear();
     };
-  }, [viewer, vehicles, show]);
+  }, [viewer, vehicles, show, Cesium]);
 
   useEffect(() => {
     return () => {

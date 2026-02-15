@@ -1,11 +1,11 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
-import * as Cesium from 'cesium';
+import { useEffect, useRef, useState } from 'react';
+import { getCesium, type CesiumModule } from '@/lib/cesium/loader';
 import { GroundStation } from '@/lib/api';
 
 interface GroundStationLayerProps {
-  viewer: Cesium.Viewer | null;
+  viewer: CesiumModule.Viewer | null;
   stations: GroundStation[];
   showCoverage?: boolean;
   coverageRadiusKm?: number;
@@ -18,9 +18,14 @@ export function GroundStationLayer({
   coverageRadiusKm = 2000,
 }: GroundStationLayerProps) {
   const cleanupRef = useRef<(() => void) | null>(null);
+  const [Cesium, setCesium] = useState<CesiumModule | null>(null);
 
   useEffect(() => {
-    if (!viewer) return;
+    getCesium().then(setCesium);
+  }, []);
+
+  useEffect(() => {
+    if (!viewer || !Cesium) return;
 
     if (cleanupRef.current) {
       cleanupRef.current();
@@ -113,7 +118,7 @@ export function GroundStationLayer({
       }
       currentEntities.clear();
     };
-  }, [viewer, stations, showCoverage, coverageRadiusKm]);
+  }, [viewer, stations, showCoverage, coverageRadiusKm, Cesium]);
 
   useEffect(() => {
     return () => {

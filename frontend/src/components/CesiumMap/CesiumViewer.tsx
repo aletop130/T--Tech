@@ -1,29 +1,22 @@
 import { useEffect, useRef, useState, useCallback, memo } from 'react';
+import { getCesium, type CesiumModule } from '@/lib/cesium/loader';
 import { Viewer, useCesium } from 'resium';
-import * as Cesium from 'cesium';
-
-declare global {
-  interface Window {
-    CESIUM_BASE_URL?: string;
-  }
-}
-
-if (typeof window !== 'undefined') {
-  window.CESIUM_BASE_URL = '/cesium/';
-  (Cesium.buildModuleUrl as unknown as { setBaseUrl: (url: string) => void }).setBaseUrl('/cesium/');
-
-  if (process.env.NEXT_PUBLIC_CESIUM_ION_TOKEN) {
-    Cesium.Ion.defaultAccessToken = process.env.NEXT_PUBLIC_CESIUM_ION_TOKEN;
-  }
-}
 
 interface CesiumViewerProps {
   className?: string;
-  onViewerReady?: (viewer: Cesium.Viewer) => void;
+  onViewerReady?: (viewer: CesiumModule.Viewer) => void;
   showTerrain?: boolean;
 }
 
-const ViewerConfig = memo(function ViewerConfig({ onViewerReady, showTerrain }: { onViewerReady?: (viewer: Cesium.Viewer) => void; showTerrain?: boolean }) {
+const ViewerConfig = memo(function ViewerConfig({ 
+  onViewerReady, 
+  showTerrain,
+  Cesium 
+}: { 
+  onViewerReady?: (viewer: CesiumModule.Viewer) => void; 
+  showTerrain?: boolean;
+  Cesium: CesiumModule;
+}) {
   const { viewer } = useCesium();
   const isConfiguredRef = useRef(false);
   const terrainLoadedRef = useRef(false);
@@ -102,7 +95,7 @@ const ViewerConfig = memo(function ViewerConfig({ onViewerReady, showTerrain }: 
         onViewerReady(viewer);
       }
     }
-  }, [viewer, onViewerReady, showTerrain]);
+  }, [viewer, onViewerReady, showTerrain, Cesium]);
 
   useEffect(() => {
     handleReady();
@@ -114,15 +107,19 @@ const ViewerConfig = memo(function ViewerConfig({ onViewerReady, showTerrain }: 
 export const CesiumViewer = memo(function CesiumViewer({ className, onViewerReady, showTerrain }: CesiumViewerProps) {
   const creditContainerRef = useRef<HTMLDivElement | null>(null);
   const [isMounted, setIsMounted] = useState(false);
+  const [cesium, setCesium] = useState<CesiumModule | null>(null);
 
   useEffect(() => {
     setIsMounted(true);
     if (typeof document !== 'undefined' && !creditContainerRef.current) {
       creditContainerRef.current = document.createElement('div');
     }
+
+    // Dynamically load Cesium
+    getCesium().then(setCesium);
   }, []);
 
-  if (!isMounted) {
+  if (!isMounted || !cesium) {
     return (
       <div className={className} style={{ width: '100%', height: '100%', backgroundColor: '#000', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <div style={{ color: '#fff' }}>Loading Cesium...</div>
@@ -147,7 +144,7 @@ export const CesiumViewer = memo(function CesiumViewer({ className, onViewerRead
          creditContainer={creditContainerRef.current ?? undefined}
          skyBox={false}
        >
-        <ViewerConfig onViewerReady={onViewerReady} />
+        <ViewerConfig onViewerReady={onViewerReady} showTerrain={showTerrain} Cesium={cesium} />
       </Viewer>
     </div>
   );

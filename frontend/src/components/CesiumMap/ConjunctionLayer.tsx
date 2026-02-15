@@ -1,13 +1,13 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
-import * as Cesium from 'cesium';
+import { useEffect, useRef, useState } from 'react';
+import { getCesium, type CesiumModule } from '@/lib/cesium/loader';
 import { ConjunctionEvent } from '@/lib/api';
 
 interface ConjunctionLayerProps {
-  viewer: Cesium.Viewer | null;
+  viewer: CesiumModule.Viewer | null;
   conjunctions: ConjunctionEvent[];
-  satellitePositions: Map<string, Cesium.Cartesian3>;
+  satellitePositions: Map<string, CesiumModule.Cartesian3>;
 }
 
 export function ConjunctionLayer({
@@ -16,9 +16,14 @@ export function ConjunctionLayer({
   satellitePositions,
 }: ConjunctionLayerProps) {
   const cleanupRef = useRef<(() => void) | null>(null);
+  const [Cesium, setCesium] = useState<CesiumModule | null>(null);
 
   useEffect(() => {
-    if (!viewer) return;
+    getCesium().then(setCesium);
+  }, []);
+
+  useEffect(() => {
+    if (!viewer || !Cesium) return;
 
     if (cleanupRef.current) {
       cleanupRef.current();
@@ -101,7 +106,7 @@ export function ConjunctionLayer({
       }
       currentEntities.clear();
     };
-  }, [viewer, conjunctions, satellitePositions]);
+  }, [viewer, conjunctions, satellitePositions, Cesium]);
 
   useEffect(() => {
     return () => {

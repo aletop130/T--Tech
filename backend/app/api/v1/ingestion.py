@@ -145,3 +145,50 @@ async def process_space_weather_file(
         user_id=user.sub,
     )
 
+
+@router.post(
+    "/upload/observations",
+    response_model=UploadResponse,
+    status_code=201
+)
+async def upload_observations_file(
+    file: Annotated[UploadFile, File()],
+    user: Annotated[TokenData, Depends(get_current_user)],
+    service: Annotated[IngestionService, Depends(get_ingestion_service)],
+):
+    """Upload observations data (sensor measurements, radar data, etc.)."""
+    content = await file.read()
+    
+    run = await service.upload_file(
+        file_data=content,
+        filename=file.filename or "observations.json",
+        source_type=DataSourceType.OBSERVATIONS_JSON,
+        tenant_id=user.tenant_id,
+        user_id=user.sub,
+    )
+    
+    return UploadResponse(
+        run_id=run.id,
+        filename=file.filename or "observations.json",
+        file_size=len(content),
+        minio_path=run.source_path or "",
+        status=run.status,
+    )
+
+
+@router.post(
+    "/process/observations/{run_id}",
+    response_model=IngestionRunResponse
+)
+async def process_observations_file(
+    run_id: Annotated[str, Path()],
+    user: Annotated[TokenData, Depends(get_current_user)],
+    service: Annotated[IngestionService, Depends(get_ingestion_service)],
+):
+    """Process uploaded observations data."""
+    return await service.process_observations_json(
+        run_id=run_id,
+        tenant_id=user.tenant_id,
+        user_id=user.sub,
+    )
+

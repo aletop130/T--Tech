@@ -1,4 +1,4 @@
-import * as Cesium from 'cesium';
+import { getCesium, type CesiumModule } from './loader';
 
 export interface CesiumAction {
   type: 'cesium.setClock' | 'cesium.loadCzml' | 'cesium.addEntity' | 'cesium.flyTo' | 'cesium.flyToCountry' | 'cesium.searchLocation' | 'cesium.toggle' | 'cesium.removeLayer' | 'cesium.setSelected';
@@ -27,16 +27,18 @@ export interface CesiumSceneState {
   };
 }
 
-type ActionHandler = (payload: Record<string, unknown>) => void;
+type ActionHandler = (payload: Record<string, unknown>, Cesium: CesiumModule) => void;
 
 class CesiumControllerClass {
-  private viewer: Cesium.Viewer | null = null;
+  private viewer: CesiumModule.Viewer | null = null;
   private actionHandlers: Map<string, ActionHandler> = new Map();
   private eventListeners: Map<string, Set<(action: CesiumAction) => void>> = new Map();
   private isFlying: boolean = false;
+  private Cesium: CesiumModule | null = null;
 
-  initialize(viewer: Cesium.Viewer): void {
+  async initialize(viewer: CesiumModule.Viewer): Promise<void> {
     this.viewer = viewer;
+    this.Cesium = await getCesium();
     this.registerDefaultHandlers();
   }
 
@@ -100,8 +102,8 @@ class CesiumControllerClass {
 
   dispatch(action: CesiumAction): void {
     const handler = this.actionHandlers.get(action.type);
-    if (handler) {
-      handler(action.payload);
+    if (handler && this.Cesium) {
+      handler(action.payload, this.Cesium);
     }
 
     this.eventListeners.get(action.type)?.forEach(callback => callback(action));
@@ -113,7 +115,7 @@ class CesiumControllerClass {
   }
 
   getSceneState(): CesiumSceneState {
-    if (!this.viewer) {
+    if (!this.viewer || !this.Cesium) {
       return {
         camera: { longitude: 0, latitude: 0, altitude: 0, heading: 0, pitch: 0, roll: 0 },
         clock: { currentTime: '', startTime: '', stopTime: '', multiplier: 1 },
@@ -123,22 +125,22 @@ class CesiumControllerClass {
 
     const camera = this.viewer.camera;
     const cartesian = camera.position;
-    const cartographic = Cesium.Cartographic.fromCartesian(cartesian);
+    const cartographic = this.Cesium.Cartographic.fromCartesian(cartesian);
     const clock = this.viewer.clock;
 
     return {
       camera: {
-        longitude: Cesium.Math.toDegrees(cartographic.longitude),
-        latitude: Cesium.Math.toDegrees(cartographic.latitude),
+        longitude: this.Cesium.Math.toDegrees(cartographic.longitude),
+        latitude: this.Cesium.Math.toDegrees(cartographic.latitude),
         altitude: cartographic.height,
-        heading: Cesium.Math.toDegrees(camera.heading),
-        pitch: Cesium.Math.toDegrees(camera.pitch),
-        roll: Cesium.Math.toDegrees(camera.roll),
+        heading: this.Cesium.Math.toDegrees(camera.heading),
+        pitch: this.Cesium.Math.toDegrees(camera.pitch),
+        roll: this.Cesium.Math.toDegrees(camera.roll),
       },
       clock: {
-        currentTime: clock.currentTime ? Cesium.JulianDate.toIso8601(clock.currentTime) : new Date().toISOString(),
-        startTime: clock.startTime ? Cesium.JulianDate.toIso8601(clock.startTime) : new Date().toISOString(),
-        stopTime: clock.stopTime ? Cesium.JulianDate.toIso8601(clock.stopTime) : new Date().toISOString(),
+        currentTime: clock.currentTime ? this.Cesium.JulianDate.toIso8601(clock.currentTime) : new Date().toISOString(),
+        startTime: clock.startTime ? this.Cesium.JulianDate.toIso8601(clock.startTime) : new Date().toISOString(),
+        stopTime: clock.stopTime ? this.Cesium.JulianDate.toIso8601(clock.stopTime) : new Date().toISOString(),
         multiplier: clock.multiplier,
       },
       entities: {
@@ -149,7 +151,7 @@ class CesiumControllerClass {
     };
   }
 
-  private handleSetClock(payload: Record<string, unknown>): void {
+  private handleSetClock(payload: Record<string, unknown>, Cesium: CesiumModule): void {
     if (!this.viewer) return;
 
     const start = payload.start as string;
@@ -175,11 +177,11 @@ class CesiumControllerClass {
     clock.shouldAnimate = true;
   }
 
-  private handleLoadCzml(payload: Record<string, unknown>): void {
+  private handleLoadCzml(payload: Record<string, unknown>, Cesium: CesiumModule): void {
     if (!this.viewer) return;
 
     const layerId = payload.layerId as string;
-    const data = payload.data as Cesium.CzmlDataSource | undefined;
+    const data = payload.data as CesiumModule.CzmlDataSource | undefined;
 
     if (data && this.viewer) {
       Cesium.CzmlDataSource.load(data).then(dataSource => {
@@ -193,7 +195,7 @@ class CesiumControllerClass {
     }
   }
 
-  private handleAddEntity(payload: Record<string, unknown>): void {
+  private handleAddEntity(payload: Record<string, unknown>, Cesium: CesiumModule): void {
     if (!this.viewer) return;
 
     const entityType = payload.entityType as string;
@@ -254,14 +256,14 @@ class CesiumControllerClass {
       case 'point':
         entity.point = new Cesium.PointGraphics({
           pixelSize: new Cesium.ConstantProperty((properties?.pixelSize as number) || 8),
-          color: new Cesium.ConstantProperty((properties?.color as Cesium.Color) || Cesium.Color.YELLOW),
+          color: new Cesium.ConstantProperty((properties?.color as CesiumModule.Color) || Cesium.Color.YELLOW),
         });
         break;
 
       case 'polygon':
         entity.polygon = new Cesium.PolygonGraphics({
           hierarchy: new Cesium.PolygonHierarchy([positionCartesian]),
-          material: (properties?.material as Cesium.Color) || Cesium.Color.RED.withAlpha(0.5),
+          material: (properties?.material as CesiumModule.Color) || Cesium.Color.RED.withAlpha(0.5),
         });
         break;
 
@@ -269,7 +271,7 @@ class CesiumControllerClass {
         entity.polyline = new Cesium.PolylineGraphics({
           positions: [positionCartesian],
           width: (properties?.width as number) || 2,
-          material: (properties?.material as Cesium.Color) || Cesium.Color.YELLOW,
+          material: (properties?.material as CesiumModule.Color) || Cesium.Color.YELLOW,
         });
         break;
     }
@@ -291,7 +293,7 @@ class CesiumControllerClass {
     entity.properties.addProperty('objectType', entityType);
   }
 
-  private handleFlyTo(payload: Record<string, unknown>): void {
+  private handleFlyTo(payload: Record<string, unknown>, Cesium: CesiumModule): void {
     if (!this.viewer || this.isFlying) return;
 
     const entityId = payload.entityId as string | undefined;
@@ -340,7 +342,7 @@ class CesiumControllerClass {
     }
   }
 
-  private handleFlyToCountry(payload: Record<string, unknown>): void {
+  private handleFlyToCountry(payload: Record<string, unknown>, Cesium: CesiumModule): void {
     if (!this.viewer || this.isFlying) return;
 
     const country = payload.country as string;
@@ -368,7 +370,7 @@ class CesiumControllerClass {
     });
   }
 
-  private async handleSearchLocation(payload: Record<string, unknown>): Promise<void> {
+  private async handleSearchLocation(payload: Record<string, unknown>, Cesium: CesiumModule): Promise<void> {
     if (!this.viewer || this.isFlying) return;
 
     const query = payload.query as string;
@@ -431,7 +433,7 @@ class CesiumControllerClass {
     }
   }
 
-  private handleToggle(payload: Record<string, unknown>): void {
+  private handleToggle(payload: Record<string, unknown>, Cesium: CesiumModule): void {
     if (!this.viewer) return;
 
     const showOrbits = payload.showOrbits as boolean | undefined;
@@ -463,7 +465,7 @@ class CesiumControllerClass {
 
   private toggleCoverageLayers(show: boolean): void {
     if (!this.viewer) return;
-    (this.viewer.dataSources as unknown as { dataSources: Cesium.DataSource[] }).dataSources.forEach(dataSource => {
+    (this.viewer.dataSources as unknown as { dataSources: CesiumModule.DataSource[] }).dataSources.forEach(dataSource => {
       const layerId = (dataSource as any).layerId;
       if (layerId && layerId.includes('coverage')) {
         dataSource.show = show;
@@ -473,7 +475,7 @@ class CesiumControllerClass {
 
   private toggleConjunctionLayers(show: boolean): void {
     if (!this.viewer) return;
-    (this.viewer.dataSources as unknown as { dataSources: Cesium.DataSource[] }).dataSources.forEach(dataSource => {
+    (this.viewer.dataSources as unknown as { dataSources: CesiumModule.DataSource[] }).dataSources.forEach(dataSource => {
       const layerId = (dataSource as any).layerId;
       if (layerId && layerId.includes('conjunction')) {
         dataSource.show = show;
@@ -486,7 +488,7 @@ class CesiumControllerClass {
 
     const layerId = payload.layerId as string;
 
-    const dataSources = (this.viewer.dataSources as unknown as { dataSources: Cesium.DataSource[] }).dataSources;
+    const dataSources = (this.viewer.dataSources as unknown as { dataSources: CesiumModule.DataSource[] }).dataSources;
     for (let i = dataSources.length - 1; i >= 0; i--) {
       const dataSource = dataSources[i];
       if ((dataSource as any).layerId === layerId) {
@@ -515,6 +517,7 @@ class CesiumControllerClass {
     this.actionHandlers.clear();
     this.eventListeners.clear();
     this.viewer = null;
+    this.Cesium = null;
   }
 
   // Route and Trajectory Visualization
@@ -535,11 +538,11 @@ class CesiumControllerClass {
       longitude: number;
       altitudeKm: number;
     }>;
-  }): Cesium.Entity | null {
-    if (!this.viewer) return null;
+  }): CesiumModule.Entity | null {
+    if (!this.viewer || !this.Cesium) return null;
 
     const positions = route.waypoints.map(wp =>
-      Cesium.Cartesian3.fromDegrees(
+      this.Cesium!.Cartesian3.fromDegrees(
         wp.positionLon,
         wp.positionLat,
         (wp.positionAltKm || 0) * 1000
@@ -552,9 +555,9 @@ class CesiumControllerClass {
       polyline: {
         positions: positions,
         width: 3,
-        material: new Cesium.PolylineGlowMaterialProperty({
+        material: new this.Cesium.PolylineGlowMaterialProperty({
           glowPower: 0.2,
-          color: Cesium.Color.CYAN,
+          color: this.Cesium.Color.CYAN,
         }),
         clampToGround: false,
       },
@@ -564,26 +567,26 @@ class CesiumControllerClass {
       this.viewer!.entities.add({
         id: `route-${route.id}-wp-${index}`,
         name: wp.name || `WP ${index + 1}`,
-        position: Cesium.Cartesian3.fromDegrees(
+        position: this.Cesium!.Cartesian3.fromDegrees(
           wp.positionLon,
           wp.positionLat,
           (wp.positionAltKm || 0) * 1000
         ),
         point: {
           pixelSize: 10,
-          color: Cesium.Color.YELLOW,
-          outlineColor: Cesium.Color.WHITE,
+          color: this.Cesium!.Color.YELLOW,
+          outlineColor: this.Cesium!.Color.WHITE,
           outlineWidth: 2,
         },
         label: {
           text: wp.name || `WP ${index + 1}`,
           font: '12px monospace',
-          fillColor: Cesium.Color.YELLOW,
-          outlineColor: Cesium.Color.BLACK,
+          fillColor: this.Cesium!.Color.YELLOW,
+          outlineColor: this.Cesium!.Color.BLACK,
           outlineWidth: 2,
-          style: Cesium.LabelStyle.FILL_AND_OUTLINE,
-          verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
-          pixelOffset: new Cesium.Cartesian2(0, -15),
+          style: this.Cesium!.LabelStyle.FILL_AND_OUTLINE,
+          verticalOrigin: this.Cesium!.VerticalOrigin.BOTTOM,
+          pixelOffset: new this.Cesium!.Cartesian2(0, -15),
         },
       });
     });
@@ -604,11 +607,11 @@ class CesiumControllerClass {
     latitude: number;
     longitude: number;
     altitudeKm: number;
-  }>): Cesium.Entity | null {
-    if (!this.viewer || trajectory.length === 0) return null;
+  }>): CesiumModule.Entity | null {
+    if (!this.viewer || !this.Cesium || trajectory.length === 0) return null;
 
     const positions = trajectory.map(t =>
-      Cesium.Cartesian3.fromDegrees(t.longitude, t.latitude, t.altitudeKm * 1000)
+      this.Cesium!.Cartesian3.fromDegrees(t.longitude, t.latitude, t.altitudeKm * 1000)
     );
 
     return this.viewer.entities.add({
@@ -616,8 +619,8 @@ class CesiumControllerClass {
       polyline: {
         positions: positions,
         width: 2,
-        material: new Cesium.PolylineDashMaterialProperty({
-          color: Cesium.Color.CYAN.withAlpha(0.8),
+        material: new this.Cesium.PolylineDashMaterialProperty({
+          color: this.Cesium.Color.CYAN.withAlpha(0.8),
         }),
       },
     });
@@ -637,7 +640,7 @@ class CesiumControllerClass {
       relativeZ: number;
     }>;
   }): void {
-    if (!this.viewer) return;
+    if (!this.viewer || !this.Cesium) return;
 
     const leaderEntity = this.viewer.entities.getById(formation.leaderEntityId);
     if (!leaderEntity) return;
@@ -650,9 +653,9 @@ class CesiumControllerClass {
         this.viewer!.entities.add({
           id: `formation-link-${formation.id}-${member.entityId}`,
           polyline: {
-            positions: new Cesium.CallbackProperty(() => {
+            positions: new this.Cesium.CallbackProperty(() => {
               if (!leaderEntity.position || !memberEntity.position) return [];
-              return [leaderEntity.position.getValue(Cesium.JulianDate.now())!, memberEntity.position.getValue(Cesium.JulianDate.now())!];
+              return [leaderEntity.position.getValue(this.Cesium!.JulianDate.now())!, memberEntity.position.getValue(this.Cesium!.JulianDate.now())!];
             }, false),
             width: 1,
             material: formationColor.withAlpha(0.5),
@@ -662,20 +665,22 @@ class CesiumControllerClass {
     });
   }
 
-  private getFormationColor(formationType: string): Cesium.Color {
+  private getFormationColor(formationType: string): CesiumModule.Color {
+    if (!this.Cesium) return new (this.Cesium || window.Cesium).Color(1, 1, 1, 1);
+    
     switch (formationType) {
       case 'v_shape':
-        return Cesium.Color.LIME;
+        return this.Cesium.Color.LIME;
       case 'line':
-        return Cesium.Color.CYAN;
+        return this.Cesium.Color.CYAN;
       case 'diamond':
-        return Cesium.Color.ORANGE;
+        return this.Cesium.Color.ORANGE;
       case 'echelon':
-        return Cesium.Color.MAGENTA;
+        return this.Cesium.Color.MAGENTA;
       case 'circle':
-        return Cesium.Color.YELLOW;
+        return this.Cesium.Color.YELLOW;
       default:
-        return Cesium.Color.WHITE;
+        return this.Cesium.Color.WHITE;
     }
   }
 
@@ -692,8 +697,8 @@ class CesiumControllerClass {
     name: string;
     operationType: string;
     participatingEntities: string[];
-  }): Cesium.Entity | null {
-    if (!this.viewer) return null;
+  }): CesiumModule.Entity | null {
+    if (!this.viewer || !this.Cesium) return null;
 
     const operationColor = this.getOperationColor(operation.operationType);
 
@@ -704,26 +709,26 @@ class CesiumControllerClass {
     operation.participatingEntities.forEach(entityId => {
       const entity = this.viewer!.entities.getById(entityId);
       if (entity?.position) {
-        const pos = entity.position.getValue(Cesium.JulianDate.now());
+        const pos = entity.position.getValue(this.Cesium!.JulianDate.now());
         if (pos) {
-          const cartographic = Cesium.Cartographic.fromCartesian(pos);
-          bounds.minLat = Math.min(bounds.minLat, Cesium.Math.toDegrees(cartographic.latitude));
-          bounds.maxLat = Math.max(bounds.maxLat, Cesium.Math.toDegrees(cartographic.latitude));
-          bounds.minLon = Math.min(bounds.minLon, Cesium.Math.toDegrees(cartographic.longitude));
-          bounds.maxLon = Math.max(bounds.maxLon, Cesium.Math.toDegrees(cartographic.longitude));
+          const cartographic = this.Cesium!.Cartographic.fromCartesian(pos);
+          bounds.minLat = Math.min(bounds.minLat, this.Cesium!.Math.toDegrees(cartographic.latitude));
+          bounds.maxLat = Math.max(bounds.maxLat, this.Cesium!.Math.toDegrees(cartographic.latitude));
+          bounds.minLon = Math.min(bounds.minLon, this.Cesium!.Math.toDegrees(cartographic.longitude));
+          bounds.maxLon = Math.max(bounds.maxLon, this.Cesium!.Math.toDegrees(cartographic.longitude));
         }
       }
     });
 
     const centerLon = (bounds.minLon + bounds.maxLon) / 2;
     const centerLat = (bounds.minLat + bounds.maxLat) / 2;
-    const width = (bounds.maxLon - bounds.minLon) * 111000 * Math.cos(Cesium.Math.toRadians(centerLat));
+    const width = (bounds.maxLon - bounds.minLon) * 111000 * Math.cos(this.Cesium!.Math.toRadians(centerLat));
     const height = (bounds.maxLat - bounds.minLat) * 111000;
 
     return this.viewer.entities.add({
       id: `operation-${operation.id}`,
       name: operation.name,
-      position: Cesium.Cartesian3.fromDegrees(centerLon, centerLat),
+      position: this.Cesium!.Cartesian3.fromDegrees(centerLon, centerLat),
       ellipse: {
         semiMinorAxis: Math.max(width, height) / 2,
         semiMajorAxis: Math.max(width, height) / 2,
@@ -735,20 +740,22 @@ class CesiumControllerClass {
     });
   }
 
-  private getOperationColor(operationType: string): Cesium.Color {
+  private getOperationColor(operationType: string): CesiumModule.Color {
+    if (!this.Cesium) return new (this.Cesium || window.Cesium).Color(1, 1, 1, 1);
+    
     switch (operationType) {
       case 'strike':
-        return Cesium.Color.RED;
+        return this.Cesium.Color.RED;
       case 'patrol':
-        return Cesium.Color.GREEN;
+        return this.Cesium.Color.GREEN;
       case 'intercept':
-        return Cesium.Color.ORANGE;
+        return this.Cesium.Color.ORANGE;
       case 'reconnaissance':
-        return Cesium.Color.CYAN;
+        return this.Cesium.Color.CYAN;
       case 'support':
-        return Cesium.Color.BLUE;
+        return this.Cesium.Color.BLUE;
       default:
-        return Cesium.Color.WHITE;
+        return this.Cesium.Color.WHITE;
     }
   }
 
@@ -765,7 +772,7 @@ class CesiumControllerClass {
     riskLevel: string;
     missDistanceKm: number;
   }): void {
-    if (!this.viewer) return;
+    if (!this.viewer || !this.Cesium) return;
 
     const entityA = this.viewer.entities.getById(alert.entityAId);
     const entityB = this.viewer.entities.getById(alert.entityBId);
@@ -777,14 +784,14 @@ class CesiumControllerClass {
     this.viewer.entities.add({
       id: `collision-${alert.id}`,
       polyline: {
-        positions: new Cesium.CallbackProperty(() => {
-          const posA = entityA.position!.getValue(Cesium.JulianDate.now());
-          const posB = entityB.position!.getValue(Cesium.JulianDate.now());
+        positions: new this.Cesium.CallbackProperty(() => {
+          const posA = entityA.position!.getValue(this.Cesium!.JulianDate.now());
+          const posB = entityB.position!.getValue(this.Cesium!.JulianDate.now());
           if (!posA || !posB) return [];
           return [posA, posB];
         }, false) as any,
         width: 3,
-        material: new Cesium.PolylineGlowMaterialProperty({
+        material: new this.Cesium.PolylineGlowMaterialProperty({
           glowPower: 0.3,
           color: riskColor,
         }),
@@ -793,43 +800,45 @@ class CesiumControllerClass {
 
     this.viewer.entities.add({
       id: `collision-warning-${alert.id}`,
-      position: new Cesium.CallbackProperty(() => {
-        const posA = entityA.position!.getValue(Cesium.JulianDate.now());
-        const posB = entityB.position!.getValue(Cesium.JulianDate.now());
-        if (!posA || !posB) return Cesium.Cartesian3.ZERO;
-        return Cesium.Cartesian3.midpoint(posA, posB, new Cesium.Cartesian3());
+      position: new this.Cesium.CallbackProperty(() => {
+        const posA = entityA.position!.getValue(this.Cesium!.JulianDate.now());
+        const posB = entityB.position!.getValue(this.Cesium!.JulianDate.now());
+        if (!posA || !posB) return this.Cesium!.Cartesian3.ZERO;
+        return this.Cesium!.Cartesian3.midpoint(posA, posB, new this.Cesium.Cartesian3());
       }, false) as any,
       point: {
         pixelSize: 15,
         color: riskColor,
-        outlineColor: Cesium.Color.WHITE,
+        outlineColor: this.Cesium.Color.WHITE,
         outlineWidth: 2,
       },
       label: {
         text: `ALERT: ${alert.riskLevel.toUpperCase()}`,
         font: '14px monospace',
         fillColor: riskColor,
-        outlineColor: Cesium.Color.BLACK,
+        outlineColor: this.Cesium.Color.BLACK,
         outlineWidth: 2,
-        style: Cesium.LabelStyle.FILL_AND_OUTLINE,
-        verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
-        pixelOffset: new Cesium.Cartesian2(0, -20),
+        style: this.Cesium.LabelStyle.FILL_AND_OUTLINE,
+        verticalOrigin: this.Cesium.VerticalOrigin.BOTTOM,
+        pixelOffset: new this.Cesium.Cartesian2(0, -20),
       },
     });
   }
 
-  private getRiskColor(riskLevel: string): Cesium.Color {
+  private getRiskColor(riskLevel: string): CesiumModule.Color {
+    if (!this.Cesium) return this.Cesium!.Color.WHITE;
+    
     switch (riskLevel.toLowerCase()) {
       case 'critical':
-        return Cesium.Color.RED;
+        return this.Cesium.Color.RED;
       case 'high':
-        return Cesium.Color.ORANGE;
+        return this.Cesium.Color.ORANGE;
       case 'medium':
-        return Cesium.Color.YELLOW;
+        return this.Cesium.Color.YELLOW;
       case 'low':
-        return Cesium.Color.GREEN;
+        return this.Cesium.Color.GREEN;
       default:
-        return Cesium.Color.WHITE;
+        return this.Cesium.Color.WHITE;
     }
   }
 
@@ -847,7 +856,7 @@ class CesiumControllerClass {
     deltaV: { x: number; y: number; z: number };
     burnDurationSec: number;
   }): void {
-    if (!this.viewer) return;
+    if (!this.viewer || !this.Cesium) return;
 
     const entity = this.viewer.entities.getById(maneuver.entityId);
     if (!entity?.position) return;
@@ -861,22 +870,22 @@ class CesiumControllerClass {
     this.viewer.entities.add({
       id: `maneuver-${maneuver.id}`,
       name: `Maneuver: ${deltaVMag.toFixed(2)} m/s`,
-      position: entity.position.getValue(Cesium.JulianDate.now()) || Cesium.Cartesian3.ZERO,
+      position: entity.position.getValue(this.Cesium.JulianDate.now()) || this.Cesium.Cartesian3.ZERO,
       point: {
         pixelSize: 12,
-        color: Cesium.Color.MAGENTA,
-        outlineColor: Cesium.Color.WHITE,
+        color: this.Cesium.Color.MAGENTA,
+        outlineColor: this.Cesium.Color.WHITE,
         outlineWidth: 2,
       },
       label: {
         text: `Δv: ${deltaVMag.toFixed(1)} m/s`,
         font: '12px monospace',
-        fillColor: Cesium.Color.MAGENTA,
-        outlineColor: Cesium.Color.BLACK,
+        fillColor: this.Cesium.Color.MAGENTA,
+        outlineColor: this.Cesium.Color.BLACK,
         outlineWidth: 2,
-        style: Cesium.LabelStyle.FILL_AND_OUTLINE,
-        verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
-        pixelOffset: new Cesium.Cartesian2(0, -15),
+        style: this.Cesium.LabelStyle.FILL_AND_OUTLINE,
+        verticalOrigin: this.Cesium.VerticalOrigin.BOTTOM,
+        pixelOffset: new this.Cesium.Cartesian2(0, -15),
       },
     });
   }
@@ -887,13 +896,13 @@ class CesiumControllerClass {
     position: { longitude: number; latitude: number; altitude: number },
     velocity?: { vx: number; vy: number; vz: number }
   ): void {
-    if (!this.viewer) return;
+    if (!this.viewer || !this.Cesium) return;
 
     const entity = this.viewer.entities.getById(entityId);
     if (!entity) return;
 
-    entity.position = new Cesium.ConstantPositionProperty(
-      Cesium.Cartesian3.fromDegrees(
+    entity.position = new this.Cesium.ConstantPositionProperty(
+      this.Cesium.Cartesian3.fromDegrees(
         position.longitude,
         position.latitude,
         position.altitude
@@ -901,11 +910,11 @@ class CesiumControllerClass {
     );
 
     if (entity.path) {
-      entity.path = new Cesium.PathGraphics({
+      entity.path = new this.Cesium.PathGraphics({
         resolution: 1,
-        material: new Cesium.PolylineGlowMaterialProperty({
+        material: new this.Cesium.PolylineGlowMaterialProperty({
           glowPower: 0.2,
-          color: Cesium.Color.CYAN,
+          color: this.Cesium.Color.CYAN,
         }),
         width: 2,
         leadTime: 0,
@@ -931,20 +940,20 @@ class CesiumControllerClass {
   }
 
   seekToTime(time: string): void {
-    if (!this.viewer) return;
-    this.viewer.clock.currentTime = Cesium.JulianDate.fromDate(new Date(time));
+    if (!this.viewer || !this.Cesium) return;
+    this.viewer.clock.currentTime = this.Cesium.JulianDate.fromDate(new Date(time));
   }
 
   // Highlight entities
-  highlightEntities(entityIds: string[], color: Cesium.Color = Cesium.Color.YELLOW): void {
+  highlightEntities(entityIds: string[], color: CesiumModule.Color = new (window as any).Cesium.Color(1, 1, 0, 1)): void {
     if (!this.viewer) return;
 
     entityIds.forEach(id => {
       const entity = this.viewer!.entities.getById(id);
       if (entity) {
         if (entity.point) {
-          entity.point.outlineColor = new Cesium.ConstantProperty(color);
-          entity.point.outlineWidth = new Cesium.ConstantProperty(3);
+          entity.point.outlineColor = new (window as any).Cesium.ConstantProperty(color);
+          entity.point.outlineWidth = new (window as any).Cesium.ConstantProperty(3);
         }
       }
     });
@@ -957,8 +966,8 @@ class CesiumControllerClass {
       const entity = this.viewer!.entities.getById(id);
       if (entity) {
         if (entity.point) {
-          entity.point.outlineColor = new Cesium.ConstantProperty(Cesium.Color.WHITE);
-          entity.point.outlineWidth = new Cesium.ConstantProperty(2);
+          entity.point.outlineColor = new (window as any).Cesium.ConstantProperty(new (window as any).Cesium.Color(1, 1, 1, 1));
+          entity.point.outlineWidth = new (window as any).Cesium.ConstantProperty(2);
         }
       }
     });

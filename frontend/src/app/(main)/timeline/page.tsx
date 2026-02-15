@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { Card, Elevation, Icon, Button, Tag, HTMLSelect } from '@blueprintjs/core';
-import { format, addDays, startOfDay } from 'date-fns';
+import { useEffect, useState, useCallback } from 'react';
+import { Card, Elevation, Icon, Button, Tag, HTMLSelect, Spinner } from '@blueprintjs/core';
+import { format, addDays } from 'date-fns';
+import { api } from '@/lib/api';
 
 interface TimelineEvent {
   id: string;
@@ -18,53 +19,54 @@ export default function TimelinePage() {
   const [events, setEvents] = useState<TimelineEvent[]>([]);
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [selectedType, setSelectedType] = useState<string>('all');
+  const [loading, setLoading] = useState(false);
+
+  const loadEvents = useCallback(async (date: Date) => {
+    setLoading(true);
+    try {
+      const dateStr = format(date, 'yyyy-MM-dd');
+      const eventTypes = selectedType === 'all' ? undefined : selectedType;
+      const response = await api.getTimelineEvents({ date: dateStr, event_types: eventTypes });
+      
+      const loadedEvents: TimelineEvent[] = response.events.map((e) => ({
+        id: e.id,
+        type: e.type,
+        title: e.title,
+        time: new Date(e.time),
+        severity: e.severity,
+        details: e.details,
+      }));
+      
+      setEvents(loadedEvents);
+    } catch (error) {
+      console.error('Failed to load timeline events:', error);
+    } finally {
+      setLoading(false);
+    }
+  }, [selectedType]);
 
   useEffect(() => {
-    // Demo events - in production, fetch from API
-    const demoEvents: TimelineEvent[] = [
-      {
-        id: '1',
-        type: 'conjunction',
-        title: 'Close approach: ISS / Debris',
-        time: new Date(),
-        severity: 'high',
-        details: 'Miss distance: 0.5 km',
-      },
-      {
-        id: '2',
-        type: 'space_weather',
-        title: 'Geomagnetic storm warning',
-        time: addDays(new Date(), -0.5),
-        severity: 'moderate',
-        details: 'Kp index: 5',
-      },
-      {
-        id: '3',
-        type: 'incident',
-        title: 'RF interference detected',
-        time: addDays(new Date(), -1),
-        severity: 'medium',
-      },
-      {
-        id: '4',
-        type: 'ingestion',
-        title: 'TLE update completed',
-        time: addDays(new Date(), -1.5),
-        details: '500 objects updated',
-      },
-      {
-        id: '5',
-        type: 'conjunction',
-        title: 'Predicted conjunction: SAT-A / SAT-B',
-        time: addDays(new Date(), 1),
-        severity: 'medium',
-        details: 'TCA in 24 hours',
-      },
-    ];
-    setEvents(demoEvents);
-    setSelectedDate(new Date());
+    const today = new Date();
+    setSelectedDate(today);
+    loadEvents(today);
     setMounted(true);
-  }, []);
+  }, [loadEvents]);
+
+  const handlePrevDay = () => {
+    if (selectedDate) {
+      const newDate = addDays(selectedDate, -1);
+      setSelectedDate(newDate);
+      loadEvents(newDate);
+    }
+  };
+
+  const handleNextDay = () => {
+    if (selectedDate) {
+      const newDate = addDays(selectedDate, 1);
+      setSelectedDate(newDate);
+      loadEvents(newDate);
+    }
+  };
 
   const eventIcon = (type: string) => {
     const icons: Record<string, string> = {
@@ -91,8 +93,7 @@ export default function TimelinePage() {
   );
 
   return (
-    <div className="h-full flex flex-col">
-      {/* Header */}
+    <div className="h-full flex flex-col p-4">
       <div className="flex items-center justify-between mb-4">
         <h1 className="text-2xl font-bold text-sda-text-primary flex items-center gap-2">
           <Icon icon="timeline-events" className="text-sda-accent-cyan" />
@@ -109,80 +110,70 @@ export default function TimelinePage() {
             <option value="incident">Incidents</option>
             <option value="ingestion">Ingestion</option>
           </HTMLSelect>
-          <Button icon="chevron-left" minimal />
+          <Button icon="chevron-left" minimal onClick={handlePrevDay} />
           <Button minimal>{selectedDate ? format(selectedDate, 'MMM d, yyyy') : 'Select date'}</Button>
-          <Button icon="chevron-right" minimal />
+          <Button icon="chevron-right" minimal onClick={handleNextDay} />
         </div>
       </div>
 
-      {/* Timeline */}
-      <Card elevation={Elevation.TWO} className="flex-1 overflow-hidden">
-        <div className="h-full overflow-auto p-4">
-          {/* Time scale */}
-          <div className="flex border-b border-sda-border-default pb-2 mb-4">
-            {Array.from({ length: 24 }, (_, i) => (
-              <div key={i} className="flex-1 text-xs text-sda-text-muted text-center">
-                {i.toString().padStart(2, '0')}:00
-              </div>
-            ))}
-          </div>
+      <Card elevation={Elevation.TWO} className="flex-1 flex flex-col overflow-hidden">
+        <div className="flex items-center gap-2 p-2 text-sda-accent-cyan border-b border-sda-border">
+          <Icon icon="time" />
+          <span className="text-sm">Now: {mounted ? format(new Date(), 'PPpp') : 'Loading...'}</span>
+        </div>
 
-          {/* Events */}
-          <div className="relative">
-            {filteredEvents.map((event, index) => {
-              const hourPosition = event.time.getHours() + event.time.getMinutes() / 60;
-              const leftPercent = (hourPosition / 24) * 100;
-
-              return (
+        <div className="flex-1 overflow-auto p-2">
+          {loading ? (
+            <div className="flex items-center justify-center h-full">
+              <Spinner />
+            </div>
+          ) : filteredEvents.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-full text-sda-text-secondary">
+              <Icon icon="timeline-events" size={48} className="mb-2 opacity-50" />
+              <p>No events for this date</p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {filteredEvents.map((event) => (
                 <div
                   key={event.id}
-                  className="relative mb-8"
+                  className="flex items-start gap-3 p-3 bg-sda-bg-secondary rounded-lg border border-sda-border"
                 >
-                  <div
-                    className="absolute w-4 h-4 rounded-full bg-sda-bg-tertiary border-2 border-sda-accent-cyan z-10"
-                    style={{ left: `${leftPercent}%`, transform: 'translateX(-50%)' }}
+                  <Icon
+                    icon={eventIcon(event.type) as any}
+                    className={`mt-1 ${eventColor(event.type)}`}
                   />
-                  <div
-                    className="absolute mt-6 w-64 p-3 bg-sda-bg-tertiary rounded-lg"
-                    style={{ 
-                      left: `${Math.min(leftPercent, 75)}%`,
-                      transform: 'translateX(-50%)',
-                    }}
-                  >
-                    <div className="flex items-center gap-2 mb-1">
-                      <Icon
-                        icon={eventIcon(event.type) as any}
-                        className={eventColor(event.type)}
-                        size={14}
-                      />
-                      <span className="text-xs text-sda-text-muted">
-                        {format(event.time, 'HH:mm')}
-                      </span>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between gap-2">
+                      <h3 className="font-medium text-sda-text-primary truncate">{event.title}</h3>
                       {event.severity && (
-                        <Tag minimal className="capitalize">
+                        <Tag
+                          minimal
+                          intent={
+                            event.severity === 'critical'
+                              ? 'danger'
+                              : event.severity === 'warning'
+                              ? 'warning'
+                              : 'none'
+                          }
+                        >
                           {event.severity}
                         </Tag>
                       )}
                     </div>
-                    <div className="font-medium text-sm">{event.title}</div>
+                    <p className="text-sm text-sda-text-secondary">
+                      {format(event.time, 'HH:mm:ss')}
+                    </p>
                     {event.details && (
-                      <div className="text-xs text-sda-text-secondary mt-1">
-                        {event.details}
-                      </div>
+                      <p className="text-sm text-sda-text-secondary mt-1">{event.details}</p>
                     )}
                   </div>
                 </div>
-              );
-            })}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
       </Card>
-
-      {/* Now indicator */}
-      <div className="flex items-center gap-2 mt-4 text-sda-accent-cyan">
-        <Icon icon="time" />
-        <span className="text-sm">Now: {mounted ? format(new Date(), 'PPpp') : 'Loading...'}</span>
-      </div>
     </div>
   );
 }

@@ -15,6 +15,8 @@ import {
 } from '@blueprintjs/core';
 import { api } from '@/lib/api';
 
+type DataType = 'tle' | 'weather' | 'observations';
+
 export default function IngestionPage() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -28,6 +30,7 @@ export default function IngestionPage() {
     success: boolean;
     message: string;
   } | null>(null);
+  const [dataType, setDataType] = useState<DataType>('tle');
 
   const handleFileSelect = (e: React.FormEvent<HTMLInputElement>) => {
     const files = (e.target as HTMLInputElement).files;
@@ -50,9 +53,22 @@ export default function IngestionPage() {
         setUploadProgress(i);
       }
 
+      // Upload based on data type
+      switch (dataType) {
+        case 'tle':
+          await api.uploadTLE(selectedFile);
+          break;
+        case 'weather':
+          await api.uploadSpaceWeather(selectedFile);
+          break;
+        case 'observations':
+          await api.uploadObservations(selectedFile);
+          break;
+      }
+
       setUploadResult({
         success: true,
-        message: `Successfully uploaded ${selectedFile.name}`,
+        message: `Successfully uploaded ${selectedFile.name} (${dataType})`,
       });
     } catch (error) {
       setUploadResult({
@@ -164,11 +180,27 @@ export default function IngestionPage() {
                 Data Type
               </label>
               <div className="flex gap-2">
-                <Button icon="satellite" active>
+                <Button
+                  icon="satellite"
+                  active={dataType === 'tle'}
+                  onClick={() => setDataType('tle')}
+                >
                   TLE File
                 </Button>
-                <Button icon="cloud">Space Weather</Button>
-                <Button icon="eye-open">Observations</Button>
+                <Button
+                  icon="cloud"
+                  active={dataType === 'weather'}
+                  onClick={() => setDataType('weather')}
+                >
+                  Space Weather
+                </Button>
+                <Button
+                  icon="eye-open"
+                  active={dataType === 'observations'}
+                  onClick={() => setDataType('observations')}
+                >
+                  Observations
+                </Button>
               </div>
             </div>
 

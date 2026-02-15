@@ -1,11 +1,11 @@
-import { useEffect, useRef } from 'react';
-import * as Cesium from 'cesium';
+import { useEffect, useRef, useState } from 'react';
+import { getCesium, type CesiumModule } from '@/lib/cesium/loader';
 
 interface GroundUnit {
   id: string;
   name: string;
   sidc: string;
-  position: Cesium.Cartesian3;
+  position: CesiumModule.Cartesian3;
   affiliation: 'friendly' | 'hostile' | 'neutral';
   status: 'static' | 'moving';
   heading?: number;
@@ -13,7 +13,7 @@ interface GroundUnit {
 }
 
 interface MilitarySymbolLayerProps {
-  viewer: Cesium.Viewer | null;
+  viewer: CesiumModule.Viewer | null;
   units: GroundUnit[];
 }
 
@@ -27,8 +27,8 @@ export const SAR_SYMBOLS = {
   SAFE_CORRIDOR: 'GFGPALC---*****',
 };
 
-function createMilitarySymbol(affiliation: string, unitType: string): Cesium.Color[] {
-  const colors: { [key: string]: Cesium.Color } = {
+function createMilitarySymbol(Cesium: CesiumModule, affiliation: string, unitType: string): CesiumModule.Color[] {
+  const colors: { [key: string]: CesiumModule.Color } = {
     friendly: Cesium.Color.CYAN,
     hostile: Cesium.Color.GRAY,
     neutral: Cesium.Color.YELLOW,
@@ -43,9 +43,14 @@ function createMilitarySymbol(affiliation: string, unitType: string): Cesium.Col
 export function MilitarySymbolLayer({ viewer, units }: MilitarySymbolLayerProps) {
   const entitiesRef = useRef<Set<string>>(new Set());
   const cleanupRef = useRef<(() => void) | null>(null);
+  const [Cesium, setCesium] = useState<CesiumModule | null>(null);
 
   useEffect(() => {
-    if (!viewer) return;
+    getCesium().then(setCesium);
+  }, []);
+
+  useEffect(() => {
+    if (!viewer || !Cesium) return;
 
     const createdEntities: string[] = [];
 
@@ -126,7 +131,7 @@ export function MilitarySymbolLayer({ viewer, units }: MilitarySymbolLayerProps)
                 sc.height
               );
               return [pos, Cesium.Cartesian3.fromRadians(endSc.longitude, endSc.latitude, endSc.height)];
-            }, false) as unknown as Cesium.PositionProperty,
+            }, false) as unknown as CesiumModule.PositionProperty,
             width: 6,
             material: new Cesium.PolylineArrowMaterialProperty(baseColor),
           },
@@ -140,7 +145,7 @@ export function MilitarySymbolLayer({ viewer, units }: MilitarySymbolLayerProps)
         position: new Cesium.CallbackProperty(() => {
           const pos = unit.position;
           return new Cesium.Cartesian3(pos.x + 1000, pos.y + 1000, pos.z);
-        }, false) as unknown as Cesium.PositionProperty,
+        }, false) as unknown as CesiumModule.PositionProperty,
         point: {
           pixelSize: 8,
           color: unit.affiliation === 'friendly' 
@@ -171,7 +176,7 @@ export function MilitarySymbolLayer({ viewer, units }: MilitarySymbolLayerProps)
         cleanupRef.current();
       }
     };
-  }, [viewer, units]);
+  }, [viewer, units, Cesium]);
 
   return null;
 }

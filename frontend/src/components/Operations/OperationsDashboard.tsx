@@ -199,11 +199,12 @@ export default function OperationsDashboard() {
               onStatusFilterChange={setStatusFilter}
               onTypeFilterChange={setTypeFilter}
               onRefresh={loadData}
+              onCreateOperation={() => setCreateDialogOpen(true)}
             />
           ) : activeTab === 'routes' ? (
-            <RoutesTab routes={routes} />
+            <RoutesTab routes={routes} onVisualize={(route) => console.log('View route', route.id)} />
           ) : activeTab === 'formations' ? (
-            <FormationsTab formations={formations} />
+            <FormationsTab formations={formations} onVisualize={(formation) => console.log('View formation', formation.id)} />
           ) : (
             <CollisionsTab
               collisions={collisions}
@@ -267,6 +268,7 @@ function OperationsTab({
   onStatusFilterChange,
   onTypeFilterChange,
   onRefresh,
+  onCreateOperation,
 }: {
   operations: Operation[];
   onDispatch: (id: string) => void;
@@ -277,6 +279,7 @@ function OperationsTab({
   onStatusFilterChange: (s: string) => void;
   onTypeFilterChange: (t: string) => void;
   onRefresh: () => void;
+  onCreateOperation: () => void;
 }) {
   if (operations.length === 0) {
     return (
@@ -284,7 +287,7 @@ function OperationsTab({
         icon="flows"
         title="No Operations"
         description="Create a new operation to get started."
-        action={<Button icon="add" intent="primary">Create Operation</Button>}
+        action={<Button icon="add" intent="primary" onClick={onCreateOperation}>Create Operation</Button>}
       />
     );
   }
@@ -366,7 +369,7 @@ function OperationsTab({
   );
 }
 
-function RoutesTab({ routes }: { routes: RoutePlan[] }) {
+function RoutesTab({ routes, onVisualize }: { routes: RoutePlan[]; onVisualize?: (route: RoutePlan) => void }) {
   if (routes.length === 0) {
     return (
       <NonIdealState
@@ -388,11 +391,11 @@ function RoutesTab({ routes }: { routes: RoutePlan[] }) {
                 <Tag minimal>{route.entity_type}</Tag>
               </div>
               <h3 className="font-semibold text-sda-text-primary">{route.name}</h3>
-              <p className="text-sm text-sda-text-muted">
+                  <p className="text-sm text-sda-text-muted">
                 {route.waypoints.length} waypoints • {route.maneuvers.length} maneuvers
               </p>
             </div>
-            <Button icon="eye-open" minimal />
+            <Button icon="eye-open" minimal onClick={() => onVisualize?.(route)} />
           </div>
         </Card>
       ))}
@@ -400,7 +403,7 @@ function RoutesTab({ routes }: { routes: RoutePlan[] }) {
   );
 }
 
-function FormationsTab({ formations }: { formations: Formation[] }) {
+function FormationsTab({ formations, onVisualize }: { formations: Formation[]; onVisualize?: (formation: Formation) => void }) {
   if (formations.length === 0) {
     return (
       <NonIdealState
@@ -426,11 +429,11 @@ function FormationsTab({ formations }: { formations: Formation[] }) {
                 </Tag>
               </div>
               <h3 className="font-semibold text-sda-text-primary">{formation.name}</h3>
-              <p className="text-sm text-sda-text-muted">
+                  <p className="text-sm text-sda-text-muted">
                 {formation.members.length} members • {formation.spacing_meters}m spacing
               </p>
             </div>
-            <Button icon="eye-open" minimal />
+            <Button icon="eye-open" minimal onClick={() => onVisualize?.(formation)} />
           </div>
         </Card>
       ))}
@@ -447,6 +450,23 @@ function CollisionsTab({
   onDetect: () => void;
   getRiskIntent: (r: string) => 'none' | 'primary' | 'success' | 'warning' | 'danger';
 }) {
+  const handleAvoidance = async (alert: CollisionAlert) => {
+    try {
+      const result = await api.generateAvoidanceManeuver({
+        entity_id: alert.entity_a_id,
+        target_collision_id: alert.id,
+        avoidance_type: 'altitude_change',
+        prefer_altitude_change: true,
+      });
+      console.log('Avoidance maneuver created:', result);
+    } catch (error) {
+      console.error('Failed to create avoidance maneuver:', error);
+    }
+  };
+
+  const handleView = (alert: CollisionAlert) => {
+    console.log('View collision alert details:', alert);
+  };
   return (
     <>
       <div className="flex gap-3 mb-4">
@@ -481,10 +501,10 @@ function CollisionsTab({
                   </p>
                 </div>
                 <div className="flex gap-1">
-                  <Button icon="trending-up" intent="warning" minimal>
+                  <Button icon="trending-up" intent="warning" minimal onClick={() => handleAvoidance(alert)}>
                     Avoidance
                   </Button>
-                  <Button icon="eye-open" minimal />
+                  <Button icon="eye-open" minimal onClick={() => handleView(alert)} />
                 </div>
               </div>
             </Card>

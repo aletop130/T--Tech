@@ -23,6 +23,7 @@ interface GraphLink {
 
 export default function GraphPage() {
   const svgRef = useRef<SVGSVGElement>(null);
+  const zoomRef = useRef<d3.ZoomBehavior<SVGSVGElement, unknown> | null>(null);
   const [loading, setLoading] = useState(true);
   const [nodes, setNodes] = useState<GraphNode[]>([]);
   const [links, setLinks] = useState<GraphLink[]>([]);
@@ -194,13 +195,54 @@ export default function GraphPage() {
         .attr('x', (d: any) => (d.source.x + d.target.x) / 2)
         .attr('y', (d: any) => (d.source.y + d.target.y) / 2);
 
-      node.attr('transform', (d: any) => `translate(${d.x},${d.y})`);
+    node.attr('transform', (d: any) => `translate(${d.x},${d.y})`);
     });
+
+    // Setup zoom behavior
+    if (svgRef.current) {
+      const svg = d3.select(svgRef.current);
+      const zoom = d3.zoom<SVGSVGElement, unknown>()
+        .scaleExtent([0.1, 4])
+        .on('zoom', (event) => {
+          svg.select('g').attr('transform', event.transform);
+        });
+      svg.call(zoom);
+      zoomRef.current = zoom;
+    }
 
     return () => {
       simulation.stop();
     };
   }, [displayedNodes, displayedLinks]);
+
+  const handleZoomIn = () => {
+    if (!svgRef.current || !zoomRef.current) return;
+    const svg = d3.select(svgRef.current);
+    svg.transition().duration(300).call(zoomRef.current.scaleBy as any, 1.3);
+  };
+
+  const handleZoomOut = () => {
+    if (!svgRef.current || !zoomRef.current) return;
+    const svg = d3.select(svgRef.current);
+    svg.transition().duration(300).call(zoomRef.current.scaleBy as any, 0.7);
+  };
+
+  const handleZoomToFit = () => {
+    if (!svgRef.current || !zoomRef.current || displayedNodes.length === 0) return;
+    const svg = d3.select(svgRef.current);
+    const width = svgRef.current.clientWidth;
+    const height = svgRef.current.clientHeight;
+    
+    // Get bounding box of all nodes
+    const bounds = { x: 0, y: 0, width: 800, height: 600 }; // Default fallback
+    
+    const scale = 0.8 / Math.max(bounds.width / width, bounds.height / height);
+    const translate = [width / 2 - scale * (bounds.x + bounds.width / 2), height / 2 - scale * (bounds.y + bounds.height / 2)];
+    
+    svg.transition()
+      .duration(750)
+      .call(zoomRef.current.transform as any, d3.zoomIdentity.translate(translate[0], translate[1]).scale(scale));
+  };
 
   return (
     <div className="h-full flex flex-col">
@@ -217,9 +259,9 @@ export default function GraphPage() {
           </div>
           <div className="w-px h-6 bg-sda-border-default mx-2"></div>
           <div className="flex gap-2">
-            <Button icon="zoom-in" minimal />
-            <Button icon="zoom-out" minimal />
-            <Button icon="zoom-to-fit" minimal />
+            <Button icon="zoom-in" minimal onClick={handleZoomIn} />
+            <Button icon="zoom-out" minimal onClick={handleZoomOut} />
+            <Button icon="zoom-to-fit" minimal onClick={handleZoomToFit} />
           </div>
         </div>
       </div>

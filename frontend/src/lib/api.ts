@@ -471,6 +471,28 @@ class ApiClient {
     });
   }
 
+  // Assign Incident
+  async assignIncident(
+    id: string,
+    assigned_to: string
+  ): Promise<Incident> {
+    return this._fetch(`/api/v1/incidents/${id}/assign`, {
+      method: 'POST',
+      body: JSON.stringify({ assigned_to }),
+    });
+  }
+
+  // Add Comment to Incident
+  async addComment(
+    incidentId: string,
+    content: string
+  ): Promise<{ id: string; content: string; created_at: string }> {
+    return this._fetch(`/api/v1/incidents/${incidentId}/comments`, {
+      method: 'POST',
+      body: JSON.stringify({ content }),
+    });
+  }
+
   // Upload TLE
   async uploadTLE(file: File): Promise<{ run_id: string; filename: string }> {
     const formData = new FormData();
@@ -815,6 +837,151 @@ class ApiClient {
       method: 'POST',
       body: JSON.stringify(config),
     });
+  }
+
+  // ========== Admin Endpoints ==========
+  async clearCache(): Promise<{ success: boolean; message: string }> {
+    return this._fetch('/api/v1/admin/cache/clear', {
+      method: 'POST',
+    });
+  }
+
+  async runDatabaseVacuum(): Promise<{ success: boolean; message: string }> {
+    return this._fetch('/api/v1/admin/database/vacuum', {
+      method: 'POST',
+    });
+  }
+
+  async exportAuditLogs(params?: {
+    start_date?: string;
+    end_date?: string;
+    format?: 'csv' | 'json';
+  }): Promise<Blob> {
+    const searchParams = new URLSearchParams();
+    if (params?.start_date) searchParams.set('start_date', params.start_date);
+    if (params?.end_date) searchParams.set('end_date', params.end_date);
+    if (params?.format) searchParams.set('format', params.format);
+
+    const url = `${this.baseUrl || ''}/api/v1/admin/audit/export?${searchParams}`;
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'X-Tenant-ID': this.tenantId,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to export audit logs: ${response.status}`);
+    }
+
+    return response.blob();
+  }
+
+  async getSystemReport(): Promise<{
+    timestamp: string;
+    tenant_id: string;
+    database: { status: string; satellites_total: number; satellites_active: number };
+    incidents: { total: number; open: number; critical: number };
+    redis: { status: string };
+    system: Record<string, unknown>;
+  }> {
+    return this._fetch('/api/v1/admin/system/report');
+  }
+
+  async getAdminStats(): Promise<{
+    satellites: number;
+    open_incidents: number;
+    incidents_24h: number;
+    audit_logs_24h: number;
+  }> {
+    return this._fetch('/api/v1/admin/stats');
+  }
+
+  // ========== Timeline Endpoints ==========
+  async getTimelineEvents(params: {
+    date: string;
+    event_types?: string;
+  }): Promise<{
+    date: string;
+    events: Array<{
+      id: string;
+      type: string;
+      title: string;
+      time: string;
+      severity?: string;
+      details?: string;
+    }>;
+    count: number;
+  }> {
+    const searchParams = new URLSearchParams({ date: params.date });
+    if (params.event_types) searchParams.set('event_types', params.event_types);
+    return this._fetch(`/api/v1/timeline/events?${searchParams}`);
+  }
+
+  async getTimelineEventsRange(params: {
+    start_date: string;
+    end_date: string;
+  }): Promise<{
+    start_date: string;
+    end_date: string;
+    events: Array<{
+      id: string;
+      type: string;
+      title: string;
+      time: string;
+      severity?: string;
+      details?: string;
+    }>;
+    count: number;
+  }> {
+    const searchParams = new URLSearchParams({
+      start_date: params.start_date,
+      end_date: params.end_date,
+    });
+    return this._fetch(`/api/v1/timeline/events/range?${searchParams}`);
+  }
+
+  async getTimelineSummary(params?: {
+    days?: number;
+  }): Promise<{
+    period: { start: string; end: string };
+    incidents: { total: number; by_severity: Record<string, number> };
+    conjunctions: { total: number; by_risk: Record<string, number> };
+  }> {
+    const searchParams = new URLSearchParams();
+    if (params?.days) searchParams.set('days', params.days.toString());
+    return this._fetch(`/api/v1/timeline/summary?${searchParams}`);
+  }
+
+  // ========== Ingestion Endpoints ==========
+  async uploadSpaceWeather(file: File): Promise<{ run_id: string; filename: string }> {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const url = `${this.baseUrl || ''}/api/v1/ingestion/upload/space-weather`;
+    const headers = { 'X-Tenant-ID': this.tenantId };
+
+    const response = await fetch(url, { method: 'POST', headers, body: formData });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.detail || `API error: ${response.status}`);
+    }
+    return response.json();
+  }
+
+  async uploadObservations(file: File): Promise<{ run_id: string; filename: string }> {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const url = `${this.baseUrl || ''}/api/v1/ingestion/upload/observations`;
+    const headers = { 'X-Tenant-ID': this.tenantId };
+
+    const response = await fetch(url, { method: 'POST', headers, body: formData });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.detail || `API error: ${response.status}`);
+    }
+    return response.json();
   }
 }
 

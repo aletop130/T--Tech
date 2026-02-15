@@ -16,6 +16,7 @@ interface MissionNarrativeProps {
 }
 
 // Scripted narrative for Operation Guardian Angel - Search and Rescue
+// Times scaled to 4-hour mission timeline (48x from original 5-minute scale)
 const NARRATIVE_SCRIPT: NarrativeEvent[] = [
   {
     time: 0,
@@ -25,70 +26,70 @@ const NARRATIVE_SCRIPT: NarrativeEvent[] = [
     icon: 'geolocation',
   },
   {
-    time: 30,
+    time: 1440, // 24 minutes
     message: "⚠️ CYBER ATTACK IN PROGRESS. Enemy ground station attempting to jam ReconSat-1's SAR payload. Signal degradation at 40%. AI defensive protocols engaging...",
     priority: 'warning',
     speaker: 'Mission Control',
     icon: 'warning-sign',
   },
   {
-    time: 45,
+    time: 2160, // 36 minutes
     message: "Maneuver executed. ReconSat-1 performing evasive orbital adjustment. Delta-V: 2.3 m/s. New orbital path established. Enemy jamming ineffective at new altitude. Maintaining reconnaissance coverage.",
     priority: 'success',
     speaker: 'AI Control System',
     icon: 'refresh',
   },
   {
-    time: 60,
+    time: 2880, // 48 minutes
     message: "SECONDARY THREAT. Hostile reconnaissance satellite adjusting orbit toward ReconSat-1. Possible anti-satellite maneuver or collision attempt. Probability of intentional intercept: 78%.",
     priority: 'warning',
     speaker: 'Threat Detection AI',
     icon: 'eye-open',
   },
   {
-    time: 75,
+    time: 3600, // 1 hour
     message: "Avoidance maneuver successful. Closest approach increased to 12.7km. Hostile satellite unable to maintain pursuit without excessive fuel expenditure. Threat neutralized. ReconSat-1 returning to primary coverage area.",
     priority: 'success',
     speaker: 'AI Control System',
     icon: 'shield',
   },
   {
-    time: 120,
+    time: 5760, // 1h 36m
     message: "Transitioning to ground operations. HMS Defender has launched MH-60 Seahawk for extraction. Coordinating satellite overwatch with pilot. Phantom-6 team located in Wadi al-Kuf, 4km from last known position.",
     priority: 'info',
     speaker: 'Mission Control',
     icon: 'airplane',
   },
   {
-    time: 150,
+    time: 7200, // 2 hours
     message: "ReconSat-1 providing real-time SAR imaging. Team heat signature detected 800m northeast of planned extraction point. Adjusting helicopter approach vector. New route: Bearing 340°, altitude 50ft AGL.",
     priority: 'info',
     speaker: 'Tactical Coordination AI',
     icon: 'arrow-right',
   },
   {
-    time: 180,
+    time: 8640, // 2h 24m
     message: "🎯 VISUAL CONTACT. Phantom-6 team located at grid 32.084°N, 20.315°E. Count: 6 personnel. All vital signs nominal. Helicopter proceeding to extraction point.",
     priority: 'success',
     speaker: 'Reconnaissance AI',
     icon: 'user',
   },
   {
-    time: 210,
+    time: 10080, // 2h 48m
     message: "TEAM BOARDING. All personnel accounted for. Helicopter lifting off with rescue team. En route to HMS Defender. Satellite maintaining overwatch.",
     priority: 'success',
     speaker: 'Mission Control',
     icon: 'import',
   },
   {
-    time: 270,
-    message: "Team extracted successfully. All 6 personnel on board. Satellite constellation providing continuous coverage during transit. En route back to HMS Defender. ETA: 3 minutes.",
+    time: 12960, // 3h 36m
+    message: "Team extracted successfully. All 6 personnel on board. Satellite constellation providing continuous coverage during transit. En route back to HMS Defender. ETA: 24 minutes.",
     priority: 'success',
     speaker: 'Mission Control',
     icon: 'tick-circle',
   },
   {
-    time: 300,
+    time: 14400, // 4 hours
     message: "Operation Guardian Angel complete. All personnel recovered safely and transported to HMS Defender. Satellite constellation: Full operational status. ReconSat-1 fuel reserves: 94%. Mission objectives achieved with zero friendly casualties.",
     priority: 'success',
     speaker: 'Mission Control',
@@ -175,7 +176,15 @@ export function MissionNarrative({ simulationTime, isPlaying, stepMode = false }
                   {currentMessage.speaker}
                 </span>
                 <span className="text-xs opacity-50">
-                  T+{Math.floor(currentMessage.time / 60)}:{String(currentMessage.time % 60).padStart(2, '0')}
+                  {(() => {
+                    const hours = Math.floor(currentMessage.time / 3600);
+                    const mins = Math.floor((currentMessage.time % 3600) / 60);
+                    const secs = currentMessage.time % 60;
+                    if (hours > 0) {
+                      return `T+${hours}:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+                    }
+                    return `T+${mins}:${String(secs).padStart(2, '0')}`;
+                  })()}
                 </span>
               </div>
               <p className="text-sm leading-relaxed font-medium">
@@ -215,7 +224,15 @@ export function MissionNarrative({ simulationTime, isPlaying, stepMode = false }
                   <Icon icon={msg.icon || 'info-sign'} size={14} className={getIconColor(msg.priority)} />
                   <span className="text-xs font-bold opacity-70">{msg.speaker}</span>
                   <span className="text-xs opacity-50">
-                    T+{Math.floor(msg.time / 60)}:{String(msg.time % 60).padStart(2, '0')}
+                    {(() => {
+                      const hours = Math.floor(msg.time / 3600);
+                      const mins = Math.floor((msg.time % 3600) / 60);
+                      const secs = msg.time % 60;
+                      if (hours > 0) {
+                        return `T+${hours}:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+                      }
+                      return `T+${mins}:${String(secs).padStart(2, '0')}`;
+                    })()}
                   </span>
                 </div>
                 <p className="text-xs leading-relaxed">{msg.message}</p>
