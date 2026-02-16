@@ -49,7 +49,7 @@
   - Funzione tle_to_state_vector(tle_line1, tle_line2, epoch) -> StateVector
   - Testare con TLE ISS noto
 
-- [ ] Task 2.2: Screening Congiunzioni (backend/app/physics/screening.py)
+- [x] Task 2.2: Screening Congiunzioni (backend/app/physics/screening.py)
   - Funzione screen_conjunctions(primary_tle, catalog, time_window_hours=72, threshold_km=5.0) -> list[ConjunctionCandidate]
   - Griglia temporale step 10 min, distanza minima approssimata
   - Funzione refine_conjunction(candidate, iterations=10) -> ConjunctionEvent
