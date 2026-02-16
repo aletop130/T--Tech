@@ -60,67 +60,129 @@ export function OrbitalTrackLayer({
       : Cesium?.Color?.fromCssColorString('#7dd3fc'); // cyan for auto
   })();
 
-  // Main entity creation / update effect
-  useEffect(() => {
-    if (!viewer || !Cesium) return;
+// Main entity creation / update effect
+useEffect(() => {
+  if (!viewer || !Cesium) return;
 
-    // Remove any previous entity
-    if (cleanupRef.current) {
-      cleanupRef.current();
-      cleanupRef.current = null;
-    }
+  // Remove any previous entity / listener
+  if (cleanupRef.current) {
+    cleanupRef.current();
+    cleanupRef.current = null;
+  }
 
-    // Wait for viewer.entities to be ready
-    if (!viewer.entities) {
-      const interval = setInterval(() => {
-        if (viewer?.isDestroyed?.()) {
-          clearInterval(interval);
-          return;
-        }
-        if (viewer?.entities) {
-          clearInterval(interval);
-        }
-      }, 50);
-      cleanupRef.current = () => clearInterval(interval);
-      return;
-    }
+  // Wait for viewer.entities to be ready (as before)
+  if (!viewer.entities) {
+    const interval = setInterval(() => {
+      if (viewer?.isDestroyed?.()) {
+        clearInterval(interval);
+        return;
+      }
+      if (viewer?.entities) {
+        clearInterval(interval);
+      }
+    }, 50);
+    cleanupRef.current = () => clearInterval(interval);
+    return;
+  }
 
-    const points = orbitTrack.points;
-    if (!points || points.length === 0) return;
+  const points = orbitTrack.points;
+  if (!points || points.length === 0) return;
 
-    // Determine how many points to show based on fraction and minimum
-    const trailCount = Math.max(
-      minTrailPoints,
-      Math.floor(points.length * trailFraction)
-    );
-    const visiblePoints = points.slice(-trailCount);
+  // Determine how many points to show based on fraction and minimum
+  const trailCount = Math.max(
+    minTrailPoints,
+    Math.floor(points.length * trailFraction)
+  );
 
-    const polylineColor = baseColor ?? Cesium.Color.WHITE;
+  // Compute the current simulation index using Cesium clock if available.
+  // Fallback to the start of the track if the clock is missing (e.g., during tests).
+  const stepMs = orbitTrack.stepSec * 1000;
+  const totalPoints = points.length;
 
-    // Unique ID – we can use the start time of the track to keep it stable
-    const entityId = `orbit-track-${orbitTrack.timeStartMs}`;
-    const entity = viewer.entities.add({
-      id: entityId,
-      polyline: {
-        positions: visiblePoints,
-        width: lineWidth,
-        material: new Cesium.PolylineGlowMaterialProperty({
-          glowPower: 0.2,
-          color: polylineColor,
-        }),
-        clampToGround: false,
-      },
-    });
-    entityRef.current = entity;
+  let baseIdx = 0; // default to first point
+  if (viewer.clock && typeof viewer.clock.currentTime !== "undefined") {
+    const simMs = Cesium.JulianDate.toDate(viewer.clock.currentTime).getTime();
+    const elapsed = simMs - orbitTrack.timeStartMs;
+    const idxFloat = elapsed / stepMs;
+    baseIdx = Math.floor(idxFloat);
+    // Normalize to valid range [0, totalPoints-1]
+    baseIdx = ((baseIdx % totalPoints) + totalPoints) % totalPoints;
+  }
 
-    // Store cleanup to remove the entity later
-    cleanupRef.current = () => {
-      if (!viewer.isDestroyed() && viewer.entities) {
-        const e = viewer.entities.getById(entityId);
-        if (e) viewer.entities.remove(e);
+  // Determine start index so that we have points behind and ahead of the current point.
+  // We allocate half of the trail to points behind the satellite and the rest ahead.
+  const half = Math.floor(trailCount / 2);
+  const behind = half; // points behind current idx
+  const ahead = trailCount - behind; // include current point in ahead side
+  let startIdx = baseIdx - behind;
+  // Normalize startIdx to be within [0, totalPoints)
+  startIdx = ((startIdx % totalPoints) + totalPoints) % totalPoints;
+
+  // Gather the visible points, wrapping around the array if needed.
+  const visiblePoints: any[] = [];
+  for (let i = 0; i < trailCount; i++) {
+    const idx = (startIdx + i) % totalPoints;
+    visiblePoints.push(points[idx]);
+  }
+
+  const polylineColor = baseColor ?? Cesium.Color.WHITE;
+
+  // Unique ID – we can use the start time of the track to keep it stable
+  const entityId = `orbit-track-${orbitTrack.timeStartMs}`;
+  const entity = viewer.entities.add({
+    id: entityId,
+    polyline: {
+      positions: visiblePoints,
+      width: lineWidth,
+      material: new Cesium.PolylineGlowMaterialProperty({
+        glowPower: 0.2,
+        color: polylineColor,
+      }),
+      clampToGround: false,
+    },
+  });
+  entityRef.current = entity;
+
+  // Register a tick handler to update the visible segment as time progresses.
+const updateTrail = () => {
+      if (!viewer || !Cesium) return;
+      // Guard against missing Cesium clock (e.g., during unit tests)
+      if (!viewer.clock || typeof viewer.clock.currentTime === "undefined") return;
+      const simMs = Cesium.JulianDate.toDate(viewer.clock.currentTime).getTime();
+      const elapsed = simMs - orbitTrack.timeStartMs;
+      const idxFloat = elapsed / stepMs;
+      let idx = Math.floor(idxFloat);
+      idx = ((idx % totalPoints) + totalPoints) % totalPoints;
+      const start = ((idx - behind) % totalPoints + totalPoints) % totalPoints;
+      const newPoints: any[] = [];
+      for (let i = 0; i < trailCount; i++) {
+        const ptIdx = (start + i) % totalPoints;
+        newPoints.push(points[ptIdx]);
+      }
+      if (entityRef.current && entityRef.current.polyline) {
+        entityRef.current.polyline.positions = newPoints;
       }
     };
-  }, [viewer, Cesium, orbitTrack, trailFraction, minTrailPoints, color, lineWidth, isManual]);
+
+  // Initial update
+  updateTrail();
+
+  // Attach listener
+  if (viewer.clock && viewer.clock.onTick) {
+        viewer.clock.onTick.addEventListener(updateTrail);
+      }
+
+  // Store cleanup to remove the entity and listener later
+  cleanupRef.current = () => {
+    if (viewer.clock && viewer.clock.onTick) {
+      viewer.clock.onTick.removeEventListener(updateTrail);
+    }
+    if (!viewer.isDestroyed() && viewer.entities) {
+      const e = viewer.entities.getById(entityId);
+      if (e) viewer.entities.remove(e);
+    }
+  };
+}, [viewer, Cesium, orbitTrack, trailFraction, minTrailPoints, color, lineWidth, isManual]);
 
   // Maneuver colour animation – runs while a manoeuvre window is active
   useEffect(() => {
