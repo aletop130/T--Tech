@@ -40,16 +40,27 @@
         "Error doing the fallback: regolo.BadRequestError: Hosted_vllmException - \"auto\" tool choice requires --enable-auto-tool-choice and --tool-call-parser to be set. Received Model Group=Llama-3.3-70B-Inst",
         "Error doing the fallback: regolo.BadRequestError: Hosted_vllmException - \"auto\" tool choice requires --enable-auto-tool-choice and --tool-call-parser to be set Regolo Retried: 2 times, Regolo Max Retr"
       ]
+    },
+    {
+      "iteration": 3,
+      "startedAt": "2026-02-16T16:19:25.563Z",
+      "endedAt": "2026-02-16T16:20:21.653Z",
+      "durationMs": 54885,
+      "agent": "opencode",
+      "model": "regolo-ai/gpt-oss-120b",
+      "toolsUsed": {},
+      "filesModified": [
+        ".ralph/ralph-tasks.md",
+        "backend/app/api/v1/ontology.py"
+      ],
+      "exitCode": 0,
+      "completionDetected": false,
+      "errors": []
     }
   ],
-  "totalDurationMs": 159541,
+  "totalDurationMs": 214426,
   "struggleIndicators": {
-    "repeatedErrors": {
-      "ConftestImportFailure: NameError: name 'get_debris_service' is not defined (from /root/T--Tech/backe": 1,
-      "E   NameError: name 'get_debris_service' is not defined": 1,
-      "\u001b[91m\u001b[1mError: \u001b[0mregolo.BadRequestError: Hosted_vllmException - max_tokens must be at least 1, go": 1,
-      "Error doing the fallback: regolo.BadRequestError: Hosted_vllmException - \"auto\" tool choice requires": 2
-    },
+    "repeatedErrors": {},
     "noProgressIterations": 0,
     "shortIterations": 0
   }

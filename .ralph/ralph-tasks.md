@@ -53,7 +53,7 @@ Implement debris visualization on the 3D Cesium map inspired by the TreeHacks 20
   - Support query params: `limit`, `orbitClasses`
   - Add RBAC checks using `get_current_user`
 
-- [ ] Task 1.3: Add Orbit Propagation Endpoint (`backend/app/api/v1/ontology.py`)
+- [x] Task 1.3: Add Orbit Propagation Endpoint (`backend/app/api/v1/ontology.py`)
   - Add `GET /api/orbit` endpoint (keanucz/detour style):
     ```python
     # Response format:

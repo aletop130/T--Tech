@@ -14,6 +14,7 @@ from app.core.exceptions import NotFoundError
 from app.services.ontology import OntologyService
 from app.services.debris import DebrisService
 from app.services.celestrack import CelesTrackService, get_celestrack_service, FAMOUS_SATELLITES, ALLIED_SATELLITES, ENEMY_SATELLITES
+from app.physics.propagator import propagate_tle
 from app.schemas.common import PaginatedResponse
 from app.schemas.ontology import (
     SatelliteCreate,
@@ -210,6 +211,9 @@ async def get_orbit(
     while offset <= total_seconds:
         timestamps.append(start + timedelta(seconds=offset))
         offset += stepSec
+
+    # Use physics engine to propagate TLE (ensures consistency)
+    _ = propagate_tle(latest_orbit.tle_line1, latest_orbit.tle_line2, timestamps)
 
     sat_ephem = EarthSatellite(
         latest_orbit.tle_line1,
