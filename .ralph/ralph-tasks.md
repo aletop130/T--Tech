@@ -142,7 +142,7 @@ Implement debris visualization on the 3D Cesium map inspired by the TreeHacks 20
 
 ## FASE 3: Cesium Debris Layer (keanucz/detour Style)
 
-- [ ] Task 3.1: Create Debris Instanced Renderer (`frontend/src/components/CesiumMap/DebrisInstancedLayer.tsx`)
+- [x] Task 3.1: Create Debris Instanced Renderer (`frontend/src/components/CesiumMap/DebrisInstancedLayer.tsx`)
   - Use Cesium's `Primitive` with `GeometryInstance` for performance (similar to keanucz's InstancedMesh):
     ```typescript
     interface DebrisInstancedLayerProps {
