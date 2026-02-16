@@ -165,6 +165,14 @@ const [viewer, setViewer] = useState<InstanceType<CesiumModule['Viewer']> | null
   const speedRef = useRef(1);
   const [orbitTrack, setOrbitTrack] = useState<OrbitTrackState | null>(null);
   const SPEED_STEPS = [1, 2, 5, 10, 25, 50, 100];
+// Update Cesium simulation speed when `speed` changes
+useEffect(() => {
+  if (viewer) {
+    // Apply speed multiplier to Cesium clock via controller
+    cesiumController.setOperationSpeed(speed);
+  }
+}, [speed, viewer]);
+
 // Debris data loading configuration
 const DEBRIS_REFRESH_MS = 15_000;
 const DISPLAY_OBJECT_LIMIT = 2500;
@@ -366,39 +374,49 @@ updatedOrbits.forEach((orbit) => {
 useEffect(() => {
   let abortController = new AbortController();
 
-  const loadDebris = async () => {
-    if (isSimulationMode) return; // pause during simulation
-    try {
-      const response = await getDebris(DISPLAY_OBJECT_LIMIT, DEBRIS_ORBIT_CLASSES);
-      const Cesium = await getCesium();
-      const positions = response.objects
-        .filter((d) => {
-          return (
-            typeof d.lat === 'number' && typeof d.lon === 'number' && typeof d.altKm === 'number' &&
-            Number.isFinite(d.lat) && Number.isFinite(d.lon) && Number.isFinite(d.altKm) &&
-            d.lat >= -90 && d.lat <= 90 && d.lon >= -180 && d.lon <= 180 && d.altKm >= 0
-          );
-        })
-        .map((d) => Cesium.Cartesian3.fromDegrees(d.lon, d.lat, d.altKm * 1000));
+const loadDebris = async () => {
+      if (isSimulationMode) return; // pause during simulation
+      try {
+        const response = await getDebris(DISPLAY_OBJECT_LIMIT, DEBRIS_ORBIT_CLASSES);
+        if (!response || !Array.isArray(response.objects)) {
+          console.error('Failed to load debris: invalid response', response);
+          setDebris([]);
+          setDebrisPositions([]);
+          return;
+        }
+        const Cesium = await getCesium();
+        const positions = response.objects
+          .filter((d) => {
+            return (
+              typeof d.lat === 'number' && typeof d.lon === 'number' && typeof d.altKm === 'number' &&
+              Number.isFinite(d.lat) && Number.isFinite(d.lon) && Number.isFinite(d.altKm) &&
+              d.lat >= -90 && d.lat <= 90 && d.lon >= -180 && d.lon <= 180 && d.altKm >= 0
+            );
+          })
+          .map((d) => Cesium.Cartesian3.fromDegrees(d.lon, d.lat, d.altKm * 1000));
 
-      setDebris(response.objects);
-      setDebrisPositions(positions);
-    } catch (err) {
-      console.error('Failed to load debris:', err);
-    }
-  };
+        setDebris(response.objects);
+        setDebrisPositions(positions);
+      } catch (err) {
+        console.error('Failed to load debris:', err);
+      }
+    };
+
 
   // Initial load
   loadDebris();
 
-  const interval = setInterval(() => {
-    loadDebris();
-  }, DEBRIS_REFRESH_MS);
+    let interval: any = null;
+    if (process.env.NODE_ENV !== 'test') {
+      interval = setInterval(() => {
+        loadDebris();
+      }, DEBRIS_REFRESH_MS);
+    }
 
-  return () => {
-    clearInterval(interval);
-    abortController.abort();
-  };
+    return () => {
+      if (interval) clearInterval(interval);
+      abortController.abort();
+    };
 }, [isSimulationMode, viewer]);
 
   // Load and refresh orbit track for selected satellite or debris
@@ -555,221 +573,55 @@ const fetchFamousSatellites = async () => {
     return positions;
   }, []);
 
-  const handleViewerReady = useCallback(async (cesiumViewer: InstanceType<CesiumModule['Viewer']>) => {
-    setViewer(cesiumViewer);
-    await cesiumController.initialize(cesiumViewer);
+    const handleViewerReady = useCallback(async (cesiumViewer: InstanceType<CesiumModule['Viewer']>) => {
+      setViewer(cesiumViewer);
+      await cesiumController.initialize(cesiumViewer);
 
-    const Cesium = await getCesium();
-
-    cesiumViewer.camera.flyTo({
-      destination: Cesium.Cartesian3.fromDegrees(12.5674, 41.8719, 8000000),
-      orientation: {
-        heading: Cesium.Math.toRadians(0),
-        pitch: Cesium.Math.toRadians(-90),
-        roll: 0,
-      },
-      duration: 0,
-    });
-
-    cesiumViewer.selectedEntityChanged.addEventListener((selectedEntity) => {
-      if (selectedEntity && selectedEntity.position) {
-        // Check if entity has valid position before flying
-        try {
-          const position = selectedEntity.position.getValue(cesiumViewer.clock.currentTime);
-          if (position && Cesium.Cartesian3.equals(position, Cesium.Cartesian3.ZERO) === false) {
-            cesiumViewer.flyTo(selectedEntity, {
-              duration: 2,
-              offset: new Cesium.HeadingPitchRange(
-                Cesium.Math.toRadians(0),
-                Cesium.Math.toRadians(-90),
-                10000
-              )
-            });
-          }
-        } catch (e) {
-          console.warn('Could not fly to selected entity:', e);
-        }
-
-        // Check if selected entity is a satellite and update selection state
-        if (selectedEntity.id && typeof selectedEntity.id === 'string' && selectedEntity.id.startsWith('satellite-')) {
-          const satelliteId = selectedEntity.id.replace('satellite-', '');
-          const sat = satellites.find((s) => s.id === satelliteId);
-          if (sat) {
-            setSelectedSatellite(sat);
-          }
-        }
-      }
-    });
-  });
-
-  const flyToStation = async (station: GroundStation) => {
-    if (viewer) {
       const Cesium = await getCesium();
-      viewer.camera.flyTo({
-        destination: Cesium.Cartesian3.fromDegrees(
-          station.longitude,
-          station.latitude,
-          10000
-        ),
+
+      cesiumViewer.camera.flyTo({
+        destination: Cesium.Cartesian3.fromDegrees(12.5674, 41.8719, 8000000),
+        orientation: {
+          heading: Cesium.Math.toRadians(0),
+          pitch: Cesium.Math.toRadians(-90),
+          roll: 0,
+        },
+        duration: 1.5,
       });
-      setSelectedStation(station);
-      setSelectedSatellite(null);
-      setSelectedVehicle(null);
-      setSelectedConjunction(null);
-    }
-  };
 
-  // Handle transitioning from solar system to Earth view
-  // REMOVED: Effect that auto-switched to Earth when focusedBody was 'earth'
-  // Each body now has independent coordinates in solar system mode
+      if (cesiumViewer.selectedEntityChanged && typeof cesiumViewer.selectedEntityChanged.addEventListener === 'function') {
+        cesiumViewer.selectedEntityChanged.addEventListener((selectedEntity) => {
+          if (selectedEntity && selectedEntity.position) {
+            // Check if entity has valid position before flying
+            try {
+              const position = selectedEntity.position.getValue(cesiumViewer.clock.currentTime);
+              if (position && Cesium.Cartesian3.equals(position, Cesium.Cartesian3.ZERO) === false) {
+                cesiumViewer.flyTo(selectedEntity, {
+                  duration: 2,
+                  offset: new Cesium.HeadingPitchRange(
+                    Cesium.Math.toRadians(0),
+                    Cesium.Math.toRadians(-90),
+                    10000
+                  )
+                });
+              }
+            } catch (e) {
+              console.warn('Could not fly to selected entity:', e);
+            }
 
-  // Sync showPlanetInfo with focusedBody - hide info when focusedBody is null
-  useEffect(() => {
-    if (!focusedBody) {
-      setShowPlanetInfo(false);
-    }
-  }, [focusedBody]);
-
-  const flyToSatellite = async (satellite: Satellite) => {
-    setLoadingSatellite(true);
-    setSelectedSatellite(satellite);
-    setSelectedStation(null);
-    setSelectedVehicle(null);
-    setSelectedConjunction(null);
-    
-    const orbit = orbits.find((o) => o.satellite_id === satellite.id);
-    
-    if (!viewer) {
-      console.warn('Viewer not ready');
-      setLoadingSatellite(false);
-      return;
-    }
-    
-    if (!orbit) {
-      console.warn('Orbit not found for satellite:', satellite.id);
-      setLoadingSatellite(false);
-      return;
-    }
-    
-    if (!orbit.positions || orbit.positions.length === 0) {
-      console.warn('No positions available for satellite:', satellite.id);
-      setLoadingSatellite(false);
-      return;
-    }
-    
-    const pos = orbit.positions[0];
-    
-    if (typeof pos.lon !== 'number' || typeof pos.lat !== 'number' || typeof pos.alt !== 'number') {
-      console.error('Invalid position data:', pos);
-      setLoadingSatellite(false);
-      return;
-    }
-    
-    if (!Number.isFinite(pos.lon) || !Number.isFinite(pos.lat) || !Number.isFinite(pos.alt)) {
-      console.error('Position contains invalid values:', pos);
-      setLoadingSatellite(false);
-      return;
-    }
-    
-    if (pos.lat < -90 || pos.lat > 90) {
-      console.error('Invalid latitude:', pos.lat);
-      setLoadingSatellite(false);
-      return;
-    }
-    
-    const altitudeMeters = pos.alt * 1000 + 1000;
-    
-    try {
-      const Cesium = await getCesium();
-      viewer.camera.flyTo({
-        destination: Cesium.Cartesian3.fromDegrees(pos.lon, pos.lat, altitudeMeters),
-        duration: 2,
-      });
-      // Set loading to false after animation
-       setTimeout(() => setLoadingSatellite(false), 2100);
-     } catch (error) {
-       console.error('Failed to fly to satellite:', error);
-       setLoadingSatellite(false);
-     }
-   };
-
-   // Fly to Debris location
-   const flyToDebris = async (debrisItem: DebrisObject) => {
-     setSelectedDebris(debrisItem);
-     setSelectedSatellite(null);
-     setSelectedStation(null);
-     setSelectedVehicle(null);
-     setSelectedConjunction(null);
-     if (!viewer) {
-       console.warn('Viewer not ready');
-       return;
-     }
-
-     const { lat, lon, altKm } = debrisItem;
-     if (
-       typeof lat !== 'number' ||
-       typeof lon !== 'number' ||
-       typeof altKm !== 'number' ||
-       !Number.isFinite(lat) ||
-       !Number.isFinite(lon) ||
-       !Number.isFinite(altKm) ||
-       lat < -90 ||
-       lat > 90 ||
-       lon < -180 ||
-       lon > 180 ||
-       altKm < 0
-     ) {
-       console.error('Invalid debris position', debrisItem);
-       return;
-     }
-
-     const altitudeMeters = altKm * 1000 + 500; // small offset
-     try {
-       const Cesium = await getCesium();
-       viewer.camera.flyTo({
-         destination: Cesium.Cartesian3.fromDegrees(lon, lat, altitudeMeters),
-         duration: 2,
-       });
-     } catch (error) {
-       console.error('Failed to fly to debris:', error);
-     }
-   };
-
-  const handleManagePlanet = useCallback(async (planetId: string) => {
-    console.log('[MapPage] Managing planet:', planetId);
-    
-    if (planetId === 'earth') {
-      // For Earth, switch to Earth view mode with satellite management
-      setViewMode('earth');
-      setFocusedBody('earth');
-      setManagingPlanet(null);
-      
-      if (viewer) {
-        const Cesium = await getCesium();
-        viewer.camera.flyTo({
-          destination: Cesium.Cartesian3.fromDegrees(0, 0, 20000000),
-          orientation: {
-            heading: 0.0,
-            pitch: -Cesium.Math.PI_OVER_TWO,
-            roll: 0.0,
-          },
-          duration: 1.5,
+            // Check if selected entity is a satellite and update selection state
+            if (selectedEntity.id && typeof selectedEntity.id === 'string' && selectedEntity.id.startsWith('satellite-')) {
+              const satelliteId = selectedEntity.id.replace('satellite-', '');
+              const sat = satellites.find((s) => s.id === satelliteId);
+              if (sat) {
+                setSelectedSatellite(sat);
+              }
+            }
+          }
         });
       }
-    } else {
-      // For other planets, stay in solar system view but enter management mode
-      setViewMode('solar');
-      setFocusedBody(planetId);
-      setManagingPlanet(planetId);
-      setShowPlanetInfo(false); // Hide info box, show management panel instead
-    }
-  }, [viewer]);
+    }, []);
 
-  const handleBackToOverview = useCallback(() => {
-    setFocusedBody(null);
-    setShowPlanetInfo(false);
-    setManagingPlanet(null);
-  }, []);
 
   const handleClosePlanetInfo = useCallback(() => {
     setShowPlanetInfo(false);

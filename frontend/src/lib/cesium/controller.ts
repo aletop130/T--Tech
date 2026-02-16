@@ -931,7 +931,7 @@ this.viewer.camera.flyTo({
   }
 
   setOperationSpeed(multiplier: number): void {
-    if (!this.viewer) return;
+    if (!this.viewer || !this.viewer.clock) return;
     this.viewer.clock.multiplier = multiplier;
   }
 

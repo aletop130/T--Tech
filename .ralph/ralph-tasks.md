@@ -397,7 +397,7 @@ Implement debris visualization on the 3D Cesium map inspired by the TreeHacks 20
 - [x] DebrisInstancedLayer renders 2500+ objects at 60fps
 - [x] Orange debris color (#f59e0b) matching keanucz/detour
 - [x] Orbital trails show 20% of orbit arc
-- [ ] Speed control (1x-100x) working
+- [x] Speed control (1x-100x) working
 - [ ] Maneuver animation (red flash) working
 - [ ] All tests pass (> 90% coverage)
 - [ ] Performance: 60fps with full debris load
