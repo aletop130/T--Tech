@@ -23,7 +23,7 @@ export function DebrisInfoCard({ debris, onClose, onManeuver }: DebrisInfoCardPr
   const orbitClass = getOrbitClass(debris.altKm);
 
   return (
-    <Card elevation={Elevation.TWO} className="absolute left-[310px] top-32 bottom-4 w-80 z-10 bg-sda-bg-primary pointer-events-auto">
+    <Card elevation={Elevation.TWO} className="absolute left-[310px] top-32 bottom-4 w-80 z-10 glass-panel pointer-events-auto">
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
           {/* Icon with debris colour */}

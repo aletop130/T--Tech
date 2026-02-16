@@ -10,7 +10,7 @@ interface GroundVehicleInfoCardProps {
 
 export function GroundVehicleInfoCard({ vehicle, onClose }: GroundVehicleInfoCardProps) {
   return (
-    <Card elevation={Elevation.TWO} className="absolute left-[310px] top-32 bottom-4 w-80 z-10 bg-sda-bg-primary pointer-events-auto">
+    <Card elevation={Elevation.TWO} className="absolute left-[310px] top-32 bottom-4 w-80 z-10 glass-panel pointer-events-auto">
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
           <Icon icon="truck" className="text-sda-accent-cyan" />

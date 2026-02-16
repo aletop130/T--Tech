@@ -867,22 +867,56 @@
         "FAIL  src/app/(main)/map/__tests__/page.test.tsx > Map page integration – debris features > refreshes debris every 15 seconds",
         "FAIL  src/app/(main)/map/__tests__/page.test.tsx > Map page integration – debris features > toggles debris visibility using the checkbox"
       ]
+    },
+    {
+      "iteration": 43,
+      "startedAt": "2026-02-16T17:17:20.347Z",
+      "endedAt": "2026-02-16T17:19:32.254Z",
+      "durationMs": 130629,
+      "agent": "opencode",
+      "model": "regolo-ai/gpt-oss-120b",
+      "toolsUsed": {},
+      "filesModified": [
+        ".ralph/ralph-tasks.md",
+        "frontend/src/app/(main)/map/page.tsx",
+        "frontend/src/components/CesiumMap/ConjunctionInfoCard.tsx",
+        "frontend/src/components/CesiumMap/DebrisInfoCard.tsx",
+        "frontend/src/components/CesiumMap/GroundStationInfoCard.tsx",
+        "frontend/src/components/CesiumMap/GroundVehicleInfoCard.tsx",
+        "frontend/src/components/CesiumMap/PlanetInfoBox.tsx",
+        "frontend/src/components/CesiumMap/SatelliteInfoCard.tsx"
+      ],
+      "exitCode": 0,
+      "completionDetected": false,
+      "errors": [
+        "❯ src/app/(main)/map/__tests__/page.test.tsx (4 tests | 4 failed) 20041ms",
+        "FAIL  tests/e2e/debris.e2e.spec.ts [ tests/e2e/debris.e2e.spec.ts ]",
+        "Error: Playwright Test did not expect test.beforeEach() to be called here.",
+        "FAIL  tests/e2e/simple.test.ts [ tests/e2e/simple.test.ts ]",
+        "Error: Playwright Test did not expect test() to be called here.",
+        "⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯",
+        "FAIL  src/app/(main)/map/__tests__/page.test.tsx > Map page integration – debris features > loads debris on mount and displays count",
+        "Error: Test timed out in 5000ms.",
+        "FAIL  src/app/(main)/map/__tests__/page.test.tsx > Map page integration – debris features > refreshes debris every 15 seconds",
+        "FAIL  src/app/(main)/map/__tests__/page.test.tsx > Map page integration – debris features > toggles debris visibility using the checkbox"
+      ]
     }
   ],
-  "totalDurationMs": 3494848,
+  "totalDurationMs": 3625477,
   "struggleIndicators": {
     "repeatedErrors": {
       "❯ src/app/(main)/map/__tests__/page.test.tsx (4 tests | 4 failed) 20042ms": 1,
-      "FAIL  tests/e2e/debris.e2e.spec.ts [ tests/e2e/debris.e2e.spec.ts ]": 2,
-      "Error: Playwright Test did not expect test.beforeEach() to be called here.": 2,
-      "FAIL  tests/e2e/simple.test.ts [ tests/e2e/simple.test.ts ]": 2,
-      "Error: Playwright Test did not expect test() to be called here.": 2,
-      "⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯": 2,
-      "FAIL  src/app/(main)/map/__tests__/page.test.tsx > Map page integration – debris features > loads de": 2,
-      "Error: Test timed out in 5000ms.": 2,
-      "FAIL  src/app/(main)/map/__tests__/page.test.tsx > Map page integration – debris features > refreshe": 2,
-      "FAIL  src/app/(main)/map/__tests__/page.test.tsx > Map page integration – debris features > toggles ": 2,
-      "❯ src/app/(main)/map/__tests__/page.test.tsx (4 tests | 4 failed) 20043ms": 1
+      "FAIL  tests/e2e/debris.e2e.spec.ts [ tests/e2e/debris.e2e.spec.ts ]": 3,
+      "Error: Playwright Test did not expect test.beforeEach() to be called here.": 3,
+      "FAIL  tests/e2e/simple.test.ts [ tests/e2e/simple.test.ts ]": 3,
+      "Error: Playwright Test did not expect test() to be called here.": 3,
+      "⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯": 3,
+      "FAIL  src/app/(main)/map/__tests__/page.test.tsx > Map page integration – debris features > loads de": 3,
+      "Error: Test timed out in 5000ms.": 3,
+      "FAIL  src/app/(main)/map/__tests__/page.test.tsx > Map page integration – debris features > refreshe": 3,
+      "FAIL  src/app/(main)/map/__tests__/page.test.tsx > Map page integration – debris features > toggles ": 3,
+      "❯ src/app/(main)/map/__tests__/page.test.tsx (4 tests | 4 failed) 20043ms": 1,
+      "❯ src/app/(main)/map/__tests__/page.test.tsx (4 tests | 4 failed) 20041ms": 1
     },
     "noProgressIterations": 0,
     "shortIterations": 0

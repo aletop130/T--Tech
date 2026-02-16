@@ -1002,7 +1002,7 @@ const fetchFamousSatellites = async () => {
       </div>
 
       {/* Speed Control Overlay */}
-<div className="absolute bottom-4 left-4 z-20 bg-black/70 backdrop-blur-sm border border-white/10 rounded-md px-3 py-2 flex items-center gap-2">
+<div className="absolute bottom-4 left-4 z-20 glass-panel rounded-md px-3 py-2 flex items-center gap-2">
   <span className="text-xs text-white font-medium">SPD</span>
   <input
     type="range"

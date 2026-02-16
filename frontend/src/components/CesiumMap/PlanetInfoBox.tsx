@@ -19,7 +19,7 @@ export function PlanetInfoBox({ planet, onManage, onClose, onBackToOverview }: P
         maxWidth: '320px',
       }}
     >
-      <Card elevation={Elevation.THREE} className="bg-sda-bg-primary border border-sda-border-default">
+      <Card elevation={Elevation.THREE} className="glass-panel border border-sda-border-default">
         <div className="flex items-start justify-between mb-3">
           <div className="flex items-center gap-2">
             <div
