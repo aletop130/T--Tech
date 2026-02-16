@@ -146,7 +146,7 @@
 
 ## FASE 4: Backend API e Servizi
 
-- [ ] Task 4.1: Servizio Collision Avoidance (backend/app/services/detour/collision_service.py)
+- [x] Task 4.1: Servizio Collision Avoidance (backend/app/services/detour/collision_service.py)
   - Classe CollisionAvoidanceService
   - Metodo async trigger_conjunction_analysis(conjunction_event_id, tenant_id) -> str
   - Metodo async get_analysis_status(session_id) -> dict
