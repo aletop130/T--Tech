@@ -119,7 +119,7 @@ const mockSatelliteMetadata = (satellites: Satellite[]): Satellite[] => {
       ...sat,
       faction: 'neutral' as const,
     };
-  });
+    });
 };
 
 function MapPageContent() {
@@ -270,7 +270,7 @@ const DEBRIS_ORBIT_CLASSES = "LEO";
                 lon: radToDeg(latLonAlt.longitude),
                 alt: latLonAlt.height,
                 time: currentTime.toISOString(),
-}, []);
+              };
 
             }
             
@@ -600,7 +600,7 @@ const fetchFamousSatellites = async () => {
         }
       }
     });
-  };
+  });
 
   const flyToStation = async (station: GroundStation) => {
     if (viewer) {

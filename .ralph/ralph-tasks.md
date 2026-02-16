@@ -393,7 +393,7 @@ Implement debris visualization on the 3D Cesium map inspired by the TreeHacks 20
 
 - [x] Backend API returns debris in keanucz/detour format
 - [x] Orbit propagation endpoint working
-- [ ] Frontend fetches debris every 15 seconds
+- [x] Frontend fetches debris every 15 seconds
 - [ ] DebrisInstancedLayer renders 2500+ objects at 60fps
 - [ ] Orange debris color (#f59e0b) matching keanucz/detour
 - [ ] Orbital trails show 20% of orbit arc
