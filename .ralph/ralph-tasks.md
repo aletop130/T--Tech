@@ -100,7 +100,7 @@
   - Campi: current_agent, events, errors, completed
   - Type hints strict, documentare ogni campo
 
-- [ ] Task 3.3: Prompts System Agenti (backend/app/agents/detour/prompts.py)
+- [x] Task 3.3: Prompts System Agenti (backend/app/agents/detour/prompts.py)
   - SCOUT_PROMPT: screening congiunzioni, identificazione threats
   - ANALYST_PROMPT: calcolo Pc, risk assessment, geometria
   - PLANNER_PROMPT: design manovre, ottimizzazione timing
