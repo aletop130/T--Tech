@@ -232,7 +232,7 @@
   - Real-time SSE updates
   - 'use client' directive, error boundaries
 
-- [ ] Task 5.5: Layer Cesium (frontend/src/components/CesiumMap/DetourLayer.tsx)
+- [x] Task 5.5: Layer Cesium (frontend/src/components/CesiumMap/DetourLayer.tsx)
   - Marker congiunzioni sulla mappa
   - Linee approccio TCA
   - Heatmap risk level
