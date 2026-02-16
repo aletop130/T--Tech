@@ -116,7 +116,7 @@ Implement debris visualization on the 3D Cesium map inspired by the TreeHacks 20
     }
     ```
 
-- [ ] Task 2.2: Add Debris API Methods (`frontend/src/lib/api/debris.ts`)
+- [x] Task 2.2: Add Debris API Methods (`frontend/src/lib/api/debris.ts`)
   - Create dedicated debris API module:
     ```typescript
     export async function getDebris(
