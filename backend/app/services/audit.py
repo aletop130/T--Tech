@@ -56,7 +56,7 @@ class AuditService:
         )
         
         self.db.add(event)
-        await self.db.flush()
+        # await self.db.flush()  # Flush omitted; commit will persist the event
         
         logger.info(
             "audit_event",

@@ -158,6 +158,71 @@ python scripts/seed_demo.py
 - **Multi-tenancy**: Complete tenant isolation
 - **Audit Logging**: Full change tracking
 
+## Detour API
+
+The Detour subsystem provides a set of REST endpoints under `/api/v1/detour` for collision avoidance analysis and maneuver management.
+
+### Endpoints
+
+| Method | Path | Description |
+| ------ | ---- | ----------- |
+| POST | `/detour/conjunctions/{id}/analyze` | Trigger a conjunction analysis, returns `{ "session_id": "<uuid>" }`. |
+| GET | `/detour/sessions/{id}/status` | Get the current status of an analysis session. |
+| GET | `/detour/sessions/{id}/results` | Retrieve final results of a completed analysis. |
+| POST | `/detour/maneuvers/{id}/approve` | Approve a proposed maneuver plan. |
+| POST | `/detour/maneuvers/{id}/reject` | Reject a maneuver plan with a reason. |
+| POST | `/detour/maneuvers/{id}/execute` | Execute an approved maneuver plan (admin only). |
+| GET | `/detour/satellites/{id}/state` | Get the detour‑specific state for a satellite. |
+| GET | `/detour/satellites/{id}/maneuvers` | List maneuver history for a satellite. |
+| POST | `/detour/screening/run` | Run manual conjunction screening. |
+
+### Example: Trigger Analysis
+
+```bash
+curl -X POST "http://localhost:8000/api/v1/detour/conjunctions/12345/analyze" \
+  -H "Authorization: Bearer <access-token>" \
+  -H "Content-Type: application/json"
+```
+
+Response:
+
+```json
+{
+  "session_id": "f2c8e7a4-9c12-4d35-a6f9-8b2c1d2e9e5f"
+}
+```
+
+### Example: Approve Maneuver
+
+```bash
+curl -X POST "http://localhost:8000/api/v1/detour/maneuvers/plan123/approve" \
+  -H "Authorization: Bearer <access-token>" \
+  -H "Content-Type: application/json" \
+  -d '{"notes":"Approved after safety review"}'
+```
+
+Response (excerpt):
+
+```json
+{
+  "id": "plan123",
+  "conjunction_analysis_id": "analysis456",
+  "maneuver_type": "in-plane",
+  "delta_v_m_s": 0.45,
+  "fuel_cost_kg": 12.3,
+  "status": "PROPOSED",
+  "approved_by": "operator123",
+  "executed_at": null
+}
+```
+
+### Integration Guide
+
+- Use the generated OpenAPI specification at `/api/openapi.json` for client generation.
+- The Swagger UI at `/api/docs` provides an interactive interface.
+- All endpoints require a valid JWT containing a `tenant_id` claim; RBAC controls access (viewer/operator/admin).
+- Errors follow RFC 7807 problem‑details format.
+
 ---
 
 ## License

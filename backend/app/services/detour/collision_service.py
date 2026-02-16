@@ -247,11 +247,7 @@ class CollisionAvoidanceService:
         # Update satellite fuel/state if possible
         analysis = await self.db.get(DetourConjunctionAnalysis, plan.conjunction_analysis_id)
         if analysis:
-            stmt = select(ConjunctionEvent).where(
-                ConjunctionEvent.id == analysis.conjunction_event_id
-            )
-            result = await self.db.execute(stmt)
-            conj_event = result.scalar_one_or_none()
+            conj_event = await self.db.get(ConjunctionEvent, analysis.conjunction_event_id)
             if conj_event:
                 satellite_id = conj_event.primary_object_id
                 sat_state = await self.state_manager.get_satellite_state(
@@ -264,7 +260,10 @@ class CollisionAvoidanceService:
                     await self.state_manager.update_satellite_state(
                         satellite_id,
                         analysis.tenant_id,
-                        {'fuel_remaining_kg': new_fuel},
+                        {
+                            'fuel_remaining_kg': new_fuel,
+                            'delta_v_budget_m_s': max((sat_state.delta_v_budget_m_s or 0.0) - (plan.delta_v_m_s or 0.0), 0.0),
+                        },
                     )
 
         await self.audit.log(

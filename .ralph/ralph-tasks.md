@@ -281,7 +281,7 @@
 
 ## FASE 7: Finalizzazione
 
-- [ ] Task 7.1: Documentazione API
+- [x] Task 7.1: Documentazione API
   - Aggiornare docstring e README
   - Aggiungere OpenAPI annotations
   - Aggiungere esempi request/response
