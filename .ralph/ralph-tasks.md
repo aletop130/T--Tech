@@ -369,7 +369,7 @@ Implement debris visualization on the 3D Cesium map inspired by the TreeHacks 20
   - Document `/api/orbit` endpoint
   - Include keanucz/detour style examples
 
-- [ ] Task 7.2: Add Architecture Notes
+- [x] Task 7.2: Add Architecture Notes
   - Document keanucz/detour inspiration
   - Explain InstancedMesh pattern in Cesium
   - Document performance optimizations

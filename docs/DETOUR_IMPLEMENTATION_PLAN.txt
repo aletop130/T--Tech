@@ -71,6 +71,17 @@ frontend/src/
     └── useDetour.ts              # Hook React per Detour
 
 =================================================================
+ARCHITECTURE NOTES
+-------------------
+- **Keanucz/Detour inspiration**: The Detour system follows the design of the keanucz/detour project, leveraging a multi‑agent pipeline (Scout → Analyst → Planner → Safety → Ops) orchestrated by LangGraph. The same approach is applied here to orchestrate debris collision analysis and maneuver planning, with agents communicating via a shared graph state.
+- **InstancedMesh pattern in Cesium**: Instead of using React‑Three‑Fiber's InstancedMesh, we adopt Cesium's `Primitive` with `GeometryInstance` to render thousands of debris objects efficiently. Each debris is represented by a point geometry with a shared material, using per‑instance attributes for position and color. This enables GPU‑side instancing and reduces draw calls.
+- **Performance optimizations**:
+  - Batch propagation of TLEs using Skyfield's vectorized API to generate positions for up to 2500 objects within < 50 ms.
+  - Debris updates are throttled to a 15 second interval, and only changed objects are re‑uploaded to the GPU.
+  - Use of Cesium's `VertexArrayObject` caching and `primitive` `releaseResources` on cleanup.
+  - Limiting rendered objects to `maxDisplayObjects` (default 2500) and culling objects outside the camera view.
+  - Asynchronous background workers (Celery) for heavy screening and risk calculations, keeping API responses fast.
+
 PARTE 2: IMPLEMENTAZIONE FEATURE - TASK DETTAGLIATI
 =================================================================
 
