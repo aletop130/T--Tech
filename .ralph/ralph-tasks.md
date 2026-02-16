@@ -6,7 +6,7 @@ WRITE_CONTENT_LENGTH=2000
 
 ---
 
-- [/] Step 1 – Clean environment
+- [x] Step 1 – Clean environment
   - Remove previous build artifacts: `rm -rf ./frontend/.next ./frontend/node_modules`
   - Reset any local changes: `git reset --hard HEAD`
 
