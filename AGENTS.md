@@ -34,8 +34,16 @@ Space Domain Awareness (SDA) platform with a FastAPI Python backend and Next.js 
 **Note:** Opencode should not automatically start Docker containers; the user must run `docker-compose up` manually.
 
 ```bash
-# Start all services
+# Start all services (production build mode by default)
 docker-compose up -d
+
+# Start in development mode (hot-reload)
+FRONTEND_MODE=dev docker-compose up -d
+
+# Or use the helper script
+./docker-dev.sh --dev -d        # Development mode
+./docker-dev.sh --build -d      # Production build mode (default)
+./docker-dev.sh --dev -d --build # Development mode with rebuild
 
 # View logs
 docker-compose logs -f backend
@@ -46,9 +54,16 @@ docker-compose restart frontend
 
 # Full rebuild
 docker-compose up -d --build
+
+# Full rebuild in development mode
+FRONTEND_MODE=dev docker-compose up -d --build
 ```
 
-**Important**: Frontend updates are hot-loaded. Only restart the container when adding new dependencies.
+**Important**: Frontend updates are hot-loaded in dev mode (`FRONTEND_MODE=dev`). Only restart the container when adding new dependencies.
+
+**Frontend Modes:**
+- `FRONTEND_MODE=dev`: Runs `npm run dev` with hot-reload for development
+- `FRONTEND_MODE=build` (default): Runs `npm run build && npm start` for production-like builds
 
 ## Backend Commands
 

@@ -927,23 +927,52 @@
         "FAIL  src/app/(main)/map/__tests__/page.test.tsx > Map page integration – debris features > refreshes debris every 15 seconds",
         "FAIL  src/app/(main)/map/__tests__/page.test.tsx > Map page integration – debris features > toggles debris visibility using the checkbox"
       ]
+    },
+    {
+      "iteration": 45,
+      "startedAt": "2026-02-16T17:22:22.512Z",
+      "endedAt": "2026-02-16T17:24:04.760Z",
+      "durationMs": 100994,
+      "agent": "opencode",
+      "model": "regolo-ai/gpt-oss-120b",
+      "toolsUsed": {},
+      "filesModified": [
+        ".env.example",
+        "AGENTS.md",
+        "docker-dev.sh"
+      ],
+      "exitCode": 0,
+      "completionDetected": false,
+      "errors": [
+        "❯ src/app/(main)/map/__tests__/page.test.tsx (4 tests | 4 failed) 20044ms",
+        "FAIL  tests/e2e/debris.e2e.spec.ts [ tests/e2e/debris.e2e.spec.ts ]",
+        "Error: Playwright Test did not expect test.beforeEach() to be called here.",
+        "FAIL  tests/e2e/simple.test.ts [ tests/e2e/simple.test.ts ]",
+        "Error: Playwright Test did not expect test() to be called here.",
+        "⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯",
+        "FAIL  src/app/(main)/map/__tests__/page.test.tsx > Map page integration – debris features > loads debris on mount and displays count",
+        "Error: Test timed out in 5000ms.",
+        "FAIL  src/app/(main)/map/__tests__/page.test.tsx > Map page integration – debris features > refreshes debris every 15 seconds",
+        "FAIL  src/app/(main)/map/__tests__/page.test.tsx > Map page integration – debris features > toggles debris visibility using the checkbox"
+      ]
     }
   ],
-  "totalDurationMs": 3790013,
+  "totalDurationMs": 3891007,
   "struggleIndicators": {
     "repeatedErrors": {
       "❯ src/app/(main)/map/__tests__/page.test.tsx (4 tests | 4 failed) 20042ms": 1,
-      "FAIL  tests/e2e/debris.e2e.spec.ts [ tests/e2e/debris.e2e.spec.ts ]": 4,
-      "Error: Playwright Test did not expect test.beforeEach() to be called here.": 4,
-      "FAIL  tests/e2e/simple.test.ts [ tests/e2e/simple.test.ts ]": 4,
-      "Error: Playwright Test did not expect test() to be called here.": 4,
-      "⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯": 4,
-      "FAIL  src/app/(main)/map/__tests__/page.test.tsx > Map page integration – debris features > loads de": 4,
-      "Error: Test timed out in 5000ms.": 4,
-      "FAIL  src/app/(main)/map/__tests__/page.test.tsx > Map page integration – debris features > refreshe": 4,
-      "FAIL  src/app/(main)/map/__tests__/page.test.tsx > Map page integration – debris features > toggles ": 4,
+      "FAIL  tests/e2e/debris.e2e.spec.ts [ tests/e2e/debris.e2e.spec.ts ]": 5,
+      "Error: Playwright Test did not expect test.beforeEach() to be called here.": 5,
+      "FAIL  tests/e2e/simple.test.ts [ tests/e2e/simple.test.ts ]": 5,
+      "Error: Playwright Test did not expect test() to be called here.": 5,
+      "⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯": 5,
+      "FAIL  src/app/(main)/map/__tests__/page.test.tsx > Map page integration – debris features > loads de": 5,
+      "Error: Test timed out in 5000ms.": 5,
+      "FAIL  src/app/(main)/map/__tests__/page.test.tsx > Map page integration – debris features > refreshe": 5,
+      "FAIL  src/app/(main)/map/__tests__/page.test.tsx > Map page integration – debris features > toggles ": 5,
       "❯ src/app/(main)/map/__tests__/page.test.tsx (4 tests | 4 failed) 20043ms": 2,
-      "❯ src/app/(main)/map/__tests__/page.test.tsx (4 tests | 4 failed) 20041ms": 1
+      "❯ src/app/(main)/map/__tests__/page.test.tsx (4 tests | 4 failed) 20041ms": 1,
+      "❯ src/app/(main)/map/__tests__/page.test.tsx (4 tests | 4 failed) 20044ms": 1
     },
     "noProgressIterations": 0,
     "shortIterations": 0
