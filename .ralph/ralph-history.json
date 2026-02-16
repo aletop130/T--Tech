@@ -419,9 +419,26 @@
         "Caused by: ReferenceError: Cannot access 'mockComponent' before initialization",
         "\u001b[91m\u001b[1mError: \u001b[0m\"regolo.ServiceUnavailableError: regolo.MidStreamFallbackError: regolo.APIConnectionError: APIConnectionError: OpenAIException - unexpected tokens remaining in message header: Some"
       ]
+    },
+    {
+      "iteration": 23,
+      "startedAt": "2026-02-16T16:42:52.863Z",
+      "endedAt": "2026-02-16T16:43:14.123Z",
+      "durationMs": 20026,
+      "agent": "opencode",
+      "model": "regolo-ai/gpt-oss-120b",
+      "toolsUsed": {},
+      "filesModified": [
+        ".ralph/ralph-tasks.md"
+      ],
+      "exitCode": 0,
+      "completionDetected": false,
+      "errors": [
+        "\u001b[91m\u001b[1mError: \u001b[0m\"regolo.ServiceUnavailableError: regolo.MidStreamFallbackError: regolo.APIConnectionError: APIConnectionError: OpenAIException - list index out of range. Received Model Group=gpt-o"
+      ]
     }
   ],
-  "totalDurationMs": 1497435,
+  "totalDurationMs": 1517461,
   "struggleIndicators": {
     "repeatedErrors": {
       "FAIL  src/app/(main)/map/__tests__/page.test.tsx [ src/app/(main)/map/__tests__/page.test.tsx ]": 1,
@@ -430,9 +447,9 @@
       "Error: Cannot find module '@testing-library/dom'": 1,
       "Error: [vitest] There was an error when mocking a module. If you are using \"vi.mock\" factory, make s": 1,
       "Caused by: ReferenceError: Cannot access 'mockComponent' before initialization": 1,
-      "\u001b[91m\u001b[1mError: \u001b[0m\"regolo.ServiceUnavailableError: regolo.MidStreamFallbackError: regolo.APIConnec": 1
+      "\u001b[91m\u001b[1mError: \u001b[0m\"regolo.ServiceUnavailableError: regolo.MidStreamFallbackError: regolo.APIConnec": 2
     },
     "noProgressIterations": 0,
-    "shortIterations": 0
+    "shortIterations": 1
   }
 }
