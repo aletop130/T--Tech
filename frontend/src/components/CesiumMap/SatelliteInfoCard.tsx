@@ -15,9 +15,10 @@ interface SatelliteInfoCardProps {
   satellite: Satellite;
   orbit?: OrbitData;
   onClose?: () => void;
+  onManeuver?: () => void;
 }
 
-export function SatelliteInfoCard({ satellite, orbit, onClose }: SatelliteInfoCardProps) {
+export function SatelliteInfoCard({ satellite, orbit, onClose, onManeuver }: SatelliteInfoCardProps) {
   // Parse TLE data if available
   const parseTLE = () => {
     if (!orbit?.tle_line1 || !orbit?.tle_line2) return null;
@@ -78,9 +79,12 @@ export function SatelliteInfoCard({ satellite, orbit, onClose }: SatelliteInfoCa
           <Icon icon="satellite" className="text-sda-accent-cyan" />
           <h3 className="text-lg font-semibold text-sda-text-primary">{satellite.name}</h3>
         </div>
-        {onClose && (
-          <Button minimal small icon="cross" onClick={onClose} />
-        )}
+{onClose && (
+            <Button minimal small icon="cross" onClick={onClose} />
+          )}
+          {onManeuver && (
+            <Button minimal small icon="flash" intent="warning" onClick={onManeuver} title="Trigger maneuver animation" />
+          )}
       </div>
 
       <div className="space-y-3">

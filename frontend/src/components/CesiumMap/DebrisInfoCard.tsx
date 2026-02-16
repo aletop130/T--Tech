@@ -9,6 +9,7 @@ import type { DebrisObject } from '@/lib/types/debris';
 interface DebrisInfoCardProps {
   debris: DebrisObject;
   onClose?: () => void;
+  onManeuver?: () => void;
 }
 
 /** Determine orbit class based on altitude (km) */
@@ -18,7 +19,7 @@ const getOrbitClass = (altKm: number): string => {
   return 'GEO';
 };
 
-export function DebrisInfoCard({ debris, onClose }: DebrisInfoCardProps) {
+export function DebrisInfoCard({ debris, onClose, onManeuver }: DebrisInfoCardProps) {
   const orbitClass = getOrbitClass(debris.altKm);
 
   return (
@@ -29,9 +30,12 @@ export function DebrisInfoCard({ debris, onClose }: DebrisInfoCardProps) {
           <Icon icon="trash" className="text-[#f59e0b]" />
           <h3 className="text-lg font-semibold text-sda-text-primary">Debris {debris.noradId}</h3>
         </div>
-        {onClose && (
-          <Button minimal small icon="cross" onClick={onClose} />
-        )}
+{onClose && (
+            <Button minimal small icon="cross" onClick={onClose} />
+          )}
+          {onManeuver && (
+            <Button minimal small icon="flash" intent="warning" onClick={onManeuver} title="Trigger maneuver animation" />
+          )}
       </div>
 
       <div className="space-y-3">

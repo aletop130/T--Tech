@@ -398,7 +398,7 @@ Implement debris visualization on the 3D Cesium map inspired by the TreeHacks 20
 - [x] Orange debris color (#f59e0b) matching keanucz/detour
 - [x] Orbital trails show 20% of orbit arc
 - [x] Speed control (1x-100x) working
-- [ ] Maneuver animation (red flash) working
+- [x] Maneuver animation (red flash) working
 - [ ] All tests pass (> 90% coverage)
 - [ ] Performance: 60fps with full debris load
 - [ ] No console errors

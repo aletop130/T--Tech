@@ -695,11 +695,12 @@ const fetchFamousSatellites = async () => {
                       />
                     )}
                     {selectedSatellite && (
-                      <SatelliteInfoCard
-                        satellite={selectedSatellite}
-                        orbit={orbits.find((o) => o.satellite_id === selectedSatellite.id)}
-                        onClose={() => setSelectedSatellite(null)}
-                      />
+<SatelliteInfoCard
+                         satellite={selectedSatellite}
+                         orbit={orbits.find((o) => o.satellite_id === selectedSatellite.id)}
+                         onClose={() => setSelectedSatellite(null)}
+                         onManeuver={() => setManeuverStartMs(Date.now())}
+                       />
                     )}
                     {selectedStation && (
                       <GroundStationInfoCard
@@ -722,10 +723,11 @@ const fetchFamousSatellites = async () => {
                     
                     {/* SAR Simulation Layers */}
 {selectedDebris && (
-  <DebrisInfoCard
-    debris={selectedDebris}
-    onClose={() => setSelectedDebris(null)}
-  />
+<DebrisInfoCard
+                      debris={selectedDebris}
+                      onClose={() => setSelectedDebris(null)}
+                      onManeuver={() => setManeuverStartMs(Date.now())}
+                    />
 )}
 {orbitTrack && viewer && !isSimulationMode && (
   <>
