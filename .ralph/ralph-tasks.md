@@ -188,7 +188,7 @@ Implement debris visualization on the 3D Cesium map inspired by the TreeHacks 20
     - 0.3→2.5s: hold red
     - 2.5→3.5s: fade back
 
-- [ ] Task 3.3: Create Moving Satellite Marker (`frontend/src/components/CesiumMap/MovingSatelliteMarker.tsx`)
+- [x] Task 3.3: Create Moving Satellite Marker (`frontend/src/components/CesiumMap/MovingSatelliteMarker.tsx`)
   - Props:
     ```typescript
     interface MovingSatelliteMarkerProps {
