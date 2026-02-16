@@ -109,7 +109,7 @@
   - Ogni prompt: definire ruolo, task, output JSON strutturato, esempi
   - Temperature 0.2 per determinismo
 
-- [ ] Task 3.4: Tool Orbitali per Agenti (backend/app/agents/detour/tools.py)
+- [x] Task 3.4: Tool Orbitali per Agenti (backend/app/agents/detour/tools.py)
   - @tool screen_conjunctions_tool(satellite_id, time_window_hours=72, threshold_km=5.0)
   - @tool assess_risk_tool(conjunction_event_id)
   - @tool propose_maneuvers_tool(conjunction_event_id, delta_v_budget=0.5)
