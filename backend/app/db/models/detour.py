@@ -49,6 +49,7 @@ class DetourSatelliteState(Base, AuditMixin):
 
     id = Column(String(50), primary_key=True, default=generate_uuid)
     satellite_id = Column(String(50), ForeignKey("satellites.id"), nullable=False, index=True)
+    tenant_id = Column(String(50), nullable=False, index=True)
 
     fuel_remaining_kg = Column(Float, nullable=True)
     delta_v_budget_m_s = Column(Float, nullable=True)

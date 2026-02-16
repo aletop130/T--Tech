@@ -255,7 +255,7 @@
   - Test maneuver plan workflow: proposed -> approved -> executed
   - Usare test database isolata
 
-- [ ] Task 6.2: E2E Tests (backend/tests/e2e/test_detour_workflow.py)
+- [x] Task 6.2: E2E Tests (backend/tests/e2e/test_detour_workflow.py)
   - Scenario 1 Complete Workflow: Screening -> Analysis -> Approve -> Execute
   - Scenario 2 Low Risk: Monitor only, no maneuver
   - Scenario 3 Concurrent: 3 analisi parallele stesso satellite
