@@ -215,7 +215,7 @@
   - Actions: runScreening, selectSatellite, selectConjunction
   - Persistenza sessioni in localStorage, ottimistic updates
 
-- [ ] Task 5.3: Componenti Detour (frontend/src/components/Detour/)
+- [x] Task 5.3: Componenti Detour (frontend/src/components/Detour/)
   - Componente DetourDashboard.tsx - layout principale
   - Componente CollisionAnalyzer.tsx - gauge risk, analisi dettaglio
   - Componente ManeuverPlanner.tsx - lista opzioni, comparazione
