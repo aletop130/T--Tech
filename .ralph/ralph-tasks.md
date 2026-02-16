@@ -30,7 +30,7 @@ WRITE_CONTENT_LENGTH=2000
       - *Other failures*: print `BUILD_ERROR` and pause for manual intervention.
     - After fixing, print `READY_FOR_NEXT_TASK` and loop back to the build step.
 
-- [ ] Step 4 – Verify runtime
+- [x] Step 4 – Verify runtime
   - Once the build succeeds, run `npm start` (with `FRONTEND_MODE=build`) to ensure the application starts correctly.
   - Print `RUNTIME_VERIFIED` if the server starts without errors.
 
