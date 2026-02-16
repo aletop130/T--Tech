@@ -207,7 +207,7 @@ Implement debris visualization on the 3D Cesium map inspired by the TreeHacks 20
     - Maneuver animation: color shift + scale pulse
   - Use `viewer.clock.onTick` for animation loop
 
-- [ ] Task 3.4: Create DebrisInfoCard Component (`frontend/src/components/CesiumMap/DebrisInfoCard.tsx`)
+- [x] Task 3.4: Create DebrisInfoCard Component (`frontend/src/components/CesiumMap/DebrisInfoCard.tsx`)
   - Props: `debris: DebrisObject`, `onClose: () => void`
   - Blueprint.js Card with:
     - Trash/scatter-plot icon (debris indicator)
