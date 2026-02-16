@@ -2,6 +2,7 @@ export interface Satellite {
   id: string;
   norad_id: number;
   name: string;
+  faction?: string;
 }
 
 /**

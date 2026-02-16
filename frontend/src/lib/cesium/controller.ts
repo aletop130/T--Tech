@@ -463,20 +463,20 @@ this.viewer.camera.flyTo({
 
   private toggleCoverageLayers(show: boolean): void {
     if (!this.viewer) return;
-    (this.viewer.dataSources as unknown as { dataSources: CesiumModule.DataSource[] }).dataSources.forEach(dataSource => {
+    (this.viewer.dataSources as unknown as { dataSources: CesiumModule['DataSource'][] }).dataSources.forEach(dataSource => {
       const layerId = (dataSource as any).layerId;
       if (layerId && layerId.includes('coverage')) {
-        dataSource.show = show;
+        (dataSource as any).show = show;
       }
     });
   }
 
   private toggleConjunctionLayers(show: boolean): void {
     if (!this.viewer) return;
-    (this.viewer.dataSources as unknown as { dataSources: CesiumModule.DataSource[] }).dataSources.forEach(dataSource => {
+    (this.viewer.dataSources as unknown as { dataSources: CesiumModule['DataSource'][] }).dataSources.forEach(dataSource => {
       const layerId = (dataSource as any).layerId;
       if (layerId && layerId.includes('conjunction')) {
-        dataSource.show = show;
+        (dataSource as any).show = show;
       }
     });
   }
@@ -486,11 +486,11 @@ this.viewer.camera.flyTo({
 
     const layerId = payload.layerId as string;
 
-    const dataSources = (this.viewer.dataSources as unknown as { dataSources: CesiumModule.DataSource[] }).dataSources;
+    const dataSources = (this.viewer.dataSources as unknown as { dataSources: CesiumModule['DataSource'][] }).dataSources;
     for (let i = dataSources.length - 1; i >= 0; i--) {
       const dataSource = dataSources[i];
       if ((dataSource as any).layerId === layerId) {
-        this.viewer.dataSources.remove(dataSource);
+        this.viewer.dataSources.remove(dataSource as any);
         break;
       }
     }
@@ -536,7 +536,7 @@ this.viewer.camera.flyTo({
       longitude: number;
       altitudeKm: number;
     }>;
-  }): CesiumModule.Entity | null {
+  }): any | null {
     if (!this.viewer || !this.Cesium) return null;
 
     const positions = route.waypoints.map(wp =>
@@ -605,7 +605,7 @@ this.viewer.camera.flyTo({
     latitude: number;
     longitude: number;
     altitudeKm: number;
-  }>): CesiumModule.Entity | null {
+  }>): any | null {
     if (!this.viewer || !this.Cesium || trajectory.length === 0) return null;
 
     const positions = trajectory.map(t =>
@@ -651,7 +651,7 @@ this.viewer.camera.flyTo({
         this.viewer!.entities.add({
           id: `formation-link-${formation.id}-${member.entityId}`,
           polyline: {
-            positions: new this.Cesium.CallbackProperty(() => {
+            positions: new (this.Cesium!).CallbackProperty(() => {
               if (!leaderEntity.position || !memberEntity.position) return [];
               return [leaderEntity.position.getValue(this.Cesium!.JulianDate.now())!, memberEntity.position.getValue(this.Cesium!.JulianDate.now())!];
             }, false),
@@ -664,21 +664,20 @@ this.viewer.camera.flyTo({
   }
 
   private getFormationColor(formationType: string): any {
-    if (!this.Cesium) return new (this.Cesium || window.Cesium).Color(1, 1, 1, 1);
-    
+    const cesium = this.Cesium!;
     switch (formationType) {
       case 'v_shape':
-        return this.Cesium.Color.LIME;
+        return cesium.Color.LIME;
       case 'line':
-        return this.Cesium.Color.CYAN;
+        return cesium.Color.CYAN;
       case 'diamond':
-        return this.Cesium.Color.ORANGE;
+        return cesium.Color.ORANGE;
       case 'echelon':
-        return this.Cesium.Color.MAGENTA;
+        return cesium.Color.MAGENTA;
       case 'circle':
-        return this.Cesium.Color.YELLOW;
+        return cesium.Color.YELLOW;
       default:
-        return this.Cesium.Color.WHITE;
+        return cesium.Color.WHITE;
     }
   }
 
@@ -695,7 +694,7 @@ this.viewer.camera.flyTo({
     name: string;
     operationType: string;
     participatingEntities: string[];
-  }): CesiumModule.Entity | null {
+  }): any | null {
     if (!this.viewer || !this.Cesium) return null;
 
     const operationColor = this.getOperationColor(operation.operationType);
@@ -739,21 +738,20 @@ this.viewer.camera.flyTo({
   }
 
   private getOperationColor(operationType: string): any {
-    if (!this.Cesium) return new (this.Cesium || window.Cesium).Color(1, 1, 1, 1);
-    
+    const cesium = this.Cesium!;
     switch (operationType) {
       case 'strike':
-        return this.Cesium.Color.RED;
+        return cesium.Color.RED;
       case 'patrol':
-        return this.Cesium.Color.GREEN;
+        return cesium.Color.GREEN;
       case 'intercept':
-        return this.Cesium.Color.ORANGE;
+        return cesium.Color.ORANGE;
       case 'reconnaissance':
-        return this.Cesium.Color.CYAN;
+        return cesium.Color.CYAN;
       case 'support':
-        return this.Cesium.Color.BLUE;
+        return cesium.Color.BLUE;
       default:
-        return this.Cesium.Color.WHITE;
+        return cesium.Color.WHITE;
     }
   }
 
@@ -782,7 +780,7 @@ this.viewer.camera.flyTo({
     this.viewer.entities.add({
       id: `collision-${alert.id}`,
       polyline: {
-        positions: new this.Cesium.CallbackProperty(() => {
+        positions: new (this.Cesium!).CallbackProperty(() => {
           const posA = entityA.position!.getValue(this.Cesium!.JulianDate.now());
           const posB = entityB.position!.getValue(this.Cesium!.JulianDate.now());
           if (!posA || !posB) return [];
@@ -798,11 +796,11 @@ this.viewer.camera.flyTo({
 
     this.viewer.entities.add({
       id: `collision-warning-${alert.id}`,
-      position: new this.Cesium.CallbackProperty(() => {
+      position: new (this.Cesium!).CallbackProperty(() => {
         const posA = entityA.position!.getValue(this.Cesium!.JulianDate.now());
         const posB = entityB.position!.getValue(this.Cesium!.JulianDate.now());
         if (!posA || !posB) return this.Cesium!.Cartesian3.ZERO;
-        return this.Cesium!.Cartesian3.midpoint(posA, posB, new this.Cesium.Cartesian3());
+        return this.Cesium!.Cartesian3.midpoint(posA, posB, new this.Cesium!.Cartesian3());
       }, false) as any,
       point: {
         pixelSize: 15,

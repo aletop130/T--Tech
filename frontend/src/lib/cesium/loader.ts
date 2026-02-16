@@ -5,6 +5,7 @@
  */
 
 import type * as CesiumType from 'cesium';
+import React from 'react';
 
 type CesiumModule = typeof CesiumType;
 

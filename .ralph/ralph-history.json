@@ -487,9 +487,39 @@
         "Type error: Cannot access 'CesiumModule.Color' because 'CesiumModule' is a type, but not a namespace. Did you mean to retrieve the type of the property 'Color' in 'CesiumModule' with 'CesiumModule[\"Co",
         "Type error: Cannot access 'CesiumModule.PositionProperty' because 'CesiumModule' is a type, but not a namespace. Did you mean to retrieve the type of the property 'PositionProperty' in 'CesiumModule' "
       ]
+    },
+    {
+      "iteration": 22,
+      "startedAt": "2026-02-16T14:10:19.563Z",
+      "endedAt": "2026-02-16T14:17:30.912Z",
+      "durationMs": 430098,
+      "agent": "opencode",
+      "model": "regolo-ai/gpt-oss-120b",
+      "toolsUsed": {},
+      "filesModified": [
+        ".ralph/ralph-tasks.md",
+        "frontend/src/components/Detour/__tests__/CollisionAnalyzer.test.tsx",
+        "frontend/src/lib/cesium/controller.ts",
+        "frontend/src/lib/cesium/loader.ts",
+        "frontend/src/lib/satelliteFaction.ts"
+      ],
+      "exitCode": 0,
+      "completionDetected": false,
+      "errors": [
+        "❯ src/components/Detour/__tests__/CollisionAnalyzer.test.tsx (3 tests | 3 failed) 14ms",
+        "⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯",
+        "FAIL  src/components/Detour/__tests__/CollisionAnalyzer.test.tsx > CollisionAnalyzer component > renders high risk as danger intent",
+        "ReferenceError: React is not defined",
+        "FAIL  src/components/Detour/__tests__/CollisionAnalyzer.test.tsx > CollisionAnalyzer component > renders low risk as warning intent",
+        "FAIL  src/components/Detour/__tests__/CollisionAnalyzer.test.tsx > CollisionAnalyzer component > shows loading indicator when isLoading",
+        "Test Files  1 failed | 1 passed (2)",
+        "Tests  3 failed | 5 passed (8)",
+        "Type error: Cannot access 'CesiumModule.DataSource' because 'CesiumModule' is a type, but not a namespace. Did you mean to retrieve the type of the property 'DataSource' in 'CesiumModule' with 'Cesium",
+        "Type error: Property 'show' does not exist on type 'typeof DataSource'."
+      ]
     }
   ],
-  "totalDurationMs": 4965356,
+  "totalDurationMs": 5395454,
   "struggleIndicators": {
     "repeatedErrors": {
       "Type error: Type 'Dispatch<SetStateAction<string>>' is not assignable to type '(newTabId: TabId, pre": 1,
@@ -507,7 +537,16 @@
       "Type error: Property 'Color' does not exist on type 'never'.": 1,
       "Type error: Cannot access 'CesiumModule.ScreenSpaceEventHandler' because 'CesiumModule' is a type, b": 1,
       "Type error: Cannot access 'CesiumModule.Color' because 'CesiumModule' is a type, but not a namespace": 1,
-      "Type error: Cannot access 'CesiumModule.PositionProperty' because 'CesiumModule' is a type, but not ": 1
+      "Type error: Cannot access 'CesiumModule.PositionProperty' because 'CesiumModule' is a type, but not ": 1,
+      "❯ src/components/Detour/__tests__/CollisionAnalyzer.test.tsx (3 tests | 3 failed) 14ms": 1,
+      "⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯": 1,
+      "FAIL  src/components/Detour/__tests__/CollisionAnalyzer.test.tsx > CollisionAnalyzer component > ren": 2,
+      "ReferenceError: React is not defined": 1,
+      "FAIL  src/components/Detour/__tests__/CollisionAnalyzer.test.tsx > CollisionAnalyzer component > sho": 1,
+      "Test Files  1 failed | 1 passed (2)": 1,
+      "Tests  3 failed | 5 passed (8)": 1,
+      "Type error: Cannot access 'CesiumModule.DataSource' because 'CesiumModule' is a type, but not a name": 1,
+      "Type error: Property 'show' does not exist on type 'typeof DataSource'.": 1
     },
     "noProgressIterations": 0,
     "shortIterations": 0

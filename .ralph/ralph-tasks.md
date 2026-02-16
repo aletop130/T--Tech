@@ -331,7 +331,7 @@
 - [x] Performance tests soddisfano requisiti
 - [x] Security tests passano
 - [x] API documentata
-- [ ] Frontend funzionante
+- [x] Frontend funzionante
 - [ ] SSE streaming testato
 - [ ] RBAC verificato su tutti endpoint
 
