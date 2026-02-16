@@ -163,6 +163,8 @@ const [viewer, setViewer] = useState<InstanceType<CesiumModule['Viewer']> | null
   const [selectedDebris, setSelectedDebris] = useState<DebrisObject | null>(null);
   const [speed, setSpeed] = useState(1);
   const speedRef = useRef(1);
+// Timestamp (ms) when a maneuver animation should start
+const [maneuverStartMs, setManeuverStartMs] = useState<number | undefined>(undefined);
   const [orbitTrack, setOrbitTrack] = useState<OrbitTrackState | null>(null);
   const SPEED_STEPS = [1, 2, 5, 10, 25, 50, 100];
 // Update Cesium simulation speed when `speed` changes
@@ -172,6 +174,8 @@ useEffect(() => {
     cesiumController.setOperationSpeed(speed);
   }
 }, [speed, viewer]);
+
+
 
 // Debris data loading configuration
 const DEBRIS_REFRESH_MS = 15_000;
@@ -725,8 +729,8 @@ const fetchFamousSatellites = async () => {
 )}
 {orbitTrack && viewer && !isSimulationMode && (
   <>
-    <OrbitalTrackLayer viewer={viewer} orbitTrack={orbitTrack} />
-    <MovingSatelliteMarker viewer={viewer} orbitTrack={orbitTrack} />
+    <OrbitalTrackLayer viewer={viewer} orbitTrack={orbitTrack} maneuverStartMs={maneuverStartMs} />
+    <MovingSatelliteMarker viewer={viewer} orbitTrack={orbitTrack} maneuverStartMs={maneuverStartMs} />
   </>
 )}
                     {isSimulationMode && (
