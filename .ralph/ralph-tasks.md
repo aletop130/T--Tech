@@ -329,7 +329,7 @@
 - [x] Integration tests passano
 - [x] E2E tests passano
 - [x] Performance tests soddisfano requisiti
-- [ ] Security tests passano
+- [x] Security tests passano
 - [ ] API documentata
 - [ ] Frontend funzionante
 - [ ] SSE streaming testato

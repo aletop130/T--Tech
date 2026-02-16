@@ -381,14 +381,26 @@
         "E       AssertionError: Screening took too long: 185.99s",
         "FAILED backend/tests/performance/test_detour_performance.py::test_screening_performance"
       ]
+    },
+    {
+      "iteration": 18,
+      "startedAt": "2026-02-16T13:39:31.358Z",
+      "endedAt": "2026-02-16T13:40:35.219Z",
+      "durationMs": 62663,
+      "agent": "opencode",
+      "model": "regolo-ai/gpt-oss-120b",
+      "toolsUsed": {},
+      "filesModified": [
+        ".ralph/ralph-tasks.md"
+      ],
+      "exitCode": 0,
+      "completionDetected": false,
+      "errors": []
     }
   ],
-  "totalDurationMs": 3130796,
+  "totalDurationMs": 3193459,
   "struggleIndicators": {
-    "repeatedErrors": {
-      "E       AssertionError: Screening took too long: 185.99s": 1,
-      "FAILED backend/tests/performance/test_detour_performance.py::test_screening_performance": 1
-    },
+    "repeatedErrors": {},
     "noProgressIterations": 0,
     "shortIterations": 0
   }
