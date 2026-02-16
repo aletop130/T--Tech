@@ -178,9 +178,9 @@ def assess_risk_level(
         return CollisionRiskLevel.CRITICAL
     if collision_prob >= 1e-4:
         return CollisionRiskLevel.CRITICAL
-    if collision_prob >= 1e-5:
+    if collision_prob >= 1e-6:
         return CollisionRiskLevel.HIGH
-    if collision_prob >= 1e-7:
+    if collision_prob >= 1e-8:
         return CollisionRiskLevel.MEDIUM
     return CollisionRiskLevel.LOW
 

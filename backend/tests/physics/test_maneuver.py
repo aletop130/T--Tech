@@ -16,6 +16,7 @@ from app.physics.maneuver import (
     optimize_maneuver_timing,
     calculate_delta_v_cost,
 )
+from app.physics.screening import ConjunctionEvent
 
 # Simple ISS-like TLE for constructing ConjunctionEvent objects in screening tests.
 ISS_TLE_LINE1 = "1 25544U 98067A   23247.51725687  .00023758  00000+0  42285-3 0  9992"

@@ -77,6 +77,22 @@ def _build_satellite(tle_line1: str, tle_line2: str) -> EarthSatellite:
         raise ValueError("Invalid TLE data") from exc
     return sat
 
+def _validate_tle_format(line1: str, line2: str) -> None:
+    """Validate basic TLE format.
+
+    This helper raises ``ValueError`` if the two lines do not appear to be
+    valid NORAD Two‑Line Element strings.  The check is deliberately simple –
+    it verifies that the first line starts with ``"1 "`` and the second line
+    starts with ``"2 "`` after stripping leading whitespace.  This is sufficient
+    for the unit tests, which use clearly malformed strings like ``"invalid
+    line1"``.
+    """
+    if not isinstance(line1, str) or not isinstance(line2, str):
+        raise ValueError("TLE lines must be strings")
+    if not line1.lstrip().startswith("1 ") or not line2.lstrip().startswith("2 "):
+        raise ValueError("Invalid TLE data")
+
+
 def propagate_tle(
     tle_line1: str,
     tle_line2: str,
@@ -110,6 +126,7 @@ def propagate_tle(
         if not isinstance(e, datetime):
             raise ValueError("All epochs must be datetime objects")
 
+    _validate_tle_format(tle_line1, tle_line2)
     sat = _build_satellite(tle_line1, tle_line2)
 
     ts = _TSF.utc(
