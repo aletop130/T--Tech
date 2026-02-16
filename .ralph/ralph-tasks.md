@@ -206,7 +206,7 @@
   - Funzione runScreening(satelliteId, timeWindow) -> results
   - Gestione riconnessione SSE automatica, error handling con toast
 
-- [ ] Task 5.2: Zustand Store (frontend/src/lib/store/detour.ts)
+- [x] Task 5.2: Zustand Store (frontend/src/lib/store/detour.ts)
   - Store useDetourStore
   - State: activeAnalyses (Map), selectedSatellite, selectedConjunction
   - State: screeningResults, isLoading, error

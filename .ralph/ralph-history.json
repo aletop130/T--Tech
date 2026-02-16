@@ -507,15 +507,29 @@
       "errors": [
         "error: externally-managed-environment"
       ]
+    },
+    {
+      "iteration": 26,
+      "startedAt": "2026-02-16T12:28:08.436Z",
+      "endedAt": "2026-02-16T12:30:10.765Z",
+      "durationMs": 121282,
+      "agent": "opencode",
+      "model": "regolo-ai/gpt-oss-120b",
+      "toolsUsed": {},
+      "filesModified": [
+        ".ralph/ralph-tasks.md",
+        "frontend/package-lock.json",
+        "frontend/tsconfig.tsbuildinfo",
+        "frontend/src/lib/store/"
+      ],
+      "exitCode": 0,
+      "completionDetected": false,
+      "errors": []
     }
   ],
-  "totalDurationMs": 1599228,
+  "totalDurationMs": 1720510,
   "struggleIndicators": {
-    "repeatedErrors": {
-      "\u001b[91m\u001b[1mError: \u001b[0m\"regolo.ServiceUnavailableError: regolo.MidStreamFallbackError: regolo.APIConnec": 1,
-      "- backend/tests/api/v1/test_detour.py: success cases, auth failures, SSE streaming": 1,
-      "error: externally-managed-environment": 1
-    },
+    "repeatedErrors": {},
     "noProgressIterations": 0,
     "shortIterations": 0
   }
