@@ -43,7 +43,7 @@
 
 ## FASE 2: Core Physics Engine
 
-- [ ] Task 2.1: Propagatore Orbite (backend/app/physics/propagator.py)
+- [/] Task 2.1: Propagatore Orbite (backend/app/physics/propagator.py)
   - Funzione propagate_tle(tle_line1, tle_line2, epochs) -> np.ndarray (Nx6 [x,y,z,vx,vy,vz] in km, km/s ECI J2000)
   - Funzione propagate_state_vector(state, dt_seconds) -> StateVector (Kepler + J2)
   - Funzione tle_to_state_vector(tle_line1, tle_line2, epoch) -> StateVector
