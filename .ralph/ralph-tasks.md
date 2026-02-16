@@ -324,7 +324,7 @@
 
 - [x] Tutti i file creati secondo struttura
 - [x] Dipendenze installate
-- [ ] Database migrato
+- [x] Database migrato
 - [ ] Unit tests passano (>90% coverage physics)
 - [ ] Integration tests passano
 - [ ] E2E tests passano
