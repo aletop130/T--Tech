@@ -148,9 +148,12 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      args:
+        FRONTEND_MODE: ${FRONTEND_MODE:-build}
     container_name: sda-frontend
     environment:
       - NEXT_PUBLIC_API_URL=http://localhost:8000
+      - FRONTEND_MODE=${FRONTEND_MODE:-build}
     volumes:
       - ./frontend:/app
       - /app/node_modules
@@ -169,7 +172,14 @@ services:
       retries: 5
       start_period: 30s
     restart: unless-stopped
-    command: sh -c "npm run build -- --webpack && npm start"
+    command: >
+      sh -c '
+      if [ "$FRONTEND_MODE" = "dev" ]; then
+        npm run dev;
+      else
+        npm run build -- --webpack && npm start;
+      fi
+      '
 
 volumes:
   postgres_data:

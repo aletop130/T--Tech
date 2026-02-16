@@ -421,7 +421,7 @@ const loadDebris = async () => {
       if (interval) clearInterval(interval);
       abortController.abort();
     };
-}, [isSimulationMode, viewer]);
+}, [isSimulationMode]);
 
   // Load and refresh orbit track for selected satellite or debris
   useEffect(() => {
