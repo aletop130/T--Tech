@@ -200,6 +200,31 @@ class SpaceWeatherEventResponse(SpaceWeatherEventBase, AuditSchema):
 
 # ============== Conjunction Event ==============
 
+# ============== Debris ==============
+
+class DebrisObject(BaseSchema):
+    """Debris object for visualization."""
+    norad_id: int = Field(..., alias="noradId", description="NORAD catalog number")
+    lat: float
+    lon: float
+    alt_km: float = Field(..., alias="altKm", description="Altitude in km")
+
+class DebrisResponse(BaseSchema):
+    """Response model for debris list."""
+    time_utc: datetime = Field(..., alias="timeUtc")
+    objects: list[DebrisObject] = Field(default_factory=list)
+
+class DebrisOrbitInfo(BaseSchema):
+    """Debris object with orbit TLE data for detailed visualization."""
+    norad_id: int = Field(..., alias="noradId")
+    lat: float = 0.0
+    lon: float = 0.0
+    alt_km: float = Field(..., alias="altKm")
+    tle_line1: Optional[str] = None
+    tle_line2: Optional[str] = None
+
+# ============== Conjunction Event ==============
+
 class ConjunctionEventBase(BaseSchema):
     """Conjunction event base fields."""
     primary_object_id: str

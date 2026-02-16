@@ -17,6 +17,7 @@ except ImportError:  # pragma: no cover
         roles: list[str] = []
 from app.services.audit import AuditService
 from app.services.ontology import OntologyService
+from app.services.debris import DebrisService
 from app.services.incidents import IncidentService
 from app.services.analytics import ConjunctionAnalyzer, SpaceWeatherAnalyzer
 from app.services.ingestion import IngestionService
@@ -97,6 +98,14 @@ async def get_ontology_service(
 ) -> OntologyService:
     """Get ontology service instance."""
     return OntologyService(db, audit)
+
+
+async def get_debris_service(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    audit: Annotated[AuditService, Depends(get_audit_service)],
+) -> DebrisService:
+    """Get debris service instance."""
+    return DebrisService(db, audit)
 
 
 async def get_incident_service(

@@ -33,7 +33,7 @@ Implement debris visualization on the 3D Cesium map inspired by the TreeHacks 20
   - Filter by orbit classes (LEO, MEO, GEO) like keanucz/detour
   - Add type hints, structured logging with structlog
 
-- [ ] Task 1.2: Add Debris API Endpoints (`backend/app/api/v1/ontology.py`)
+- [x] Task 1.2: Add Debris API Endpoints (`backend/app/api/v1/ontology.py`)
   - Add `GET /api/debris` endpoint following keanucz/detour spec:
     ```python
     # Response format from keanucz/detour:

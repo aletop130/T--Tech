@@ -7,10 +7,12 @@ from fastapi import APIRouter, Depends, Query, Path
 from app.api.deps import (
     get_current_user,
     get_ontology_service,
+    get_debris_service,
 )
 from app.core.security import TokenData
 from app.core.exceptions import NotFoundError
 from app.services.ontology import OntologyService
+from app.services.debris import DebrisService
 from app.services.celestrack import CelesTrackService, get_celestrack_service, FAMOUS_SATELLITES, ALLIED_SATELLITES, ENEMY_SATELLITES
 from app.schemas.common import PaginatedResponse
 from app.schemas.ontology import (
@@ -34,6 +36,9 @@ from app.schemas.ontology import (
     CelestrackFetchRequest,
     CelestrackFetchResponse,
     CelestrackRefreshResponse,
+    DebrisResponse,
+    DebrisObject,
+    DebrisOrbitInfo,
 )
 
 router = APIRouter()
@@ -106,6 +111,71 @@ async def list_satellites_with_orbits(
             ],
         ))
     
+    return result
+
+# Debris endpoints
+@router.get("/debris", response_model=DebrisResponse)
+async def get_debris(
+    user: Annotated[TokenData, Depends(get_current_user)],
+    service: Annotated[DebrisService, Depends(get_debris_service)],
+    limit: int = Query(2500, ge=1),
+    orbitClasses: str = Query("LEO"),
+):
+    """Retrieve debris objects for visualization."""
+    # Fetch debris with orbits (ignoring orbitClasses for now)
+    debris_with_orbits = await service.get_debris_with_orbits(user.tenant_id)
+    # Limit results
+    limited = debris_with_orbits[:limit]
+    objects = []
+    for sat, orb in limited:
+        # Compute approximate altitude km
+        if orb.apogee_km is not None and orb.perigee_km is not None:
+            alt_km = (orb.apogee_km + orb.perigee_km) / 2
+        elif orb.apogee_km is not None:
+            alt_km = orb.apogee_km
+        elif orb.perigee_km is not None:
+            alt_km = orb.perigee_km
+        else:
+            alt_km = 0.0
+        objects.append(DebrisObject(
+            norad_id=sat.norad_id,
+            lat=0.0,
+            lon=0.0,
+            alt_km=alt_km,
+        ))
+    return DebrisResponse(
+        time_utc=datetime.utcnow(),
+        objects=objects,
+    )
+
+@router.get("/debris/with-orbits", response_model=list[DebrisOrbitInfo])
+async def get_debris_with_orbits(
+    user: Annotated[TokenData, Depends(get_current_user)],
+    service: Annotated[DebrisService, Depends(get_debris_service)],
+    limit: int = Query(2500, ge=1),
+    orbitClasses: str = Query("LEO"),
+):
+    """Retrieve debris objects with TLE data for detailed visualization."""
+    debris_with_orbits = await service.get_debris_with_orbits(user.tenant_id)
+    limited = debris_with_orbits[:limit]
+    result = []
+    for sat, orb in limited:
+        if orb.apogee_km is not None and orb.perigee_km is not None:
+            alt_km = (orb.apogee_km + orb.perigee_km) / 2
+        elif orb.apogee_km is not None:
+            alt_km = orb.apogee_km
+        elif orb.perigee_km is not None:
+            alt_km = orb.perigee_km
+        else:
+            alt_km = 0.0
+        result.append(DebrisOrbitInfo(
+            norad_id=sat.norad_id,
+            lat=0.0,
+            lon=0.0,
+            alt_km=alt_km,
+            tle_line1=orb.tle_line1,
+            tle_line2=orb.tle_line2,
+        ))
     return result
 
 
