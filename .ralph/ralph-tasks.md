@@ -225,7 +225,7 @@
   - Componente OpsBriefPanel.tsx - riepilogo operativo
   - Props interfaces con suffix Props, functional components con hooks, Blueprint.js
 
-- [ ] Task 5.4: Pagina Detour (frontend/src/app/(main)/detour/page.tsx)
+- [x] Task 5.4: Pagina Detour (frontend/src/app/(main)/detour/page.tsx)
   - Layout 2 colonne: sidebar (ThreatList) + main (tabs)
   - Tabs: Analysis, Maneuvers, History
   - Integrazione CesiumMap
