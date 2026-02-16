@@ -22,7 +22,7 @@
   - Creare: backend/app/services/detour/__init__.py
   - Verificare che i moduli siano importabili
 
-- [ ] Task 1.3: Costanti Physics (backend/app/physics/constants.py)
+- [x] Task 1.3: Costanti Physics (backend/app/physics/constants.py)
   - MU_EARTH: 3.986004418e14 (m^3/s^2)
   - R_EARTH: 6378137.0 (m)
   - J2: 0.00108263
