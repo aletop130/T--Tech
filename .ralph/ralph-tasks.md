@@ -240,7 +240,7 @@
   - Integrare con CesiumViewer esistente
   - Performance: limitare entità visibili
 
-- [ ] Task 5.6: Frontend Tests
+- [/] Task 5.6: Frontend Tests
   - frontend/src/lib/api/__tests__/detour.test.ts: mock fetch, SSE handling
   - frontend/src/components/Detour/__tests__/CollisionAnalyzer.test.tsx: rendering, user interactions
   - Vitest + React Testing Library, mock EventSource per SSE

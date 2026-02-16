@@ -584,13 +584,45 @@
         "Error: Cannot find module @rollup/rollup-linux-x64-gnu. npm has a bug related to optional dependencies (https://github.com/npm/cli/issues/4828). Please try `npm i` again after removing both package-lo",
         "[cause]: Error: Cannot find module '@rollup/rollup-linux-x64-gnu'"
       ]
+    },
+    {
+      "iteration": 30,
+      "startedAt": "2026-02-16T12:32:43.380Z",
+      "endedAt": "2026-02-16T12:33:49.790Z",
+      "durationMs": 65306,
+      "agent": "opencode",
+      "model": "regolo-ai/gpt-oss-120b",
+      "toolsUsed": {},
+      "filesModified": [
+        ".ralph/ralph-tasks.md",
+        "frontend/package-lock.json",
+        "frontend/package.json",
+        "frontend/src/components/Detour/__tests__/",
+        "frontend/src/lib/api/__tests__/"
+      ],
+      "exitCode": 0,
+      "completionDetected": false,
+      "errors": [
+        "Error: Cannot find module @rollup/rollup-linux-x64-gnu. npm has a bug related to optional dependencies (https://github.com/npm/cli/issues/4828). Please try `npm i` again after removing both package-lo",
+        "[cause]: Error: Cannot find module '@rollup/rollup-linux-x64-gnu'",
+        "FAIL  src/components/Detour/__tests__/CollisionAnalyzer.test.tsx [ src/components/Detour/__tests__/CollisionAnalyzer.test.tsx ]",
+        "Error: Cannot find package '@/lib/store/detour' imported from '/root/T--Tech/frontend/src/components/Detour/CollisionAnalyzer.tsx'",
+        "Caused by: Error: Failed to load url @/lib/store/detour (resolved id: @/lib/store/detour) in /root/T--Tech/frontend/src/components/Detour/CollisionAnalyzer.tsx. Does the file exist?",
+        "Test Files  1 failed | 1 passed (2)",
+        "\u001b[91m\u001b[1mError: \u001b[0m\"regolo.ServiceUnavailableError: regolo.MidStreamFallbackError: regolo.APIConnectionError: APIConnectionError: OpenAIException - unexpected tokens remaining in message header: Some"
+      ]
     }
   ],
-  "totalDurationMs": 1860892,
+  "totalDurationMs": 1926198,
   "struggleIndicators": {
     "repeatedErrors": {
-      "Error: Cannot find module @rollup/rollup-linux-x64-gnu. npm has a bug related to optional dependenci": 3,
-      "[cause]: Error: Cannot find module '@rollup/rollup-linux-x64-gnu'": 3
+      "Error: Cannot find module @rollup/rollup-linux-x64-gnu. npm has a bug related to optional dependenci": 4,
+      "[cause]: Error: Cannot find module '@rollup/rollup-linux-x64-gnu'": 4,
+      "FAIL  src/components/Detour/__tests__/CollisionAnalyzer.test.tsx [ src/components/Detour/__tests__/C": 1,
+      "Error: Cannot find package '@/lib/store/detour' imported from '/root/T--Tech/frontend/src/components": 1,
+      "Caused by: Error: Failed to load url @/lib/store/detour (resolved id: @/lib/store/detour) in /root/T": 1,
+      "Test Files  1 failed | 1 passed (2)": 1,
+      "\u001b[91m\u001b[1mError: \u001b[0m\"regolo.ServiceUnavailableError: regolo.MidStreamFallbackError: regolo.APIConnec": 1
     },
     "noProgressIterations": 0,
     "shortIterations": 0
