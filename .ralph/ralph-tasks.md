@@ -10,7 +10,7 @@ WRITE_CONTENT_LENGTH=2000
   - Remove previous build artifacts: `rm -rf ./frontend/.next ./frontend/node_modules`
   - Reset any local changes: `git reset --hard HEAD`
 
-- [ ] Step 2 – Install exact dependencies
+- [/] Step 2 – Install exact dependencies
   - Run `npm ci` inside `./frontend`
   - If installation fails, output `DEPENDENCY_INSTALL_FAILED` and abort the plan.
 
