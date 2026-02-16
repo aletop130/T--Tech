@@ -92,7 +92,7 @@
   - Metodo async get_maneuver_history(satellite_id, tenant_id)
   - Usare async SQLAlchemy, gestire transazioni, logging operazioni
 
-- [ ] Task 3.2: Schema LangGraph State (backend/app/agents/detour/state.py)
+- [x] Task 3.2: Schema LangGraph State (backend/app/agents/detour/state.py)
   - Definire DetourGraphState TypedDict
   - Campi: session_id, tenant_id, satellite_id, conjunction_event_id
   - Campi: satellite_state, conjunction_data, screening_results, risk_assessment
