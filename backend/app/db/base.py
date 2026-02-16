@@ -4,6 +4,8 @@ from typing import AsyncGenerator
 from uuid import uuid4
 
 from sqlalchemy import Column, DateTime, String, event
+from sqlalchemy.engine import Engine
+import sqlite3
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
     async_sessionmaker,
@@ -21,7 +23,7 @@ class Base(DeclarativeBase):
 
 class TenantMixin:
     """Mixin for multi-tenant models."""
-    tenant_id = Column(String(50), nullable=False, index=True)
+    tenant_id = Column(String(50), nullable=False, index=True, default="default")
 
 
 class TimestampMixin:
@@ -41,6 +43,15 @@ class AuditMixin(TenantMixin, TimestampMixin):
     """Combined mixin for tenant + timestamps."""
     created_by = Column(String(50), nullable=True)
     updated_by = Column(String(50), nullable=True)
+
+
+# Enable foreign key constraints on SQLite for testing and consistency
+@event.listens_for(Engine, "connect")
+def _set_sqlite_pragma(dbapi_connection, connection_record):
+    """Set SQLite PRAGMA foreign_keys=ON."""
+    cursor = dbapi_connection.cursor()
+    cursor.execute("PRAGMA foreign_keys=ON")
+    cursor.close()
 
 
 def generate_uuid() -> str:

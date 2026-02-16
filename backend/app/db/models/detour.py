@@ -12,7 +12,7 @@ from sqlalchemy import (
     String,
     JSON,
 )
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, backref
 
 from app.db.base import Base, AuditMixin, generate_uuid
 
@@ -70,7 +70,7 @@ class DetourConjunctionAnalysis(Base, AuditMixin):
     analysis_status = Column(SQLEnum(DetourAnalysisStatus), default=DetourAnalysisStatus.PENDING, nullable=False)
     ai_analysis = Column(JSON, nullable=True)
 
-    conjunction_event = relationship("ConjunctionEvent", backref="detour_analysis")
+    conjunction_event = relationship("ConjunctionEvent", backref=backref("detour_analysis", lazy="selectin"))
 
 
 class DetourManeuverPlan(Base, AuditMixin):
@@ -94,7 +94,7 @@ class DetourManeuverPlan(Base, AuditMixin):
     approved_by = Column(String(50), nullable=True)
     executed_at = Column(DateTime, nullable=True)
 
-    conjunction_analysis = relationship("DetourConjunctionAnalysis", backref="maneuver_plans")
+    conjunction_analysis = relationship("DetourConjunctionAnalysis", backref=backref("maneuver_plans", lazy="selectin"))
 
 
 class DetourAgentSession(Base, AuditMixin):
