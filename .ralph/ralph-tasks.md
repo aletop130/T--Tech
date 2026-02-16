@@ -55,7 +55,7 @@
   - Funzione refine_conjunction(candidate, iterations=10) -> ConjunctionEvent
   - Newton-Raphson per TCA esatto, geometria miss (radial, intrack, crosstrack)
 
-- [ ] Task 2.3: Calcolo Rischio Collisione (backend/app/physics/risk.py)
+- [x] Task 2.3: Calcolo Rischio Collisione (backend/app/physics/risk.py)
   - Funzione calculate_collision_probability_chan(primary_cov, secondary_cov, miss_distance, combined_radius) -> float
   - Formula Chan 1997, input matrici covarianza 3x3
   - Funzione assess_risk_level(collision_prob, miss_distance_km, object_sizes) -> RiskLevel
