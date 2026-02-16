@@ -246,7 +246,7 @@ Implement debris visualization on the 3D Cesium map inspired by the TreeHacks 20
     }
     ```
 
-- [ ] Task 4.2: Implement Debris Data Loading (`frontend/src/app/(main)/map/page.tsx`)
+- [x] Task 4.2: Implement Debris Data Loading (`frontend/src/app/(main)/map/page.tsx`)
   - Implement keanucz/detour style loading:
     ```typescript
     const DEBRIS_REFRESH_MS = 15_000;

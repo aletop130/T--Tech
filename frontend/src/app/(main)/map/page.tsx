@@ -5,6 +5,7 @@ import dynamic from 'next/dynamic';
 import { useSearchParams } from 'next/navigation';
 import { Spinner, Tag, Icon, Button, Checkbox, Intent } from '@blueprintjs/core';
 import { api, GroundStation, Satellite, ConjunctionEvent, PositionReport } from '@/lib/api';
+import { getDebris } from '@/lib/api/debris';
 import { getCesium, type CesiumModule } from '@/lib/cesium/loader';
 import type { DebrisObject } from '@/lib/types/debris';
 import { CesiumViewer } from '@/components/CesiumMap/CesiumViewer';
@@ -158,6 +159,10 @@ const [viewer, setViewer] = useState<InstanceType<CesiumModule['Viewer']> | null
   const [selectedDebris, setSelectedDebris] = useState<DebrisObject | null>(null);
   const [speed, setSpeed] = useState(1);
   const speedRef = useRef(1);
+// Debris data loading configuration
+const DEBRIS_REFRESH_MS = 15_000;
+const DISPLAY_OBJECT_LIMIT = 2500;
+const DEBRIS_ORBIT_CLASSES = "LEO";
   
   // SAR Simulation hook
   const {
@@ -350,7 +355,46 @@ updatedOrbits.forEach((orbit) => {
     }
   };
 
-  const fetchFamousSatellites = async () => {
+  // Load debris data and refresh periodically
+useEffect(() => {
+  let abortController = new AbortController();
+
+  const loadDebris = async () => {
+    if (isSimulationMode) return; // pause during simulation
+    try {
+      const response = await getDebris(DISPLAY_OBJECT_LIMIT, DEBRIS_ORBIT_CLASSES);
+      const Cesium = await getCesium();
+      const positions = response.objects
+        .filter((d) => {
+          return (
+            typeof d.lat === 'number' && typeof d.lon === 'number' && typeof d.altKm === 'number' &&
+            Number.isFinite(d.lat) && Number.isFinite(d.lon) && Number.isFinite(d.altKm) &&
+            d.lat >= -90 && d.lat <= 90 && d.lon >= -180 && d.lon <= 180 && d.altKm >= 0
+          );
+        })
+        .map((d) => Cesium.Cartesian3.fromDegrees(d.lon, d.lat, d.altKm * 1000));
+
+      setDebris(response.objects);
+      setDebrisPositions(positions);
+    } catch (err) {
+      console.error('Failed to load debris:', err);
+    }
+  };
+
+  // Initial load
+  loadDebris();
+
+  const interval = setInterval(() => {
+    loadDebris();
+  }, DEBRIS_REFRESH_MS);
+
+  return () => {
+    clearInterval(interval);
+    abortController.abort();
+  };
+}, [isSimulationMode, viewer]);
+
+const fetchFamousSatellites = async () => {
     setFetchingFamous(true);
     setFetchMessage(null);
     
