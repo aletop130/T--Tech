@@ -31,7 +31,7 @@
   - Costanti screening: THRESHOLD_KM=5.0, RADIUS_KM=10.0
   - Type hints obbligatori per tutte le costanti
 
-- [ ] Task 1.4: Modelli Database Detour (backend/app/db/models/detour.py + Alembic)
+- [x] Task 1.4: Modelli Database Detour (backend/app/db/models/detour.py + Alembic)
   - Tabella detour_satellite_state: id, satellite_id (FK), tenant_id, fuel_remaining_kg, delta_v_budget_m_s, timestamps
   - Tabella detour_conjunction_analysis: id, conjunction_event_id (FK), tenant_id, collision_probability, risk_level, miss_distance_km, tca, analysis_status, ai_analysis (JSONB), timestamps
   - Tabella detour_maneuver_plans: id, conjunction_analysis_id (FK), tenant_id, maneuver_type, delta_v_m_s, fuel_cost_kg, execution_window, expected_miss_distance_km, risk_reduction_percent, status, ai_recommendation (JSONB), created_by, approved_by, executed_at, timestamps
