@@ -188,7 +188,7 @@ export interface SearchResult {
   norad_id?: number;
 }
 
-class ApiClient {
+export class ApiClient {
   private baseUrl: string;
   private tenantId: string;
 
@@ -490,6 +490,13 @@ class ApiClient {
     return this._fetch(`/api/v1/incidents/${incidentId}/comments`, {
       method: 'POST',
       body: JSON.stringify({ content }),
+    });
+  }
+
+  // Deduplicate Incidents
+  async deduplicateIncidents(): Promise<{ duplicates_found: number; removed_count: number }> {
+    return this._fetch('/api/v1/incidents/deduplicate', {
+      method: 'POST',
     });
   }
 

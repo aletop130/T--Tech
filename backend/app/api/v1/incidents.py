@@ -210,5 +210,26 @@ async def add_comment(
         incident_id=incident_id,
         data=data,
         tenant_id=user.tenant_id,
+    )
+
+
+@router.post("/deduplicate")
+async def deduplicate_incidents(
+    user: Annotated[TokenData, Depends(get_current_user)],
+    service: Annotated[IncidentService, Depends(get_incident_service)],
+):
+    """Remove duplicate incidents."""
+    return await service.deduplicate_incidents(user.tenant_id)
+async def add_comment(
+    incident_id: Annotated[str, Path()],
+    data: CommentCreate,
+    user: Annotated[TokenData, Depends(get_current_user)],
+    service: Annotated[IncidentService, Depends(get_incident_service)],
+):
+    """Add a comment to an incident."""
+    return await service.add_comment(
+        incident_id=incident_id,
+        data=data,
+        tenant_id=user.tenant_id,
         user_id=user.sub,
     )

@@ -36,6 +36,8 @@ export function useSARSimulation(viewer: Cesium.Viewer | null, isActive: boolean
   const lastTimeRef = useRef<number>(0);
   const lastCameraTimeRef = useRef<number>(-1);
   const hasInitializedCameraRef = useRef<boolean>(false);
+  const hasStartedRef = useRef<boolean>(false);
+  const freeCameraModeRef = useRef<boolean>(true); // Default to free roam
 
   // Get current satellite states - CINEMATIC positioning
   // Satellites staged for visibility over Mediterranean theater
@@ -51,44 +53,59 @@ export function useSARSimulation(viewer: Cesium.Viewer | null, isActive: boolean
       let newLon = initialLon;
       let newLat = initialLat;
       
+      // Calculate cumulative maneuver offset - applies permanently after maneuver completes
+      let totalManeuverOffsetLon = 0;
+      let totalManeuverOffsetLat = 0;
+      
+      if (sat.maneuvers) {
+        sat.maneuvers.forEach(maneuver => {
+          if (state.time >= maneuver.time + maneuver.duration) {
+            // Maneuver completed - apply full offset permanently
+            totalManeuverOffsetLon += maneuver.deltaV.tangential * 0.5;
+            totalManeuverOffsetLat += maneuver.deltaV.normal * 0.5;
+          } else if (state.time >= maneuver.time) {
+            // Maneuver in progress - apply partial offset
+            const progress = (state.time - maneuver.time) / maneuver.duration;
+            totalManeuverOffsetLon += maneuver.deltaV.tangential * progress * 0.5;
+            totalManeuverOffsetLat += maneuver.deltaV.normal * progress * 0.5;
+          }
+        });
+      }
+      
       // CINEMATIC positioning - satellites drift slowly in theater
       if (sat.id === 'reconsat-1') {
         // Main recon satellite - slight drift over mission area
         // One gentle orbit over 4 hours = very slow drift
         const driftAngle = (state.time / 14400) * 2 * Math.PI; // One orbit over mission
-        newLon = initialLon + Math.sin(driftAngle) * 2; // ±2° longitude drift
-        newLat = initialLat + Math.cos(driftAngle) * 1; // ±1° latitude drift
+        newLon = initialLon + Math.sin(driftAngle) * 2 + totalManeuverOffsetLon;
+        newLat = initialLat + Math.cos(driftAngle) * 1 + totalManeuverOffsetLat;
       } else if (sat.id === 'comsat-2') {
         // Comms satellite - offset position
         const driftAngle = (state.time / 14400) * 2 * Math.PI + 1; // Phase offset
         newLon = initialLon + Math.sin(driftAngle) * 2;
         newLat = initialLat + Math.cos(driftAngle) * 1;
       } else if (sat.id === 'hostile-sat') {
-        // Hostile satellite - appears at 0:48 (2880s), approaches from angle
+        // Hostile satellite - appears at 0:48 (2880s), approaches then backs off
         if (state.time < 2880) {
           // Before appearance, position off-screen
           newLon = initialLon + 20;
           newLat = initialLat + 10;
-        } else {
-          // After 0:48, moves into theater
-          const approachTime = Math.min((state.time - 2880) / 720, 1); // 12 minute approach
+        } else if (state.time < 3600) {
+          // After 0:48, moves into theater - approaching reconsat
+          const approachTime = (state.time - 2880) / 720; // 12 minute approach
           const startLon = initialLon + 15;
           const startLat = initialLat + 8;
           newLon = startLon - approachTime * 15; // Move toward ReconSat-1
           newLat = startLat - approachTime * 8;
+        } else {
+          // After reconsat's avoidance at t=3600, hostile backs off
+          // Stay at a safe distance - retreat from reconsat
+          const retreatTime = Math.min((state.time - 3600) / 3600, 1); // 1 hour to fully retreat
+          const peakLon = initialLon; // Where it was at t=3600
+          const peakLat = initialLat;
+          newLon = peakLon + retreatTime * 5; // Move away
+          newLat = peakLat + retreatTime * 3;
         }
-      }
-      
-      // Apply maneuver offset during burn
-      const activeManeuver = sat.maneuvers?.find(
-        m => state.time >= m.time && state.time < m.time + m.duration
-      );
-      
-      if (activeManeuver) {
-        // During maneuver, show slight position offset
-        const progress = (state.time - activeManeuver.time) / activeManeuver.duration;
-        newLon += activeManeuver.deltaV.tangential * progress * 0.5;
-        newLat += activeManeuver.deltaV.normal * progress * 0.5;
       }
       
       return {
@@ -127,6 +144,8 @@ export function useSARSimulation(viewer: Cesium.Viewer | null, isActive: boolean
     lastTimeRef.current = 0;
     lastCameraTimeRef.current = -1;
     hasInitializedCameraRef.current = false;
+    hasStartedRef.current = false;
+    freeCameraModeRef.current = false;
   }, []);
 
   // Start the simulation
@@ -165,6 +184,15 @@ export function useSARSimulation(viewer: Cesium.Viewer | null, isActive: boolean
 
   // Dummy functions for compatibility
   const toggleStepMode = useCallback(() => {}, []);
+
+  // Toggle free camera mode - allows user to freely control camera
+  const toggleFreeCameraMode = useCallback(() => {
+    freeCameraModeRef.current = !freeCameraModeRef.current;
+    if (freeCameraModeRef.current && viewer) {
+      // Release Cesium camera from lookAt tracking
+      viewer.camera.lookAtTransform(Cesium.Matrix4.IDENTITY);
+    }
+  }, [viewer]);
 
   // Main simulation loop
   useEffect(() => {
@@ -229,33 +257,31 @@ export function useSARSimulation(viewer: Cesium.Viewer | null, isActive: boolean
     };
   }, [state.isPlaying, state.isPaused, state.isComplete]);
 
-  // Initial camera setup when simulation becomes active
-  useEffect(() => {
-    if (!viewer || !isActive) return;
-    
-    // Reset camera initialization flag when simulation mode is activated
-    hasInitializedCameraRef.current = false;
-    
-    // Initial camera position focused on the first satellite
-    const currentSats = getCurrentSatellites();
-    const targetSat = currentSats[0];
-    
-    if (targetSat && targetSat.currentPosition) {
-      viewer.camera.lookAt(
-        targetSat.currentPosition,
-        new Cesium.HeadingPitchRange(
-          Cesium.Math.toRadians(0),
-          Cesium.Math.toRadians(-45),
-          300000 // 300km range to see satellite and its orbital path
-        )
-      );
-      hasInitializedCameraRef.current = true;
-    }
-  }, [viewer, isActive, getCurrentSatellites]);
+  // DISABLED: Initial camera setup - using free roam by default
+  // useEffect(() => {
+  //   if (!viewer || !isActive) return;
+  //   if (hasStartedRef.current) return;
+  //   hasStartedRef.current = true;
+  //   const currentSats = getCurrentSatellites();
+  //   const targetSat = currentSats[0];
+  //   if (targetSat && targetSat.currentPosition) {
+  //     viewer.camera.lookAt(
+  //       targetSat.currentPosition,
+  //       new Cesium.HeadingPitchRange(
+  //         Cesium.Math.toRadians(0),
+  //         Cesium.Math.toRadians(-45),
+  //         300000
+  //       )
+  //     );
+  //     hasInitializedCameraRef.current = true;
+  //   }
+  // }, [viewer, isActive]);
 
-  // Camera update - CINEMATIC modes
+  // DISABLED: Camera update - using free roam by default
+  // The cinematic camera sequence is disabled - user has full camera control
   useEffect(() => {
     if (!viewer || !isActive) return;
+    if (freeCameraModeRef.current) return;
     if (!hasInitializedCameraRef.current) return;
     if (!state.isPlaying) return;
     if (state.time === lastCameraTimeRef.current) return;
@@ -394,5 +420,7 @@ export function useSARSimulation(viewer: Cesium.Viewer | null, isActive: boolean
     startSimulation,
     nextStep,
     prevStep,
+    freeCameraMode: freeCameraModeRef.current,
+    toggleFreeCameraMode,
   };
 }

@@ -161,6 +161,8 @@ export default function MapPage() {
     startSimulation: simStart,
     nextStep: simNextStep,
     prevStep: simPrevStep,
+    freeCameraMode: simFreeCameraMode,
+    toggleFreeCameraMode: simToggleFreeCameraMode,
   } = useSARSimulation(viewer, isSimulationMode);
   
   const satellitePositionsRef = useRef<Map<string, CesiumModule.Cartesian3>>(new Map());
@@ -711,6 +713,7 @@ export default function MapPage() {
                             position: sat.currentPosition || sat.initialPosition,
                             status: sat.status as 'online' | 'degraded' | 'maneuvering' | 'offline',
                             fuelPercent: sat.fuelPercent,
+                            affiliation: sat.affiliation as 'allied' | 'hostile' | 'neutral' | undefined,
                           }))}
                           showManeuvers={true}
                           showDataLinks={true}
@@ -1244,7 +1247,8 @@ export default function MapPage() {
         </div>
         )}
 
-        {/* Right Panel - Alerts & AI Chat */}
+        {/* Right Panel - Alerts & AI Chat - Hidden during simulation */}
+        {!isSimulationMode && (
         <div className="absolute right-4 top-24 bottom-4 w-96 pointer-events-auto flex flex-col gap-4">
           {/* Unified Alerts Panel */}
           {viewMode === 'earth' && (
@@ -1273,6 +1277,7 @@ export default function MapPage() {
             </div>
           </div>
         </div>
+        )}
       </div>
 
       {/* Fetch message toast */}
@@ -1343,6 +1348,8 @@ export default function MapPage() {
             onToggleStepMode={simToggleStepMode}
             onNextStep={simNextStep}
             onPrevStep={simPrevStep}
+            freeCameraMode={simFreeCameraMode}
+            onToggleFreeCameraMode={simToggleFreeCameraMode}
           />
           <MissionNarrative
             simulationTime={simTime}

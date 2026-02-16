@@ -265,6 +265,7 @@ class Formation(Base, AuditMixin):
     formation_data = Column(JSON, nullable=True)
     slot_assignments = Column(JSON, default=dict)
 
+    members = relationship("FormationMember", back_populates="formation", cascade="all, delete-orphan")
     operations = relationship("Operation", back_populates="formation")
 
     __table_args__ = (

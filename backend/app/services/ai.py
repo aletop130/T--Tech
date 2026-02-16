@@ -415,8 +415,17 @@ When technical data IS requested and available, provide structured, actionable i
                         yield f"data: {json.dumps({'type': 'content', 'chunk': chunk.choices[0].delta.content})}\n\n"
             else:
                 # No tool calls, stream the first response
-                if response_message.content:
-                    yield f"data: {json.dumps({'type': 'content', 'chunk': response_message.content})}\n\n"
+                final_response = await self.client.chat.completions.create(
+                    model=settings.REGOLO_MODEL,
+                    messages=full_messages,
+                    max_tokens=2048,
+                    temperature=0.7,
+                    stream=True,
+                )
+                
+                async for chunk in final_response:
+                    if chunk.choices[0].delta.content:
+                        yield f"data: {json.dumps({'type': 'content', 'chunk': chunk.choices[0].delta.content})}\n\n"
             
             yield "data: [DONE]\n\n"
             

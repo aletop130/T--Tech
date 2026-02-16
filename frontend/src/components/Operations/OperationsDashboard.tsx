@@ -30,6 +30,7 @@ export default function OperationsDashboard() {
   const [formations, setFormations] = useState<Formation[]>([]);
   const [collisions, setCollisions] = useState<CollisionAlert[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [selectedOperation, setSelectedOperation] = useState<Operation | null>(null);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [dispatchDialogOpen, setDispatchDialogOpen] = useState(false);
@@ -39,18 +40,26 @@ export default function OperationsDashboard() {
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const [opsData, routesData, formationsData, collisionsData] = await Promise.all([
+      const [opsData, routesData, formationsData] = await Promise.all([
         api.getOperations({ status: statusFilter || undefined, operation_type: typeFilter || undefined }),
         api.getRoutes(),
         api.getFormations(),
-        api.getActiveCollisions(),
       ]);
       setOperations(opsData.items);
       setRoutes(routesData.items);
       setFormations(formationsData.items);
-      setCollisions(collisionsData.items);
+      
+      try {
+        const collisionsData = await api.getActiveCollisions();
+        setCollisions(collisionsData.items);
+      } catch (e) {
+        console.warn('Failed to load collisions:', e);
+        setCollisions([]);
+      }
     } catch (error) {
       console.error('Failed to load operations data:', error);
+      const errMsg = error instanceof Error ? error.message : String(error);
+      setError(errMsg);
     } finally {
       setLoading(false);
     }
@@ -188,6 +197,10 @@ export default function OperationsDashboard() {
             <div className="flex items-center justify-center h-full">
               <Spinner />
             </div>
+          ) : error ? (
+            <Callout intent="danger" icon="error">
+              <strong>Error loading data:</strong> {error}
+            </Callout>
           ) : activeTab === 'operations' ? (
             <OperationsTab
               operations={operations}

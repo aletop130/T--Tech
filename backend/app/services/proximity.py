@@ -646,6 +646,16 @@ class ProximityDetectionService:
             else IncidentSeverity.HIGH
         )
         
+        # Check if incident already exists for this event
+        existing = await self.incident_service.get_incident(event.id, event.tenant_id)
+        if existing:
+            logger.info(
+                "incident_already_exists_for_proximity_event",
+                event_id=event.id,
+                incident_id=existing.id,
+            )
+            return existing
+        
         title = f"{'Hostile ' if event.is_hostile else ''}Proximity Alert: {primary.name} - {secondary.name}"
         
         description = (

@@ -167,7 +167,11 @@ class RoutePlanningService:
         status: Optional[str] = None, page: int = 1, page_size: int = 50
     ) -> Tuple[List[RoutePlan], int]:
         """List route plans with filtering."""
-        query = select(RoutePlan).where(RoutePlan.tenant_id == tenant_id)
+        query = (
+            select(RoutePlan)
+            .where(RoutePlan.tenant_id == tenant_id)
+            .options(selectinload(RoutePlan.waypoints), selectinload(RoutePlan.maneuvers))
+        )
 
         if entity_id:
             query = query.where(RoutePlan.entity_id == entity_id)
@@ -342,7 +346,11 @@ class FormationService:
         page: int = 1, page_size: int = 50
     ) -> Tuple[List[Formation], int]:
         """List formations."""
-        query = select(Formation).where(Formation.tenant_id == tenant_id)
+        query = (
+            select(Formation)
+            .where(Formation.tenant_id == tenant_id)
+            .options(selectinload(Formation.members))
+        )
 
         if is_active is not None:
             query = query.where(Formation.is_active == is_active)
@@ -754,7 +762,11 @@ class OperationService:
         operation_type: Optional[str] = None, page: int = 1, page_size: int = 50
     ) -> Tuple[List[Operation], int]:
         """List operations with filtering."""
-        query = select(Operation).where(Operation.tenant_id == tenant_id)
+        query = (
+            select(Operation)
+            .where(Operation.tenant_id == tenant_id)
+            .options(selectinload(Operation.route_plans), selectinload(Operation.tasks))
+        )
 
         if status:
             query = query.where(Operation.status == status)

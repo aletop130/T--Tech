@@ -23,6 +23,7 @@ export interface SimulatedSatelliteData {
     deltaV: { radial: number; tangential: number; normal: number };
     duration: number;
   }[];
+  affiliation?: 'allied' | 'hostile' | 'neutral';
 }
 
 export interface GroundUnitData {
@@ -98,6 +99,7 @@ export const GUARDIAN_ANGEL_SCENARIO = {
       status: 'online' as const,
       fuelPercent: 100,
       maneuvers: [],
+      affiliation: 'hostile' as const,
     },
     {
       id: 'hostile-sat',

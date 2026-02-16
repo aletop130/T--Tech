@@ -52,6 +52,7 @@ export default function IncidentsPage() {
   
   // Action feedback
   const [actionMessage, setActionMessage] = useState<{ text: string; intent: Intent } | null>(null);
+  const [detecting, setDetecting] = useState(false);
 
   const loadIncidents = useCallback(async () => {
     setLoading(true);
@@ -165,6 +166,25 @@ export default function IncidentsPage() {
     }
   }, [actionMessage]);
 
+  const handleRunProximityDetection = async () => {
+    setDetecting(true);
+    try {
+      const result = await api.runProximityDetection();
+      setActionMessage({ 
+        text: `Detection complete: ${result.events_created} new, ${result.events_updated} updated events`, 
+        intent: Intent.SUCCESS 
+      });
+      await loadIncidents();
+    } catch (error) {
+      setActionMessage({ 
+        text: error instanceof Error ? error.message : 'Failed to run detection', 
+        intent: Intent.DANGER 
+      });
+    } finally {
+      setDetecting(false);
+    }
+  };
+
   return (
     <div className="h-full flex flex-col">
       {/* Header */}
@@ -173,9 +193,20 @@ export default function IncidentsPage() {
           <Icon icon="warning-sign" className="text-sda-accent-yellow" />
           Incident Console
         </h1>
-        <Button icon="add" intent="primary" onClick={() => setCreateDialogOpen(true)}>
-          Create Incident
-        </Button>
+        <div className="flex gap-2">
+          <Button 
+            icon="pulse" 
+            outlined 
+            onClick={handleRunProximityDetection} 
+            loading={detecting}
+            title="Run proximity detection to generate new events"
+          >
+            Run Detection
+          </Button>
+          <Button icon="add" intent="primary" onClick={() => setCreateDialogOpen(true)}>
+            Create Incident
+          </Button>
+        </div>
       </div>
 
       {/* Action feedback */}

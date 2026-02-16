@@ -26,6 +26,8 @@ interface MissionHUDProps {
   onToggleStepMode: () => void;
   onNextStep: () => void;
   onPrevStep: () => void;
+  freeCameraMode?: boolean;
+  onToggleFreeCameraMode?: () => void;
 }
 
 export function MissionHUD({
@@ -44,6 +46,8 @@ export function MissionHUD({
   onToggleStepMode,
   onNextStep,
   onPrevStep,
+  freeCameraMode = false,
+  onToggleFreeCameraMode,
 }: MissionHUDProps) {
   const formatTime = (seconds: number) => {
     const hours = Math.floor(seconds / 3600);
@@ -83,12 +87,17 @@ export function MissionHUD({
   const isAtKeyEvent = keyEvents.includes(Math.floor(simulationTime / 30) * 30);
 
   return (
-    <div className="fixed top-4 right-4 z-50 w-80 bg-slate-900/95 border border-slate-700 rounded-lg shadow-2xl backdrop-blur-sm">
+    <div className="fixed top-4 right-4 z-50 w-96 bg-slate-900/95 border border-slate-700 rounded-lg shadow-2xl backdrop-blur-sm">
       {/* Header */}
-      <div className="p-3 border-b border-slate-700 flex justify-between items-center">
+      <div className="p-4 border-b border-slate-700 flex justify-between items-center">
         <div>
-          <h3 className="text-sm font-bold text-cyan-400">OPERATION GUARDIAN ANGEL</h3>
-          <p className="text-xs text-slate-400">SAR Warfare Simulation</p>
+          <h3 className="text-lg font-bold text-cyan-400">OPERATION GUARDIAN ANGEL</h3>
+          <div className="flex items-center gap-2 mt-1">
+            <p className="text-sm text-slate-400">SAR Warfare Simulation</p>
+            <span className="px-2 py-0.5 bg-amber-600/80 text-white text-xs font-semibold rounded">
+              FREE CAM
+            </span>
+          </div>
         </div>
         <div className="flex gap-2">
           <button
@@ -103,39 +112,53 @@ export function MissionHUD({
           {isPaused && !isComplete ? (
             <button
               onClick={onNextStep}
-              className="px-3 py-2 bg-green-600 hover:bg-green-500 rounded transition-colors flex items-center gap-1"
+              className="px-4 py-2 bg-green-600 hover:bg-green-500 rounded transition-colors flex items-center gap-2"
               title="Continue Simulation"
             >
-              <Icon icon="play" size={14} className="text-white" />
-              <span className="text-xs text-white font-semibold">CONTINUE</span>
+              <Icon icon="play" size={16} className="text-white" />
+              <span className="text-sm text-white font-semibold">CONTINUE</span>
             </button>
           ) : (
             <button
               onClick={onPlayPause}
-              className="p-2 bg-cyan-600 hover:bg-cyan-500 rounded transition-colors"
+              className="p-3 bg-cyan-600 hover:bg-cyan-500 rounded transition-colors"
               title={isPlaying ? 'Pause' : 'Play'}
             >
-              <Icon icon={isPlaying ? 'pause' : 'play'} size={14} className="text-white" />
+              <Icon icon={isPlaying ? 'pause' : 'play'} size={16} className="text-white" />
             </button>
           )}
           
           <button
             onClick={onReset}
-            className="p-2 bg-slate-700 hover:bg-slate-600 rounded transition-colors"
+            className="p-3 bg-slate-700 hover:bg-slate-600 rounded transition-colors"
             title="Reset"
           >
-            <Icon icon="reset" size={14} className="text-slate-300" />
+            <Icon icon="reset" size={16} className="text-slate-300" />
           </button>
+          
+          {onToggleFreeCameraMode && (
+            <button
+              onClick={onToggleFreeCameraMode}
+              className={`p-3 rounded transition-colors ${
+                freeCameraMode 
+                  ? 'bg-amber-600 hover:bg-amber-500' 
+                  : 'bg-slate-700 hover:bg-slate-600'
+              }`}
+              title={freeCameraMode ? 'Free Camera Active - Click to Lock' : 'Click for Free Camera'}
+            >
+              <Icon icon="mobile-phone" size={16} className="text-white" />
+            </button>
+          )}
         </div>
       </div>
 
       {/* Timer and Progress */}
-      <div className="p-3 border-b border-slate-700">
-        <div className="flex justify-between items-center mb-2">
-          <span className="text-2xl font-mono font-bold text-white">
+      <div className="p-4 border-b border-slate-700">
+        <div className="flex justify-between items-center mb-3">
+          <span className="text-3xl font-mono font-bold text-white">
             {formatTime(simulationTime)}
           </span>
-          <span className="text-xs text-slate-400">
+          <span className="text-sm text-slate-400">
             / {formatTime(totalDuration)}
           </span>
         </div>
@@ -156,12 +179,12 @@ export function MissionHUD({
 
       {/* Current Event Description */}
       {currentEvent && (
-        <div className="p-3 border-b border-slate-700 bg-slate-800/50">
-          <div className="flex items-center gap-2 mb-1">
-            <Icon icon="info-sign" size={12} className="text-cyan-400" />
-            <span className="text-xs font-semibold text-cyan-400 uppercase">Current Event</span>
+        <div className="p-4 border-b border-slate-700 bg-slate-800/50">
+          <div className="flex items-center gap-2 mb-2">
+            <Icon icon="info-sign" size={14} className="text-cyan-400" />
+            <span className="text-sm font-semibold text-cyan-400 uppercase">Current Event</span>
           </div>
-          <p className="text-sm text-slate-200">{currentEvent.description}</p>
+          <p className="text-base text-slate-200 leading-relaxed">{currentEvent.description}</p>
         </div>
       )}
 

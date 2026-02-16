@@ -2,7 +2,7 @@
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import select, and_, func
+from sqlalchemy import select, and_, func, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -372,4 +372,72 @@ class IncidentService:
             "assigned_to": incident.assigned_to,
             "priority": incident.priority,
         }
+
+    async def deduplicate_incidents(self, tenant_id: str) -> dict:
+        """Remove duplicate incidents based on source_event_id."""
+        # Find incidents with same source_event_id, keep the oldest one
+        stmt = (
+            select(Incident.source_event_id, func.array_agg(Incident.id))
+            .where(
+                and_(
+                    Incident.tenant_id == tenant_id,
+                    Incident.source_event_id.isnot(None),
+                )
+            )
+            .group_by(Incident.source_event_id)
+            .having(func.count(Incident.id) > 1)
+        )
+        result = await self.db.execute(stmt)
+        duplicates = list(result.all())
+        
+        removed_count = 0
+        for source_event_id, incident_ids in duplicates:
+            # Keep the oldest (first created), remove the rest
+            sorted_ids = sorted(incident_ids)
+            ids_to_delete = sorted_ids[1:]  # Keep first, delete rest
+            
+            delete_stmt = delete(Incident).where(
+                and_(
+                    Incident.id.in_(ids_to_delete),
+                    Incident.tenant_id == tenant_id,
+                )
+            )
+            await self.db.execute(delete_stmt)
+            removed_count += len(ids_to_delete)
+        
+        await self.db.flush()
+        
+        logger.info(
+            "incidents_deduplicated",
+            tenant_id=tenant_id,
+            removed_count=removed_count,
+        )
+        
+        return {
+            "duplicates_found": len(duplicates),
+            "removed_count": removed_count,
+        }
+
+    async def create_incident_if_not_exists(
+        self,
+        data: IncidentCreate,
+        tenant_id: str,
+        user_id: Optional[str] = None,
+    ) -> tuple[Optional[Incident], bool]:
+        """Create incident only if one with same source_event_id doesn't exist."""
+        # Check if incident with same source_event_id exists
+        if data.source_event_id:
+            existing_stmt = select(Incident).where(
+                and_(
+                    Incident.tenant_id == tenant_id,
+                    Incident.source_event_id == data.source_event_id,
+                )
+            )
+            result = await self.db.execute(existing_stmt)
+            existing = result.scalar_one_or_none()
+            if existing:
+                return existing, False
+        
+        incident = await self.create_incident(data, tenant_id, user_id)
+        return incident, True
 

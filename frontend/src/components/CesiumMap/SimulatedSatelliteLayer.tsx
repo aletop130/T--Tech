@@ -1,8 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { getCesium, type CesiumModule } from '@/lib/cesium/loader';
 
-function isAlliedByName(name: string): boolean {
-  const lowerName = name.toLowerCase();
+function isAlliedSatellite(satellite: SimulatedSatellite): boolean {
+  // Use affiliation field if available
+  if (satellite.affiliation) {
+    return satellite.affiliation === 'allied';
+  }
+  // Fall back to name-based detection
+  const lowerName = satellite.name.toLowerCase();
   return (
     lowerName.includes('guardian') ||
     lowerName.includes('deepwatch') ||
@@ -14,8 +19,8 @@ function isAlliedByName(name: string): boolean {
     lowerName.includes('weathereye') ||
     lowerName.includes('navbeacon') ||
     lowerName.includes('eyeinsky') ||
-    lowerName.includes('reconsat') ||
-    lowerName.includes('comsat')
+    lowerName.includes('reconsat')
+    // Note: comsat is now handled by affiliation field
   );
 }
 
@@ -26,6 +31,7 @@ interface SimulatedSatellite {
   position: CesiumModule.Cartesian3;
   status: 'online' | 'degraded' | 'maneuvering' | 'offline';
   fuelPercent: number;
+  affiliation?: 'allied' | 'hostile' | 'neutral';
 }
 
 interface SimulatedSatelliteLayerProps {
@@ -56,21 +62,34 @@ export function SimulatedSatelliteLayer({
   useEffect(() => {
     if (!viewer || !Cesium) return;
 
-    const createdEntities: string[] = [];
+    // Get all entity IDs for current satellites (without suffixes)
+    const currentSatIds = new Set(satellites.map(s => `sim-sat-${s.id}`));
 
-    // Clean up existing entities
+    // Clean up entities that are no longer in the satellites list
     entitiesRef.current.forEach(id => {
-      viewer.entities.removeById(id);
+      // Extract base satellite ID from entity ID
+      const baseId = id.replace(/-wing1|-wing2|-status|-label|-plume|-trajectory|-deltaV|-distance|-distLabel$/, '');
+      if (!currentSatIds.has(baseId)) {
+        viewer.entities.removeById(id);
+        entitiesRef.current.delete(id);
+      }
     });
 
     satellites.forEach((satellite) => {
       const entityId = `sim-sat-${satellite.id}`;
-      const isAllied = isAlliedByName(satellite.name);
+      const isAllied = isAlliedSatellite(satellite);
       
-      // Main satellite body
+      // Skip if main entity already exists - use CallbackProperty for dynamic updates
+      if (entitiesRef.current.has(entityId)) {
+        return;
+      }
+
+      // Main satellite body - use CallbackProperty for dynamic position updates
       viewer.entities.add({
         id: entityId,
-        position: satellite.position,
+        position: new Cesium.CallbackProperty(() => {
+          return satellite.position;
+        }, false),
         box: {
           dimensions: new Cesium.Cartesian3(3000, 1500, 1500),
           material: isAllied ? Cesium.Color.DODGERBLUE : Cesium.Color.CRIMSON,
@@ -79,7 +98,7 @@ export function SimulatedSatelliteLayer({
           outlineWidth: 2,
         },
       });
-      createdEntities.push(entityId);
+      entitiesRef.current.add(entityId);
 
       // Solar panel 1
       const wing1Id = `sim-sat-${satellite.id}-wing1`;
@@ -98,7 +117,7 @@ export function SimulatedSatelliteLayer({
           outlineColor: Cesium.Color.SILVER,
         },
       });
-      createdEntities.push(wing1Id);
+      entitiesRef.current.add(wing1Id);
 
       // Solar panel 2
       const wing2Id = `sim-sat-${satellite.id}-wing2`;
@@ -117,7 +136,7 @@ export function SimulatedSatelliteLayer({
           outlineColor: Cesium.Color.SILVER,
         },
       });
-      createdEntities.push(wing2Id);
+      entitiesRef.current.add(wing2Id);
 
       // Status indicator
       const statusId = `sim-sat-${satellite.id}-status`;
@@ -142,7 +161,7 @@ export function SimulatedSatelliteLayer({
           outlineWidth: 2,
         },
       });
-      createdEntities.push(statusId);
+      entitiesRef.current.add(statusId);
 
       // Label
       const labelId = `sim-sat-${satellite.id}-label`;
@@ -162,7 +181,7 @@ export function SimulatedSatelliteLayer({
           pixelOffset: new Cesium.Cartesian2(0, -10),
         },
       });
-      createdEntities.push(labelId);
+      entitiesRef.current.add(labelId);
 
       // CINEMATIC: Maneuver effects
       if (satellite.status === 'maneuvering') {
@@ -184,7 +203,7 @@ export function SimulatedSatelliteLayer({
             ),
           },
         });
-        createdEntities.push(plumeId);
+        entitiesRef.current.add(plumeId);
 
         // Trajectory change indicator
         const trajectoryId = `sim-sat-${satellite.id}-trajectory`;
@@ -205,7 +224,7 @@ export function SimulatedSatelliteLayer({
             }),
           },
         });
-        createdEntities.push(trajectoryId);
+        entitiesRef.current.add(trajectoryId);
 
         // Delta-V label
         const deltaVId = `sim-sat-${satellite.id}-deltav`;
@@ -224,7 +243,7 @@ export function SimulatedSatelliteLayer({
             verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
           },
         });
-        createdEntities.push(deltaVId);
+        entitiesRef.current.add(deltaVId);
       }
 
       // CINEMATIC: Distance line to hostile satellite (only during threat)
@@ -246,7 +265,7 @@ export function SimulatedSatelliteLayer({
               material: Cesium.Color.RED.withAlpha(0.6),
             },
           });
-          createdEntities.push(distanceId);
+          entitiesRef.current.add(distanceId);
 
           // Distance label
           const distLabelId = `sim-sat-distance-label`;
@@ -263,17 +282,17 @@ export function SimulatedSatelliteLayer({
               verticalOrigin: Cesium.VerticalOrigin.CENTER,
             },
           });
-          createdEntities.push(distLabelId);
+          entitiesRef.current.add(distLabelId);
         }
       }
     });
 
-    entitiesRef.current = new Set(createdEntities);
-
+    // Cleanup function to remove all tracked entities when component unmounts
     cleanupRef.current = () => {
-      createdEntities.forEach((id) => {
+      entitiesRef.current.forEach((id) => {
         viewer.entities.removeById(id);
       });
+      entitiesRef.current.clear();
     };
 
     return () => {
