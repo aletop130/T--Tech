@@ -54,6 +54,7 @@ skyfield>=1.48
 aiofiles>=23.2.1
 numpy>=1.26.0
 scipy>=1.12.0
+prometheus_client>=0.20.0
 
 # Type checking
 mypy==1.8.0

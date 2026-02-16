@@ -298,7 +298,7 @@
   - Aggiungere DETOUR_REGOLO_TEMPERATURE=0.2
   - Non committare secrets
 
-- [ ] Task 7.3: Monitoring Setup
+- [x] Task 7.3: Monitoring Setup
   - Aggiungere metriche Prometheus: detour_analyses_total
   - Aggiungere metriche Prometheus: detour_analysis_duration_seconds
   - Aggiungere metriche Prometheus: detour_maneuvers_executed_total

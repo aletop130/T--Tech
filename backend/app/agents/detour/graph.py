@@ -34,6 +34,8 @@ from .nodes import (
 )
 from .state import DetourGraphState
 from app.services.detour.state_manager import DetourStateManager
+import time
+from app.monitoring import DETOUR_ANALYSIS_DURATION_SECONDS
 
 __all__ = [
     "build_detour_graph",
@@ -98,6 +100,7 @@ async def run_detour_pipeline(
         The complete state after the ``ops_brief`` node has finished.
     """
     graph = build_detour_graph()
+    start_time = time.time()
     # Initialise the shared state with required fields and sensible defaults.
     state: DetourGraphState = {
         "session_id": session_id,
@@ -124,6 +127,8 @@ async def run_detour_pipeline(
     for node_fn in (scout_node, analyst_node, planner_node, safety_node, ops_brief_node):
         state = await node_fn(state, config)  # type: ignore[arg-type]
 
+    duration = time.time() - start_time
+    DETOUR_ANALYSIS_DURATION_SECONDS.observe(duration)
     return state
 
 

@@ -25,6 +25,7 @@ from app.db.models.ontology import ConjunctionEvent
 
 from app.services.detour.state_manager import DetourStateManager
 from app.services.audit import AuditService
+from app.monitoring import DETOUR_ANALYSES_TOTAL, DETOUR_MANEUVERS_EXECUTED_TOTAL
 
 logger = get_logger(__name__)
 
@@ -84,6 +85,7 @@ class CollisionAvoidanceService:
             started_at=datetime.utcnow(),
         )
         self.db.add(session)
+DETOUR_ANALYSES_TOTAL.inc()
 
         await self.audit.log(
             action='TRIGGER_ANALYSIS',
@@ -274,7 +276,8 @@ class CollisionAvoidanceService:
             user_id=user_id,
             metadata={'detail': 'Maneuver plan executed'},
         )
-        self.logger.info('detour_maneuver_executed', plan_id=plan.id, user_id=user_id)
+        DETOUR_MANEUVERS_EXECUTED_TOTAL.inc()
+self.logger.info('detour_maneuver_executed', plan_id=plan.id, user_id=user_id)
         return {
             'plan_id': plan.id,
             'status': plan.status.value,
