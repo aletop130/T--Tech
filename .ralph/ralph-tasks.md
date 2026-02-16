@@ -327,7 +327,7 @@
 - [x] Database migrato
 - [x] Unit tests passano (>90% coverage physics)
 - [x] Integration tests passano
-- [ ] E2E tests passano
+- [x] E2E tests passano
 - [ ] Performance tests soddisfano requisiti
 - [ ] Security tests passano
 - [ ] API documentata
