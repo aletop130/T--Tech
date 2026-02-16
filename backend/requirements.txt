@@ -47,8 +47,8 @@ httpx==0.26.0
 langgraph==0.6.8
 langchain==0.3.0
 langchain-openai==0.3.0
-# poliastro>=0.17.0
-# astropy>=6.0.0
+poliastro>=0.17.0
+astropy>=5.0
 skyfield>=1.48
 # satellite.py>=0.2.0
 aiofiles>=23.2.1
