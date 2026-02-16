@@ -322,7 +322,7 @@
 
 ## CHECKLIST FINALE
 
-- [ ] Tutti i file creati secondo struttura
+- [x] Tutti i file creati secondo struttura
 - [ ] Dipendenze installate
 - [ ] Database migrato
 - [ ] Unit tests passano (>90% coverage physics)

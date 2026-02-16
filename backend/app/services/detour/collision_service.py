@@ -85,7 +85,7 @@ class CollisionAvoidanceService:
             started_at=datetime.utcnow(),
         )
         self.db.add(session)
-DETOUR_ANALYSES_TOTAL.inc()
+        DETOUR_ANALYSES_TOTAL.inc()
 
         await self.audit.log(
             action='TRIGGER_ANALYSIS',
@@ -277,7 +277,7 @@ DETOUR_ANALYSES_TOTAL.inc()
             metadata={'detail': 'Maneuver plan executed'},
         )
         DETOUR_MANEUVERS_EXECUTED_TOTAL.inc()
-self.logger.info('detour_maneuver_executed', plan_id=plan.id, user_id=user_id)
+        self.logger.info('detour_maneuver_executed', plan_id=plan.id, user_id=user_id)
         return {
             'plan_id': plan.id,
             'status': plan.status.value,

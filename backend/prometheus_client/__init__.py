@@ -1,5 +1,3 @@
-WRITE_TARGET="/root/T--Tech/backend/prometheus_client/__init__.py"
-WRITE_CONTENT_LENGTH=342
 """Minimal stub implementation of Prometheus client for testing.
 
 Provides Counter and Summary classes with no-op methods and the necessary
