@@ -330,7 +330,7 @@
 - [x] E2E tests passano
 - [x] Performance tests soddisfano requisiti
 - [x] Security tests passano
-- [ ] API documentata
+- [x] API documentata
 - [ ] Frontend funzionante
 - [ ] SSE streaming testato
 - [ ] RBAC verificato su tutti endpoint

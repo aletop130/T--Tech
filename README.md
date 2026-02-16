@@ -223,6 +223,12 @@ Response (excerpt):
 - All endpoints require a valid JWT containing a `tenant_id` claim; RBAC controls access (viewer/operator/admin).
 - Errors follow RFC 7807 problem‑details format.
 
+### Detailed API Documentation
+
+For a complete reference including request/response schemas, examples for each endpoint, and SSE streaming details, see the dedicated documentation file:
+
+- `docs/DETOUR_API.md`
+
 ---
 
 ## License
