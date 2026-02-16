@@ -355,7 +355,7 @@ Implement debris visualization on the 3D Cesium map inspired by the TreeHacks 20
   - Assign categories based on name patterns
   - Import TLE data
 
-- [ ] Task 6.2: Seed Database
+- [x] Task 6.2: Seed Database
   - Run script: `python scripts/seed_debris.py`
   - Verify 1000+ debris objects created
   - Verify orbit data populated
