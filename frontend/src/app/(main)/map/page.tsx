@@ -18,6 +18,8 @@ import { SatelliteInfoCard } from '@/components/CesiumMap/SatelliteInfoCard';
 import { GroundStationInfoCard } from '@/components/CesiumMap/GroundStationInfoCard';
 import { GroundVehicleInfoCard } from '@/components/CesiumMap/GroundVehicleInfoCard';
 import { ConjunctionInfoCard } from '@/components/CesiumMap/ConjunctionInfoCard';
+import { DebrisInstancedLayer } from '@/components/CesiumMap/DebrisInstancedLayer';
+import { DebrisInfoCard } from '@/components/CesiumMap/DebrisInfoCard';
 import { SolarSystemLayer } from '@/components/CesiumMap/SolarSystemLayer';
 import { PlanetInfoBox } from '@/components/CesiumMap/PlanetInfoBox';
 import { PLANETS, type CelestialBody } from '@/lib/solarSystem/data';
@@ -779,6 +781,15 @@ const fetchFamousSatellites = async () => {
                         satellitePositions={satellitePositionsRef.current}
                       />
                     )}
+                    {!isSimulationMode && showDebris && (
+                      <DebrisInstancedLayer
+                        viewer={viewer}
+                        debris={debris}
+                        maxDisplayObjects={2500}
+                        refreshIntervalMs={15000}
+                        showDebris={showDebris}
+                      />
+                    )}
                     {selectedSatellite && (
                       <SatelliteInfoCard
                         satellite={selectedSatellite}
@@ -806,6 +817,12 @@ const fetchFamousSatellites = async () => {
                     )}
                     
                     {/* SAR Simulation Layers */}
+{selectedDebris && (
+  <DebrisInfoCard
+    debris={selectedDebris}
+    onClose={() => setSelectedDebris(null)}
+  />
+)}
                     {isSimulationMode && (
                       <>
                         <SimulatedSatelliteLayer

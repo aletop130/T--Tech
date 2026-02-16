@@ -292,7 +292,7 @@ Implement debris visualization on the 3D Cesium map inspired by the TreeHacks 20
     - Sort by altitude (lower = higher risk in LEO)
     - Click to fly to debris position
 
-- [ ] Task 4.6: Integrate Debris Layers (`frontend/src/app/(main)/map/page.tsx`)
+- [x] Task 4.6: Integrate Debris Layers (`frontend/src/app/(main)/map/page.tsx`)
   - Import and integrate:
     ```tsx
     {viewMode === 'earth' && !isSimulationMode && showDebris && (
