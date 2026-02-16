@@ -62,7 +62,7 @@
   - Funzione calculate_maximum_conjunction_time(primary_state, secondary_state, threshold_km=10.0) -> float
   - Validare con casi test letteratura
 
-- [ ] Task 2.4: Calcolo Manovre Avoidance (backend/app/physics/maneuver.py)
+- [x] Task 2.4: Calcolo Manovre Avoidance (backend/app/physics/maneuver.py)
   - Funzione calculate_raan_precession_rate(orbit) -> float (effetto J2)
   - Funzione propose_in_plane_maneuvers(primary, conjunction, delta_v_budget=0.5) -> list[ManeuverOption]
   - Burn pro/retrograde, ottimizzazione timing
