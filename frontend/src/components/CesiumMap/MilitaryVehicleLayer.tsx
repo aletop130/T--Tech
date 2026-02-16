@@ -5,7 +5,7 @@ import { getCesium, type CesiumModule } from '@/lib/cesium/loader';
 import { PositionReport } from '@/lib/api';
 
 interface MilitaryVehicleLayerProps {
-  viewer: CesiumModule.Viewer | null;
+  viewer: InstanceType<CesiumModule['Viewer']> | null;
   vehicles: PositionReport[];
   show?: boolean;
 }
@@ -250,7 +250,7 @@ function getVehicleConfig(type: string): VehicleConfig {
   return configs[type] || configs.jeep;
 }
 
-function getFactionColor(Cesium: CesiumModule, entityId: string): CesiumModule.Color {
+function getFactionColor(Cesium: CesiumModule, entityId: string): any {
   const lowerId = entityId.toLowerCase();
   if (lowerId.includes('alpha') || lowerId.includes('friendly') || lowerId.includes('friend')) {
     return Cesium.Color.LIMEGREEN;

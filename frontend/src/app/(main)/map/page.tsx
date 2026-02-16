@@ -113,7 +113,7 @@ const mockSatelliteMetadata = (satellites: Satellite[]): Satellite[] => {
 export default function MapPage() {
   const searchParams = useSearchParams();
   // @ts-ignore
-const [viewer, setViewer] = useState<CesiumModule.Viewer | null>(null);
+const [viewer, setViewer] = useState<InstanceType<CesiumModule['Viewer']> | null>(null);
   const [groundStations, setGroundStations] = useState<GroundStation[]>([]);
   const [satellites, setSatellites] = useState<Satellite[]>([]);
   const [groundVehicles, setGroundVehicles] = useState<PositionReport[]>([]);
@@ -166,7 +166,7 @@ const [viewer, setViewer] = useState<CesiumModule.Viewer | null>(null);
     toggleFreeCameraMode: simToggleFreeCameraMode,
   } = useSARSimulation(viewer, isSimulationMode);
   
-  const satellitePositionsRef = useRef<Map<string, CesiumModule.Cartesian3>>(new Map());
+  const satellitePositionsRef = useRef<Map<string, InstanceType<CesiumModule['Cartesian3']>>>(new Map());
   const animationFrameRef = useRef<number | null>(null);
   const lastUpdateRef = useRef<number>(0);
 
@@ -259,15 +259,15 @@ const [viewer, setViewer] = useState<CesiumModule.Viewer | null>(null);
       setOrbits(updatedOrbits);
       
       // Update satellite positions ref
-      updatedOrbits.forEach((orbit) => {
-        if (orbit.positions.length > 0) {
-          const pos = orbit.positions[0];
-          satellitePositionsRef.current.set(
-            orbit.satellite_id,
-            Cesium.Cartesian3.fromDegrees(pos.lon, pos.lat, pos.alt * 1000)
-          );
-        }
-      });
+updatedOrbits.forEach((orbit) => {
+  if (orbit.positions.length > 0 && Cesium) {
+    const pos = orbit.positions[0];
+    satellitePositionsRef.current.set(
+      orbit.satellite_id,
+      Cesium.Cartesian3.fromDegrees(pos.lon, pos.lat, pos.alt * 1000)
+    );
+  }
+});
 
       animationFrameRef.current = requestAnimationFrame(updatePositions);
     };
@@ -445,7 +445,7 @@ const [viewer, setViewer] = useState<CesiumModule.Viewer | null>(null);
     return positions;
   }, []);
 
-  const handleViewerReady = async (cesiumViewer: CesiumModule.Viewer) => {
+  const handleViewerReady = async (cesiumViewer: InstanceType<CesiumModule['Viewer']>) => {
     setViewer(cesiumViewer);
     await cesiumController.initialize(cesiumViewer);
 
@@ -583,7 +583,7 @@ const [viewer, setViewer] = useState<CesiumModule.Viewer | null>(null);
     }
   };
 
-  const handleManagePlanet = useCallback((planetId: string) => {
+  const handleManagePlanet = useCallback(async (planetId: string) => {
     console.log('[MapPage] Managing planet:', planetId);
     
     if (planetId === 'earth') {
@@ -593,6 +593,7 @@ const [viewer, setViewer] = useState<CesiumModule.Viewer | null>(null);
       setManagingPlanet(null);
       
       if (viewer) {
+        const Cesium = await getCesium();
         viewer.camera.flyTo({
           destination: Cesium.Cartesian3.fromDegrees(0, 0, 20000000),
           orientation: {
@@ -801,10 +802,11 @@ const [viewer, setViewer] = useState<CesiumModule.Viewer | null>(null);
           <div className="flex items-center gap-2 ml-auto">
             <Button
               intent={viewMode === 'earth' ? Intent.PRIMARY : Intent.NONE}
-              onClick={() => {
+              onClick={async () => {
                 setViewMode('earth');
                 setFocusedBody('earth');
                 if (viewer) {
+                  const Cesium = await getCesium();
                   viewer.camera.flyTo({
                     destination: Cesium.Cartesian3.fromDegrees(12.5674, 41.8719, 8000000),
                     orientation: {

@@ -5,7 +5,7 @@ import { getCesium, type CesiumModule } from '@/lib/cesium/loader';
 import { Satellite } from '@/lib/api';
 
 interface SatelliteLayerProps {
-  viewer: CesiumModule.Viewer | null;
+  viewer: InstanceType<CesiumModule['Viewer']> | null;
   satellites: Satellite[];
   orbits: Array<{
     satellite_id: string;

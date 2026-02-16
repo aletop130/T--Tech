@@ -5,9 +5,9 @@ import { getCesium, type CesiumModule } from '@/lib/cesium/loader';
 import { ConjunctionEvent } from '@/lib/api';
 
 interface ConjunctionLayerProps {
-  viewer: CesiumModule.Viewer | null;
+  viewer: InstanceType<CesiumModule['Viewer']> | null;
   conjunctions: ConjunctionEvent[];
-  satellitePositions: Map<string, CesiumModule.Cartesian3>;
+  satellitePositions: Map<string, InstanceType<CesiumModule['Cartesian3']>>;
 }
 
 export function ConjunctionLayer({

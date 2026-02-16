@@ -1,5 +1,3 @@
-WRITE_TARGET="/root/T--Tech/frontend/src/components/CesiumMap/DetourLayer.tsx"
-WRITE_CONTENT_LENGTH=1127
 'use client';
 
 import { useEffect, useRef, useState, useCallback, memo } from 'react';
@@ -7,9 +5,9 @@ import { getCesium, type CesiumModule } from '@/lib/cesium/loader';
 import { ConjunctionEvent } from '@/lib/api';
 
 interface DetourLayerProps {
-  viewer: CesiumModule.Viewer | null;
+  viewer: InstanceType<CesiumModule['Viewer']> | null;
   conjunctions: ConjunctionEvent[];
-  satellitePositions: Map<string, CesiumModule.Cartesian3>;
+  satellitePositions: Map<string, InstanceType<CesiumModule['Cartesian3']>>;
   maxVisible?: number;
   onSelectConjunction?: (conjunction: ConjunctionEvent) => void;
 }
@@ -42,7 +40,7 @@ export function DetourLayer({
   // Helper to map risk level to colour
   const riskColor = useCallback(
     (level: string) => {
-      if (!Cesium) return Cesium?.Color.WHITE;
+      if (!Cesium) return undefined as any;
       switch (level) {
         case 'critical':
         case 'high':
@@ -176,10 +174,10 @@ export function DetourLayer({
     if (!viewer || !Cesium) return;
     const handler = new Cesium.ScreenSpaceEventHandler(viewer.canvas);
 
-    const clickCallback = (click: CesiumModule.ScreenSpaceEventHandler.PositionedEvent) => {
+    const clickCallback = (click: any) => {
       const picked = viewer.scene.pick(click.position);
       if (Cesium.defined(picked) && (picked as any).id instanceof Cesium.Entity) {
-        const entity = (picked as any).id as CesiumModule.Entity;
+        const entity = (picked as any).id as any;
         const match = (entity.id as string).match(/^detour-(?:primary|secondary|line|heat)-(.+)$/);
         if (match) {
           const conjId = match[1];

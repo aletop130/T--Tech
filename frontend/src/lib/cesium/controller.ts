@@ -30,13 +30,13 @@ export interface CesiumSceneState {
 type ActionHandler = (payload: Record<string, unknown>, Cesium: CesiumModule) => void;
 
 class CesiumControllerClass {
-  private viewer: CesiumModule.Viewer | null = null;
+  private viewer: InstanceType<CesiumModule['Viewer']> | null = null;
   private actionHandlers: Map<string, ActionHandler> = new Map();
   private eventListeners: Map<string, Set<(action: CesiumAction) => void>> = new Map();
   private isFlying: boolean = false;
   private Cesium: CesiumModule | null = null;
 
-  async initialize(viewer: CesiumModule.Viewer): Promise<void> {
+  async initialize(viewer: InstanceType<CesiumModule['Viewer']>): Promise<void> {
     this.viewer = viewer;
     this.Cesium = await getCesium();
     this.registerDefaultHandlers();
@@ -181,7 +181,7 @@ class CesiumControllerClass {
     if (!this.viewer) return;
 
     const layerId = payload.layerId as string;
-    const data = payload.data as CesiumModule.CzmlDataSource | undefined;
+    const data = payload.data as any;
 
     if (data && this.viewer) {
       Cesium.CzmlDataSource.load(data).then(dataSource => {
@@ -256,14 +256,14 @@ class CesiumControllerClass {
       case 'point':
         entity.point = new Cesium.PointGraphics({
           pixelSize: new Cesium.ConstantProperty((properties?.pixelSize as number) || 8),
-          color: new Cesium.ConstantProperty((properties?.color as CesiumModule.Color) || Cesium.Color.YELLOW),
+          color: new Cesium.ConstantProperty((properties?.color as any) || Cesium.Color.YELLOW),
         });
         break;
 
       case 'polygon':
         entity.polygon = new Cesium.PolygonGraphics({
           hierarchy: new Cesium.PolygonHierarchy([positionCartesian]),
-          material: (properties?.material as CesiumModule.Color) || Cesium.Color.RED.withAlpha(0.5),
+          material: (properties?.material as any) || Cesium.Color.RED.withAlpha(0.5),
         });
         break;
 
@@ -271,7 +271,7 @@ class CesiumControllerClass {
         entity.polyline = new Cesium.PolylineGraphics({
           positions: [positionCartesian],
           width: (properties?.width as number) || 2,
-          material: (properties?.material as CesiumModule.Color) || Cesium.Color.YELLOW,
+          material: (properties?.material as any) || Cesium.Color.YELLOW,
         });
         break;
     }
@@ -321,7 +321,7 @@ class CesiumControllerClass {
             Cesium.Math.toRadians(pitch || -45),
             altitude || 10000
           ),
-        }).then(completeFly);
+}); completeFly();
         // Also select the entity to show info card
         this.viewer.selectedEntity = entity;
       }
@@ -338,7 +338,7 @@ class CesiumControllerClass {
           roll: Cesium.Math.toRadians(roll || 0),
         },
         duration,
-      }).then(completeFly);
+      }); completeFly();
     }
   }
 
@@ -357,17 +357,16 @@ class CesiumControllerClass {
 
     this.isFlying = true;
 
-    this.viewer.camera.flyTo({
-      destination: Cesium.Cartesian3.fromDegrees(coords.lon, coords.lat, altitude),
-      orientation: {
-        heading: Cesium.Math.toRadians(0),
-        pitch: Cesium.Math.toRadians(-90), // Top-down view
-        roll: 0,
-      },
-      duration,
-    }).then(() => {
+this.viewer.camera.flyTo({
+        destination: Cesium.Cartesian3.fromDegrees(coords.lon, coords.lat, altitude),
+        orientation: {
+          heading: Cesium.Math.toRadians(0),
+          pitch: Cesium.Math.toRadians(-90), // Top-down view
+          roll: 0,
+        },
+        duration,
+      });
       setTimeout(() => { this.isFlying = false; }, duration * 1000 + 200);
-    });
   }
 
   private async handleSearchLocation(payload: Record<string, unknown>, Cesium: CesiumModule): Promise<void> {
@@ -423,9 +422,8 @@ class CesiumControllerClass {
           roll: 0,
         },
         duration,
-      }).then(() => {
-        setTimeout(() => { this.isFlying = false; }, duration * 1000 + 200);
       });
+      setTimeout(() => { this.isFlying = false; }, duration * 1000 + 200);
 
     } catch (error) {
       console.error('Error searching location:', error);
@@ -665,7 +663,7 @@ class CesiumControllerClass {
     });
   }
 
-  private getFormationColor(formationType: string): CesiumModule.Color {
+  private getFormationColor(formationType: string): any {
     if (!this.Cesium) return new (this.Cesium || window.Cesium).Color(1, 1, 1, 1);
     
     switch (formationType) {
@@ -740,7 +738,7 @@ class CesiumControllerClass {
     });
   }
 
-  private getOperationColor(operationType: string): CesiumModule.Color {
+  private getOperationColor(operationType: string): any {
     if (!this.Cesium) return new (this.Cesium || window.Cesium).Color(1, 1, 1, 1);
     
     switch (operationType) {
@@ -825,7 +823,7 @@ class CesiumControllerClass {
     });
   }
 
-  private getRiskColor(riskLevel: string): CesiumModule.Color {
+  private getRiskColor(riskLevel: string): any {
     if (!this.Cesium) return this.Cesium!.Color.WHITE;
     
     switch (riskLevel.toLowerCase()) {
@@ -945,7 +943,7 @@ class CesiumControllerClass {
   }
 
   // Highlight entities
-  highlightEntities(entityIds: string[], color: CesiumModule.Color = new (window as any).Cesium.Color(1, 1, 0, 1)): void {
+  highlightEntities(entityIds: string[], color: any = new (window as any).Cesium.Color(1, 1, 0, 1)): void {
     if (!this.viewer) return;
 
     entityIds.forEach(id => {

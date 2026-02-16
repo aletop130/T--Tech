@@ -5,7 +5,7 @@ import { getCesium, type CesiumModule } from '@/lib/cesium/loader';
 import { PositionReport } from '@/lib/api';
 
 interface GroundVehicleLayerProps {
-  viewer: CesiumModule.Viewer | null;
+  viewer: InstanceType<CesiumModule['Viewer']> | null;
   vehicles: PositionReport[];
   show?: boolean;
 }

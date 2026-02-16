@@ -117,7 +117,7 @@ export function subscribeToAnalysisStream(
   };
   connect();
   // Return the EventSource so callers can close it when done.
-  return es as EventSource;
+  return es as unknown as EventSource;
 }
 
 /** Retrieve the final results of a completed analysis session. */

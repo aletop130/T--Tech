@@ -4,7 +4,7 @@ import { Viewer, useCesium } from 'resium';
 
 interface CesiumViewerProps {
   className?: string;
-  onViewerReady?: (viewer: CesiumModule.Viewer) => void;
+  onViewerReady?: (viewer: InstanceType<CesiumModule['Viewer']>) => void;
   showTerrain?: boolean;
 }
 
@@ -13,7 +13,7 @@ const ViewerConfig = memo(function ViewerConfig({
   showTerrain,
   Cesium 
 }: { 
-  onViewerReady?: (viewer: CesiumModule.Viewer) => void; 
+  onViewerReady?: (viewer: InstanceType<CesiumModule['Viewer']>) => void; 
   showTerrain?: boolean;
   Cesium: CesiumModule;
 }) {

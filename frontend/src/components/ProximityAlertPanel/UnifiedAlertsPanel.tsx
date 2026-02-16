@@ -163,14 +163,14 @@ export const UnifiedAlertsPanel: React.FC<UnifiedAlertsPanelProps> = ({
         {proximityAlerts.map((alert) => (
           <div
             key={alert.event_id}
-            className={`${styles.alertItem} ${alert.alert_level === 'CRITICAL' ? styles.critical : ''}`}
+            className={`${styles.alertItem} ${alert.alert_level === 'critical' ? styles.critical : ''}`}
             onClick={() => onAlertClick?.(alert)}
           >
             <div className={styles.alertHeader}>
               <div className={styles.alertTitle}>
                 <Icon 
-                  icon={alert.alert_level === 'CRITICAL' ? 'error' : 'warning-sign'}
-                  intent={alert.alert_level === 'CRITICAL' ? 'danger' : 'warning'}
+                  icon={alert.alert_level === 'critical' ? 'error' : 'warning-sign'}
+                  intent={alert.alert_level === 'critical' ? 'danger' : 'warning'}
                   className={styles.alertIcon}
                 />
                 <span className={styles.satellites}>
@@ -179,9 +179,8 @@ export const UnifiedAlertsPanel: React.FC<UnifiedAlertsPanelProps> = ({
               </div>
               <div className={styles.alertBadges}>
                 <Tag 
-                  intent={alert.alert_level === 'CRITICAL' ? 'danger' : 'warning'}
-                  minimal 
-                  small
+                  intent={alert.alert_level === 'critical' ? 'danger' : 'warning'}
+                  minimal
                 >
                   {alert.alert_level}
                 </Tag>
@@ -195,7 +194,7 @@ export const UnifiedAlertsPanel: React.FC<UnifiedAlertsPanelProps> = ({
               <div className={styles.detail}>
                 <span className={styles.label}>TCA:</span>
                 <span className={styles.value}>
-                  {formatDistanceToNow(new Date(alert.tca_time))}
+                  {alert.predicted_tca ? formatDistanceToNow(new Date(alert.predicted_tca)) : 'N/A'}
                 </span>
               </div>
             </div>
@@ -242,7 +241,7 @@ export const UnifiedAlertsPanel: React.FC<UnifiedAlertsPanelProps> = ({
             <div className={styles.alertHeader}>
               <div className={styles.alertTitle}>
                 <Icon 
-                  icon={getSeverityIcon(alert.severity)}
+                  icon={getSeverityIcon(alert.severity) as any}
                   intent={getSeverityIntent(alert.severity)}
                   className={styles.alertIcon}
                 />
@@ -254,11 +253,11 @@ export const UnifiedAlertsPanel: React.FC<UnifiedAlertsPanelProps> = ({
                 <Tag 
                   intent={getSeverityIntent(alert.severity)} 
                   minimal 
-                  small
+                 
                 >
                   {alert.severity.toUpperCase()}
                 </Tag>
-                <Tag minimal small>
+                <Tag minimal>
                   {alert.status.toUpperCase()}
                 </Tag>
               </div>
@@ -332,7 +331,7 @@ export const UnifiedAlertsPanel: React.FC<UnifiedAlertsPanelProps> = ({
                 <Tag 
                   intent={getSeverityIntent(alert.severity)} 
                   minimal 
-                  small
+                 
                 >
                   {alert.severity.toUpperCase()}
                 </Tag>
@@ -386,7 +385,7 @@ export const UnifiedAlertsPanel: React.FC<UnifiedAlertsPanelProps> = ({
           </span>
           <Button
             icon="refresh"
-            small
+           
             minimal
             loading={proximityLoading || cyberLoading || maneuverLoading}
             onClick={fetchAllAlerts}

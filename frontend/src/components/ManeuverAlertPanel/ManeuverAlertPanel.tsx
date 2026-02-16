@@ -161,7 +161,7 @@ export const ManeuverAlertPanel: React.FC<ManeuverAlertPanelProps> = ({
                 <div className={styles.alertHeader}>
                   <div className={styles.alertTitle}>
                     <Icon 
-                      icon={getSeverityIcon(alert.severity)}
+                      icon={getSeverityIcon(alert.severity) as any}
                       intent={getSeverityIntent(alert.severity)}
                       className={styles.alertIcon}
                     />
@@ -174,12 +174,11 @@ export const ManeuverAlertPanel: React.FC<ManeuverAlertPanelProps> = ({
                   <div className={styles.alertBadges}>
                     <Tag 
                       intent={getSeverityIntent(alert.severity)} 
-                      minimal 
-                      small
+                      minimal
                     >
                       {alert.severity.toUpperCase()}
                     </Tag>
-                    <Tag minimal small>
+                    <Tag minimal>
                       {alert.status.toUpperCase()}
                     </Tag>
                   </div>

@@ -154,7 +154,7 @@ export const ProximityAlertPanel: React.FC<ProximityAlertPanelProps> = ({
               <div className={styles.alertHeader}>
                 <div className={styles.alertTitle}>
                   <Icon 
-                    icon={getAlertIcon(alert.alert_level, alert.is_hostile)}
+                    icon={getAlertIcon(alert.alert_level, alert.is_hostile) as any}
                     intent={getAlertIntent(alert.alert_level)}
                     className={styles.alertIcon}
                   />
@@ -167,15 +167,14 @@ export const ProximityAlertPanel: React.FC<ProximityAlertPanelProps> = ({
                 <div className={styles.alertBadges}>
                   {alert.is_hostile && (
                     <Tooltip content="Hostile approach detected" position={Position.TOP}>
-                      <Tag intent="danger" minimal small>
+                      <Tag intent="danger" minimal>
                         HOSTILE
                       </Tag>
                     </Tooltip>
                   )}
                   <Tag 
                     intent={getAlertIntent(alert.alert_level)} 
-                    minimal 
-                    small
+                    minimal
                   >
                     {alert.alert_level.toUpperCase()}
                   </Tag>

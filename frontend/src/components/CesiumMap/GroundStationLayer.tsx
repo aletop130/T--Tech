@@ -5,7 +5,7 @@ import { getCesium, type CesiumModule } from '@/lib/cesium/loader';
 import { GroundStation } from '@/lib/api';
 
 interface GroundStationLayerProps {
-  viewer: CesiumModule.Viewer | null;
+  viewer: InstanceType<CesiumModule['Viewer']> | null;
   stations: GroundStation[];
   showCoverage?: boolean;
   coverageRadiusKm?: number;

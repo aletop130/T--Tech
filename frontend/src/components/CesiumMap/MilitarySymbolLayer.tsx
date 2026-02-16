@@ -5,7 +5,7 @@ interface GroundUnit {
   id: string;
   name: string;
   sidc: string;
-  position: CesiumModule.Cartesian3;
+  position: InstanceType<CesiumModule['Cartesian3']>;
   affiliation: 'friendly' | 'hostile' | 'neutral';
   status: 'static' | 'moving';
   heading?: number;
@@ -13,7 +13,7 @@ interface GroundUnit {
 }
 
 interface MilitarySymbolLayerProps {
-  viewer: CesiumModule.Viewer | null;
+  viewer: InstanceType<CesiumModule['Viewer']> | null;
   units: GroundUnit[];
 }
 
@@ -27,8 +27,8 @@ export const SAR_SYMBOLS = {
   SAFE_CORRIDOR: 'GFGPALC---*****',
 };
 
-function createMilitarySymbol(Cesium: CesiumModule, affiliation: string, unitType: string): CesiumModule.Color[] {
-  const colors: { [key: string]: CesiumModule.Color } = {
+function createMilitarySymbol(Cesium: CesiumModule, affiliation: string, unitType: string): any[] {
+  const colors: { [key: string]: any } = {
     friendly: Cesium.Color.CYAN,
     hostile: Cesium.Color.GRAY,
     neutral: Cesium.Color.YELLOW,
@@ -131,7 +131,7 @@ export function MilitarySymbolLayer({ viewer, units }: MilitarySymbolLayerProps)
                 sc.height
               );
               return [pos, Cesium.Cartesian3.fromRadians(endSc.longitude, endSc.latitude, endSc.height)];
-            }, false) as unknown as CesiumModule.PositionProperty,
+            }, false) as unknown as any,
             width: 6,
             material: new Cesium.PolylineArrowMaterialProperty(baseColor),
           },
@@ -145,7 +145,7 @@ export function MilitarySymbolLayer({ viewer, units }: MilitarySymbolLayerProps)
         position: new Cesium.CallbackProperty(() => {
           const pos = unit.position;
           return new Cesium.Cartesian3(pos.x + 1000, pos.y + 1000, pos.z);
-        }, false) as unknown as CesiumModule.PositionProperty,
+        }, false) as unknown as any,
         point: {
           pixelSize: 8,
           color: unit.affiliation === 'friendly' 

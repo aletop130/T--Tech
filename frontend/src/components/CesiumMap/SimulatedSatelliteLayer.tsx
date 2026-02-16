@@ -28,14 +28,14 @@ interface SimulatedSatellite {
   id: string;
   name: string;
   type: 'recon' | 'comms';
-  position: CesiumModule.Cartesian3;
+  position: InstanceType<CesiumModule['Cartesian3']>;
   status: 'online' | 'degraded' | 'maneuvering' | 'offline';
   fuelPercent: number;
   affiliation?: 'allied' | 'hostile' | 'neutral';
 }
 
 interface SimulatedSatelliteLayerProps {
-  viewer: CesiumModule.Viewer | null;
+  viewer: InstanceType<CesiumModule['Viewer']> | null;
   satellites: SimulatedSatellite[];
   showManeuvers?: boolean;
   showDataLinks?: boolean;
@@ -89,7 +89,7 @@ export function SimulatedSatelliteLayer({
         id: entityId,
         position: new Cesium.CallbackProperty(() => {
           return satellite.position;
-        }, false),
+        }, false) as any,
         box: {
           dimensions: new Cesium.Cartesian3(3000, 1500, 1500),
           material: isAllied ? Cesium.Color.DODGERBLUE : Cesium.Color.CRIMSON,
@@ -107,7 +107,7 @@ export function SimulatedSatelliteLayer({
         position: new Cesium.CallbackProperty(() => {
           const pos = satellite.position;
           return new Cesium.Cartesian3(pos.x + 5000, pos.y, pos.z);
-        }, false),
+        }, false) as any,
         box: {
           dimensions: new Cesium.Cartesian3(800, 10000, 150),
           material: satellite.status === 'maneuvering' 
@@ -123,10 +123,10 @@ export function SimulatedSatelliteLayer({
       const wing2Id = `sim-sat-${satellite.id}-wing2`;
       viewer.entities.add({
         id: wing2Id,
-        position: new Cesium.CallbackProperty(() => {
-          const pos = satellite.position;
-          return new Cesium.Cartesian3(pos.x - 5000, pos.y, pos.z);
-        }, false),
+position: new Cesium.CallbackProperty(() => {
+            const pos = satellite.position;
+            return new Cesium.Cartesian3(pos.x - 5000, pos.y, pos.z);
+          }, false) as any,
         box: {
           dimensions: new Cesium.Cartesian3(800, 10000, 150),
           material: satellite.status === 'maneuvering'
@@ -142,10 +142,10 @@ export function SimulatedSatelliteLayer({
       const statusId = `sim-sat-${satellite.id}-status`;
       viewer.entities.add({
         id: statusId,
-        position: new Cesium.CallbackProperty(() => {
-          const pos = satellite.position;
-          return new Cesium.Cartesian3(pos.x, pos.y + 1000, pos.z);
-        }, false),
+position: new Cesium.CallbackProperty(() => {
+            const pos = satellite.position;
+            return new Cesium.Cartesian3(pos.x, pos.y + 1000, pos.z);
+          }, false) as any,
         point: {
           pixelSize: satellite.status === 'maneuvering' ? 20 : 12,
           color: (() => {
@@ -167,10 +167,10 @@ export function SimulatedSatelliteLayer({
       const labelId = `sim-sat-${satellite.id}-label`;
       viewer.entities.add({
         id: labelId,
-        position: new Cesium.CallbackProperty(() => {
-          const pos = satellite.position;
-          return new Cesium.Cartesian3(pos.x, pos.y, pos.z + 2500);
-        }, false),
+position: new Cesium.CallbackProperty(() => {
+            const pos = satellite.position;
+            return new Cesium.Cartesian3(pos.x, pos.y, pos.z + 2500);
+          }, false) as any,
         label: {
           text: satellite.name,
           font: 'bold 16px monospace',
@@ -192,14 +192,14 @@ export function SimulatedSatelliteLayer({
           position: new Cesium.CallbackProperty(() => {
             const pos = satellite.position;
             return new Cesium.Cartesian3(pos.x - 2000, pos.y, pos.z);
-          }, false),
+          }, false) as any,
           ellipsoid: {
             radii: new Cesium.Cartesian3(500, 800, 500),
             material: new Cesium.ColorMaterialProperty(
               new Cesium.CallbackProperty(() => {
                 const alpha = 0.5 + 0.3 * Math.sin((simulationTime * 10) / 100);
                 return Cesium.Color.ORANGE.withAlpha(alpha);
-              }, false)
+              }, false) as any
             ),
           },
         });
@@ -233,7 +233,7 @@ export function SimulatedSatelliteLayer({
           position: new Cesium.CallbackProperty(() => {
             const pos = satellite.position;
             return new Cesium.Cartesian3(pos.x, pos.y, pos.z + 5000);
-          }, false),
+          }, false) as any,
           label: {
             text: 'ΔV BURN ACTIVE',
             font: 'bold 14px monospace',
