@@ -1,0 +1,1325 @@
+PIANO DETTAGLIATO IMPLEMENTAZIONE SISTEMA DETOUR - SDA PLATFORM
+=================================================================
+
+PROGETTO: Integrazione sistema collision avoidance Detour nella piattaforma SDA esistente
+OBIETTIVO: Implementare un sistema completo di collision avoidance con pipeline multi-agent,
+          physics engine orbitali, e interfaccia utente dedicata
+STACK TECNOLOGICO: FastAPI + LangGraph + Regolo.ai (cloud LLM) + PostgreSQL + Next.js + CesiumJS
+
+=================================================================
+PARTE 1: ARCHITETTURA E STRUTTURA MODULI
+=================================================================
+
+1.1 STRUTTURA DIRECTORY BACKEND
+-------------------------------
+Crea la seguente struttura sotto backend/app/:
+
+backend/app/
+├── api/v1/
+│   ├── detour.py                 # Endpoint API Detour
+│   └── router.py                 # Aggiornare per includere router detour
+├── services/
+│   ├── detour/                   # Nuovo package
+│   │   ├── __init__.py
+│   │   ├── state_manager.py      # Gestione stato persistente (DB)
+│   │   ├── collision_service.py  # Servizio principale collision avoidance
+│   │   └── maneuver_service.py   # Gestione manovre
+│   └── ai.py                     # Esistente - da estendere con agenti Detour
+├── agents/
+│   ├── detour/                   # Nuovo package LangGraph
+│   │   ├── __init__.py
+│   │   ├── graph.py              # Definizione grafo multi-agent
+│   │   ├── nodes.py              # Implementazione nodi (Scout, Analyst, etc.)
+│   │   ├── prompts.py            # Prompt system per ogni agente
+│   │   ├── state.py              # State schema LangGraph
+│   │   └── tools.py              # Tool orbitali per agenti
+├── physics/                      # Nuovo package
+│   ├── __init__.py
+│   ├── constants.py              # Costanti orbitali
+│   ├── propagator.py             # Propagazione orbite (SGP4/SDP4)
+│   ├── screening.py              # Screening congiunzioni
+│   ├── risk.py                   # Calcolo rischio collisione (Chan, etc.)
+│   ├── maneuver.py               # Calcolo manovre ottimali
+│   ├── frames.py                 # Conversioni sistemi di riferimento
+│   └── utils.py                  # Utility fisiche
+├── schemas/
+│   └── detour.py                 # Schemas Pydantic per Detour
+└── db/models/
+    └── detour.py                 # Modelli SQLAlchemy per persistenza
+
+1.2 STRUTTURA DIRECTORY FRONTEND
+--------------------------------
+frontend/src/
+├── app/(main)/
+│   └── detour/                   # Nuova route
+│       └── page.tsx              # Dashboard Detour
+├── components/
+│   ├── Detour/                   # Nuovo package componenti
+│   │   ├── DetourDashboard.tsx
+│   │   ├── CollisionAnalyzer.tsx
+│   │   ├── ManeuverPlanner.tsx
+│   │   ├── ThreatList.tsx
+│   │   ├── OrbitVisualizer.tsx
+│   │   ├── AgentChat.tsx
+│   │   └── OpsBriefPanel.tsx
+│   └── CesiumMap/
+│       └── DetourLayer.tsx       # Layer visualizzazione collisioni
+├── lib/
+│   ├── api/detour.ts             # Client API Detour
+│   └── store/detour.ts           # Zustand store Detour
+└── hooks/
+    └── useDetour.ts              # Hook React per Detour
+
+=================================================================
+PARTE 2: IMPLEMENTAZIONE FEATURE - TASK DETTAGLIATI
+=================================================================
+
+TASK 2.1: Setup Moduli e Dipendenze
+-----------------------------------
+FILE: backend/requirements.txt
+AZIONE: Aggiungere dipendenze necessarie
+
+```
+# LangGraph e LangChain
+langgraph>=0.2.0
+langchain>=0.3.0
+langchain-openai>=0.2.0
+
+# Fisica Orbitali
+poliastro>=0.18.0
+astropy>=6.0.0
+skyfield>=1.48
+satellite.py>=0.2.0
+numpy>=1.26.0
+scipy>=1.12.0
+
+# Supporto
+aiofiles>=23.2.1
+```
+
+TASK 2.2: Costanti e Configurazioni Physics
+--------------------------------------------
+FILE: backend/app/physics/constants.py
+CONTENUTO OBBLIGATORIO:
+- MU_EARTH: 3.986004418e14 (m^3/s^2)
+- R_EARTH: 6378137.0 (m)
+- J2: 0.00108263
+- OMEGA_EARTH: 7.2921158553e-5 (rad/s)
+- Conversioni: km <-> m, deg <-> rad
+- Limiti screening default: 5km box, 10km radius
+
+TASK 2.3: Propagatore Orbite
+-----------------------------
+FILE: backend/app/physics/propagator.py
+
+FUNZIONI DA IMPLEMENTARE:
+1. propagate_tle(tle_line1, tle_line2, epochs: list[datetime]) -> np.ndarray
+   - Input: TLE lines, lista datetime UTC
+   - Output: Array Nx6 [x, y, z, vx, vy, vz] in km e km/s ECI J2000
+   - Implementazione: Usare skyfield o implementazione SGP4 custom
+   - Deve supportare propagazione batch per performance
+
+2. propagate_state_vector(state: StateVector, dt_seconds: float) -> StateVector
+   - Propaga stato usando equazioni del moto Kepleriano + J2 perturbazione
+   - Utile per simulazioni rapide
+
+3. tle_to_state_vector(tle_line1, tle_line2, epoch: datetime) -> StateVector
+   - Converte TLE in stato ECI a epoch specificata
+
+TASK 2.4: Screening Congiunzioni
+--------------------------------
+FILE: backend/app/physics/screening.py
+
+FUNZIONI DA IMPLEMENTARE:
+1. screen_conjunctions(primary_tle: TLE, catalog: list[TLE], 
+                       time_window_hours: float = 72,
+                       threshold_km: float = 5.0) -> list[ConjunctionCandidate]
+   - Implementa algoritmo di screening geometrico
+   - Per ogni oggetto nel catalogo:
+     * Propaga entrambi gli oggetti su griglia temporale (step ogni 10 min)
+     * Calcola distanza minima approssimata
+     * Se < threshold, aggiungi a candidati per refinement
+   - Output: Lista candidati con TCA approssimato, miss distance, etc.
+
+2. refine_conjunction(candidate: ConjunctionCandidate, 
+                     iterations: int = 10) -> ConjunctionEvent
+   - Refinement preciso con iterazioni Newton-Raphson
+   - Trova TCA esatto
+   - Calcola geometria miss (radial, intrack, crosstrack)
+   - Input: candidato dallo screening
+   - Output: ConjunctionEvent completo
+
+TASK 2.5: Calcolo Rischio Collisione
+------------------------------------
+FILE: backend/app/physics/risk.py
+
+FUNZIONI DA IMPLEMENTARE:
+1. calculate_collision_probability_chan(primary_cov: Covariance3D,
+                                       secondary_cov: Covariance3D,
+                                       miss_distance: np.ndarray,
+                                       combined_radius: float) -> float
+   - Implementa formula Chan 1997 per probabilità collisione
+   - Input: matrici covarianza 3x3 entrambi oggetti, vettore miss distance, somma raggi
+   - Output: probabilità [0,1]
+
+2. assess_risk_level(collision_prob: float, 
+                    miss_distance_km: float,
+                    object_sizes: tuple[float, float]) -> RiskLevel
+   - Logica decisionale risk level (low/medium/high/critical)
+   - Considera: Pc, miss distance, dimensioni oggetti
+
+3. calculate_maximum_conjunction_time(primary_state: StateVector,
+                                     secondary_state: StateVector,
+                                     threshold_km: float = 10.0) -> float
+   - Tempo massimo in cui oggetti sono entro threshold
+
+TASK 2.6: Calcolo Manovre Avoidance
+-----------------------------------
+FILE: backend/app/physics/maneuver.py
+
+FUNZIONI DA IMPLEMENTARE:
+1. calculate_raan_precession_rate(orbit: OrbitElements) -> float
+   - Rate precessione nodo ascendente (effetto J2)
+
+2. propose_in_plane_maneuvers(primary: SatelliteState,
+                             conjunction: ConjunctionEvent,
+                             delta_v_budget: float = 0.5) -> list[ManeuverOption]
+   - Calcola manovre in-plane possibili:
+     * Aumento/diminuzione velocità (cambia periodo/orbita)
+     * Timing ottimale per massimare miss distance
+   - Vincoli: delta-v disponibile, finestra temporale, risorse satellite
+
+3. propose_out_of_plane_maneuvers(primary: SatelliteState,
+                                 conjunction: ConjunctionEvent,
+                                 delta_v_budget: float = 0.5) -> list[ManeuverOption]
+   - Calcola manovre out-of-plane (cambio inclinazione/RAAN)
+   - Considera costo energetico vs riduzione rischio
+
+4. optimize_maneuver_timing(maneuvers: list[ManeuverOption],
+                           conjunction: ConjunctionEvent) -> ManeuverOption
+   - Ottimizza timing manovra per massimare miss distance
+   - Considera: tempo reazione, errori esecuzione, propagation uncertainty
+
+5. calculate_delta_v_cost(maneuver: ManeuverOption, 
+                         satellite: SatelliteState) -> float
+   - Calcola costo delta-v manovra specifica
+
+TASK 2.7: Modelli Database Detour
+---------------------------------
+FILE: backend/app/db/models/detour.py
+
+TABELLE DA CREARE (Alembic migration):
+
+1. detour_satellite_state
+   - id: UUID PK
+   - satellite_id: UUID FK -> satellites
+   - tenant_id: str
+   - fuel_remaining_kg: float
+   - delta_v_budget_m_s: float
+   - last_updated: datetime
+   - created_at: datetime
+
+2. detour_conjunction_analysis
+   - id: UUID PK
+   - conjunction_event_id: UUID FK -> conjunction_events
+   - tenant_id: str
+   - collision_probability: float
+   - risk_level: enum
+   - miss_distance_km: float
+   - tca: datetime
+   - analysis_status: enum (pending, analyzing, completed, failed)
+   - ai_analysis: JSONB (risultato analisi AI)
+   - created_at: datetime
+   - updated_at: datetime
+
+3. detour_maneuver_plans
+   - id: UUID PK
+   - conjunction_analysis_id: UUID FK
+   - tenant_id: str
+   - maneuver_type: enum (in_plane, out_of_plane)
+   - delta_v_m_s: float
+   - fuel_cost_kg: float
+   - execution_window_start: datetime
+   - execution_window_end: datetime
+   - expected_miss_distance_km: float
+   - risk_reduction_percent: float
+   - status: enum (proposed, approved, rejected, executed)
+   - ai_recommendation: JSONB
+   - created_by: str
+   - approved_by: str
+   - executed_at: datetime
+   - created_at: datetime
+
+4. detour_agent_sessions
+   - id: UUID PK
+   - tenant_id: str
+   - session_type: enum (scouting, analysis, planning, safety, ops_brief)
+   - status: enum (active, completed, error)
+   - input_data: JSONB
+   - output_data: JSONB
+   - events: JSONB (lista eventi durante esecuzione)
+   - started_at: datetime
+   - completed_at: datetime
+   - created_at: datetime
+
+TASK 2.8: State Manager Persistente
+-----------------------------------
+FILE: backend/app/services/detour/state_manager.py
+
+CLASSE: DetourStateManager
+
+METODI DA IMPLEMENTARE:
+1. async get_satellite_state(satellite_id: str, tenant_id: str) -> SatelliteState
+   - Recupera stato da DB, se non esiste crea default
+
+2. async update_satellite_state(satellite_id: str, tenant_id: str, 
+                                updates: dict) -> SatelliteState
+   - Aggiorna stato in DB
+
+3. async create_conjunction_analysis(conjunction_event_id: str, 
+                                    tenant_id: str) -> ConjunctionAnalysis
+   - Crea record analisi in stato pending
+
+4. async update_conjunction_analysis(analysis_id: str, 
+                                   updates: dict) -> ConjunctionAnalysis
+   - Aggiorna risultati analisi
+
+5. async get_pending_conjunctions(tenant_id: str, 
+                                 risk_threshold: str = "medium") -> list[ConjunctionAnalysis]
+   - Recupera congiunzioni che richiedono analisi
+
+6. async save_maneuver_plan(analysis_id: str, plan_data: dict) -> ManeuverPlan
+   - Salva piano manovra proposto
+
+7. async get_maneuver_history(satellite_id: str, 
+                              tenant_id: str) -> list[ManeuverPlan]
+   - Storico manovre satellite
+
+TASK 2.9: Schema LangGraph Detour State
+----------------------------------------
+FILE: backend/app/agents/detour/state.py
+
+CLASSE: DetourGraphState (TypedDict)
+
+FIELDS:
+- session_id: str
+- tenant_id: str
+- satellite_id: str
+- conjunction_event_id: str
+- satellite_state: SatelliteState
+- conjunction_data: ConjunctionEvent
+- screening_results: list[ConjunctionCandidate]
+- risk_assessment: RiskAssessment
+- maneuver_options: list[ManeuverOption]
+- safety_review: SafetyReview
+- ops_brief: OpsBrief
+- current_agent: str  # Quale agente sta processando
+- events: list[AgentEvent]  # Log eventi per SSE
+- errors: list[str]
+- completed: bool
+
+TASK 2.10: Prompts System Agenti
+--------------------------------
+FILE: backend/app/agents/detour/prompts.py
+
+PROMPTS DA DEFINIRE:
+
+1. SCOUT_PROMPT = """
+You are the Scout Agent for the Detour collision avoidance system.
+Your role is to screen for potential conjunctions and identify threats.
+
+Input: Satellite state and catalog of debris/objects
+Task: 
+1. Run screening algorithm on all objects within time window
+2. Identify conjunctions above threshold
+3. Flag high-priority threats for detailed analysis
+
+Rules:
+- Be thorough but efficient
+- Prioritize by miss distance and object size
+- Consider uncertainty in orbital elements
+
+Output JSON format:
+{
+  "screening_results": [...],
+  "threats_identified": int,
+  "priority_queue": [...],
+  "notes": "..."
+}
+"""
+
+2. ANALYST_PROMPT = """
+You are the Analyst Agent for the Detour collision avoidance system.
+Your role is to perform detailed risk analysis on flagged conjunctions.
+
+Input: Conjunction candidate from Scout
+Task:
+1. Calculate precise collision probability using Chan method
+2. Assess risk level considering all factors
+3. Analyze conjunction geometry
+4. Determine if maneuver is warranted
+
+Output JSON format:
+{
+  "collision_probability": float,
+  "risk_level": "low|medium|high|critical",
+  "risk_factors": [...],
+  "recommended_action": "maneuver|monitor|accept_risk",
+  "confidence": float,
+  "analysis_notes": "..."
+}
+"""
+
+3. PLANNER_PROMPT = """
+You are the Planner Agent for the Detour collision avoidance system.
+Your role is to design optimal avoidance maneuvers.
+
+Input: Risk assessment requiring maneuver
+Task:
+1. Calculate in-plane maneuver options
+2. Calculate out-of-plane maneuver options if beneficial
+3. Optimize timing for maximum miss distance
+4. Evaluate fuel cost vs risk reduction
+
+Constraints to respect:
+- Delta-v budget limits
+- Mission operational constraints
+- Maneuver execution windows
+
+Output JSON format:
+{
+  "maneuver_options": [
+    {
+      "maneuver_id": str,
+      "type": "in_plane|out_of_plane",
+      "delta_v_m_s": float,
+      "fuel_cost_kg": float,
+      "execution_time": datetime,
+      "expected_miss_distance_km": float,
+      "risk_reduction_percent": float,
+      "pros": [...],
+      "cons": [...]
+    }
+  ],
+  "recommended_option": str,
+  "confidence": float
+}
+"""
+
+4. SAFETY_PROMPT = """
+You are the Safety Officer Agent for the Detour collision avoidance system.
+Your role is to review and validate maneuver plans.
+
+Input: Proposed maneuver plan
+Task:
+1. Check for violations of safety constraints
+2. Verify no secondary collision risks created
+3. Assess operational impact
+4. Validate fuel margins post-maneuver
+
+Output JSON format:
+{
+  "approved": bool,
+  "approval_level": "auto|manual_review_required",
+  "concerns": [...],
+  "modifications_required": [...],
+  "final_recommendation": "...",
+  "confidence": float
+}
+"""
+
+5. OPS_BRIEF_PROMPT = """
+You are the Ops Brief Agent for the Detour collision avoidance system.
+Your role is to generate clear operational summaries.
+
+Input: Complete analysis and approved maneuver plan
+Task:
+1. Summarize situation in plain language
+2. Provide clear recommended action
+3. List next steps and decision points
+4. Include contingency options
+
+Output JSON format:
+{
+  "situation_summary": "...",
+  "recommended_action": "...",
+  "timeline": {
+    "decision_deadline": datetime,
+    "execution_window": "...",
+    "tca": datetime
+  },
+  "next_steps": [...],
+  "contingencies": [...],
+  "confidence": float
+}
+"""
+
+TASK 2.11: Tool Orbitali per Agenti
+-----------------------------------
+FILE: backend/app/agents/detour/tools.py
+
+TOOL DA IMPLEMENTARE (usando @tool decorator LangChain):
+
+1. @tool
+def screen_conjunctions_tool(satellite_id: str, 
+                             time_window_hours: int = 72,
+                             threshold_km: float = 5.0) -> str:
+    """Screen for potential conjunctions in time window."""
+    - Chiama physics.screening.screen_conjunctions
+    - Formatta risultato come JSON per LLM
+
+2. @tool
+def assess_risk_tool(conjunction_event_id: str) -> str:
+    """Perform detailed risk assessment on conjunction."""
+    - Recupera dati congiunzione
+    - Chiama physics.risk.calculate_collision_probability_chan
+    - Ritorna analisi completa
+
+3. @tool
+def propose_maneuvers_tool(conjunction_event_id: str,
+                          delta_v_budget: float = 0.5) -> str:
+    """Propose avoidance maneuver options."""
+    - Chiama physics.maneuver.propose_in_plane_maneuvers
+    - Chiama physics.maneuver.propose_out_of_plane_maneuvers
+    - Ritorna opzioni con trade-off
+
+4. @tool
+def validate_maneuver_tool(maneuver_plan_id: str) -> str:
+    """Validate maneuver plan for safety."""
+    - Verifica vincoli safety
+    - Controlla collisioni secondarie
+    - Ritorna esito validazione
+
+5. @tool
+def execute_maneuver_tool(maneuver_plan_id: str) -> str:
+    """Execute approved maneuver plan."""
+    - Solo per plan approvati
+    - Aggiorna stato satellite
+    - Registra esecuzione
+
+TASK 2.12: Implementazione Nodi Grafo
+-------------------------------------
+FILE: backend/app/agents/detour/nodes.py
+
+FUNZIONI NODO DA IMPLEMENTARE:
+
+1. scout_node(state: DetourGraphState, config: RunnableConfig) -> DetourGraphState
+   - Logga evento inizio "Scout agent starting screening"
+   - Recupera satellite state e catalogo oggetti
+   - Esegue screening congiunzioni
+   - Aggiorna state.screening_results
+   - Logga evento completamento
+   - Ritorna state aggiornato
+
+2. analyst_node(state: DetourGraphState, config: RunnableConfig) -> DetourGraphState
+   - Per ogni congiunzione identificata:
+     * Calcola probabilità collisione
+     * Valuta risk level
+   - Aggiorna state.risk_assessment
+   - Logga eventi durante processo
+
+3. planner_node(state: DetourGraphState, config: RunnableConfig) -> DetourGraphState
+   - Se risk level >= medium:
+     * Calcola opzioni manovra
+     * Ottimizza timing
+   - Aggiorna state.maneuver_options
+
+4. safety_node(state: DetourGraphState, config: RunnableConfig) -> DetourGraphState
+   - Valida ogni piano manovra
+   - Verifica vincoli
+   - Aggiorna state.safety_review
+
+5. ops_brief_node(state: DetourGraphState, config: RunnableConfig) -> DetourGraphState
+   - Genera riepilogo operativo
+   - Formatta output leggibile
+   - Aggiorna state.ops_brief
+   - Imposta state.completed = True
+
+TASK 2.13: Costruzione Grafo LangGraph
+--------------------------------------
+FILE: backend/app/agents/detour/graph.py
+
+FUNZIONI DA IMPLEMENTARE:
+
+1. def build_detour_graph() -> StateGraph:
+   - Crea StateGraph con DetourGraphState
+   - Aggiunge nodi: scout, analyst, planner, safety, ops_brief
+   - Definisce archi condizionali:
+     * scout -> analyst (sempre)
+     * analyst -> planner (se risk >= medium)
+     * analyst -> ops_brief (se risk < medium)
+     * planner -> safety (sempre)
+     * safety -> ops_brief (se approvato)
+     * safety -> planner (se modifiche richieste, max 3 iterazioni)
+
+2. async def run_detour_pipeline(session_id: str, 
+                                satellite_id: str,
+                                conjunction_event_id: str,
+                                tenant_id: str,
+                                state_manager: DetourStateManager) -> DetourGraphState:
+   - Compila grafo
+   - Inizializza stato
+   - Esegue grafo fino a completamento
+   - Salva risultati in DB
+   - Ritorna stato finale
+
+3. async def stream_detour_pipeline(...) -> AsyncGenerator[AgentEvent, None]:
+   - Come run ma yield eventi in tempo reale
+   - Usato per SSE streaming
+
+TASK 2.14: Configurazione LLM Regolo.ai
+---------------------------------------
+FILE: backend/app/agents/detour/config.py
+
+CLASSE: DetourLLMConfig
+
+CONFIGURAZIONE:
+- Modello: regolo.ai (gpt-oss-120b o specificato in env)
+- Base URL: https://api.regolo.ai/v1
+- Temperature: 0.2 (bassa per analisi deterministiche)
+- Max tokens: 4096
+- Timeout: 60s
+
+METODI:
+1. get_llm() -> ChatOpenAI
+   - Ritorna istanza configurata per LangChain
+
+2. get_llm_with_tools(tools: list) -> ChatOpenAI
+   - Configura con tool binding
+
+TASK 2.15: Servizio Collision Avoidance
+---------------------------------------
+FILE: backend/app/services/detour/collision_service.py
+
+CLASSE: CollisionAvoidanceService
+
+METODI:
+
+1. async trigger_conjunction_analysis(conjunction_event_id: str,
+                                     tenant_id: str) -> str:
+   - Crea sessione agente
+   - Avvia pipeline in background (Celery)
+   - Ritorna session_id
+
+2. async get_analysis_status(session_id: str) -> dict:
+   - Recupera stato analisi da DB
+   - Ritorna progresso e risultati parziali
+
+3. async get_analysis_results(session_id: str) -> dict:
+   - Ritorna risultati completi
+   - Include ops_brief, maneuver options, etc.
+
+4. async approve_maneuver_plan(plan_id: str, 
+                              user_id: str) -> ManeuverPlan:
+   - Cambia stato plan ad approved
+   - Notifica operatori
+
+5. async reject_maneuver_plan(plan_id: str,
+                             reason: str,
+                             user_id: str) -> ManeuverPlan:
+   - Cambia stato plan a rejected
+   - Registra motivo
+
+6. async execute_maneuver_plan(plan_id: str,
+                              user_id: str) -> dict:
+   - Solo se stato approved
+   - Registra esecuzione
+   - Aggiorna stato satellite (fuel, etc.)
+
+TASK 2.16: Endpoint API Detour
+------------------------------
+FILE: backend/app/api/v1/detour.py
+
+ENDPOINT DA IMPLEMENTARE:
+
+1. POST /api/v1/detour/conjunctions/{conjunction_id}/analyze
+   - Trigger analisi per congiunzione
+   - Ritorna session_id
+   - Autenticazione: operator+
+
+2. GET /api/v1/detour/sessions/{session_id}/status
+   - Stato analisi in corso
+   - SSE support per streaming
+   - Autenticazione: viewer+
+
+3. GET /api/v1/detour/sessions/{session_id}/results
+   - Risultati completi analisi
+   - Include ops_brief, options, etc.
+   - Autenticazione: viewer+
+
+4. POST /api/v1/detour/maneuvers/{plan_id}/approve
+   - Approva piano manovra
+   - Body: {notes: str}
+   - Autenticazione: operator+
+
+5. POST /api/v1/detour/maneuvers/{plan_id}/reject
+   - Rifiuta piano manovra
+   - Body: {reason: str}
+   - Autenticazione: operator+
+
+6. POST /api/v1/detour/maneuvers/{plan_id}/execute
+   - Esegue piano manovra
+   - Solo se approvato
+   - Autenticazione: admin
+
+7. GET /api/v1/detour/satellites/{satellite_id}/state
+   - Stato collision avoidance satellite
+   - Include fuel, delta-v budget, history
+   - Autenticazione: viewer+
+
+8. GET /api/v1/detour/satellites/{satellite_id}/maneuvers
+   - Storico manovre satellite
+   - Pagination support
+   - Autenticazione: viewer+
+
+9. POST /api/v1/detour/screening/run
+   - Esegue screening manuale
+   - Body: {satellite_id, time_window, threshold}
+   - Autenticazione: operator+
+
+TASK 2.17: Schemas Pydantic Detour
+----------------------------------
+FILE: backend/app/schemas/detour.py
+
+SCHEMAS DA DEFINIRE:
+
+1. SatelliteStateSchema
+   - satellite_id, fuel_kg, delta_v_m_s, last_updated
+
+2. ConjunctionAnalysisRequest
+   - conjunction_event_id, priority (normal/urgent)
+
+3. ConjunctionAnalysisResponse
+   - session_id, status, progress_percent, results
+
+4. ManeuverPlanSchema
+   - id, type, delta_v, fuel_cost, execution_window, status
+
+5. ManeuverApprovalRequest
+   - notes, approved_by
+
+6. OpsBriefSchema
+   - summary, recommended_action, timeline, next_steps
+
+7. AgentEventSchema (per SSE)
+   - timestamp, agent_name, event_type, message, data
+
+8. ScreeningRequest
+   - satellite_id, time_window_hours, threshold_km
+
+9. ScreeningResponse
+   - candidates: list[ConjunctionCandidate]
+   - threats_count, screened_objects
+
+TASK 2.18: Frontend - API Client
+--------------------------------
+FILE: frontend/src/lib/api/detour.ts
+
+FUNZIONI DA IMPLEMENTARE:
+
+1. async analyzeConjunction(conjunctionId: string): Promise<string>
+   - POST /detour/conjunctions/{id}/analyze
+   - Ritorna session_id
+
+2. async getAnalysisStatus(sessionId: string): Promise<AnalysisStatus>
+   - GET /detour/sessions/{id}/status
+
+3. subscribeToAnalysisStream(sessionId: string, 
+                             onEvent: (event: AgentEvent) => void): EventSource
+   - GET /detour/sessions/{id}/status (SSE)
+   - Gestione riconnessione automatica
+
+4. async getAnalysisResults(sessionId: string): Promise<AnalysisResults>
+   - GET /detour/sessions/{id}/results
+
+5. async approveManeuver(planId: string, notes: string): Promise<void>
+   - POST /detour/maneuvers/{id}/approve
+
+6. async rejectManeuver(planId: string, reason: string): Promise<void>
+   - POST /detour/maneuvers/{id}/reject
+
+7. async executeManeuver(planId: string): Promise<void>
+   - POST /detour/maneuvers/{id}/execute
+
+8. async getSatelliteState(satelliteId: string): Promise<SatelliteState>
+   - GET /detour/satellites/{id}/state
+
+9. async runScreening(satelliteId: string, 
+                     timeWindow: number): Promise<ScreeningResult>
+   - POST /detour/screening/run
+
+TASK 2.19: Frontend - Zustand Store
+-----------------------------------
+FILE: frontend/src/lib/store/detour.ts
+
+STORE: useDetourStore
+
+STATE:
+- activeAnalyses: Map<string, AnalysisState>
+- selectedSatellite: Satellite | null
+- selectedConjunction: ConjunctionEvent | null
+- screeningResults: ScreeningResult | null
+- isLoading: boolean
+- error: string | null
+
+ACTIONS:
+- startAnalysis(conjunctionId: string): Promise<void>
+- subscribeToSession(sessionId: string): void
+- approveManeuver(planId: string): Promise<void>
+- rejectManeuver(planId: string, reason: string): Promise<void>
+- executeManeuver(planId: string): Promise<void>
+- runScreening(satelliteId: string): Promise<void>
+- selectSatellite(satellite: Satellite): void
+- selectConjunction(conjunction: ConjunctionEvent): void
+
+TASK 2.20: Frontend - Componenti UI
+-----------------------------------
+FILE: frontend/src/components/Detour/
+
+COMPONENTI DA IMPLEMENTARE:
+
+1. DetourDashboard.tsx
+   - Layout principale Detour
+   - Sidebar con lista congiunzioni
+   - Main panel con dettaglio analisi
+   - Props: tenantId, className
+
+2. CollisionAnalyzer.tsx
+   - Visualizzazione risultati analisi
+   - Probabilità collisione (gauge chart)
+   - Risk level indicator
+   - Geometria congiunzione (3D preview)
+   - Props: analysisId, onApprove, onReject
+
+3. ManeuverPlanner.tsx
+   - Lista opzioni manovra
+   - Comparazione trade-off
+   - Form approvazione
+   - Props: plans, onSelect, onApprove
+
+4. ThreatList.tsx
+   - Tabella congiunzioni rilevate
+   - Filtri per risk level
+   - Sorting per TCA
+   - Azioni rapide
+   - Props: threats, onSelect, onAnalyze
+
+5. OrbitVisualizer.tsx
+   - Mini visualizzazione 3D orbite
+   - Marker TCA
+   - Vettore miss distance
+   - Props: primaryOrbit, secondaryOrbit, tca
+
+6. AgentChat.tsx
+   - Interfaccia chat con agenti
+   - Visualizzazione eventi in tempo reale
+   - Stato agenti attivi
+   - Props: sessionId
+
+7. OpsBriefPanel.tsx
+   - Riepilogo operativo
+   - Recommended action highlight
+   - Timeline esecuzione
+   - Next steps checklist
+   - Props: brief
+
+TASK 2.21: Frontend - Pagina Detour
+-----------------------------------
+FILE: frontend/src/app/(main)/detour/page.tsx
+
+STRUTTURA PAGINA:
+- Layout a due colonne (sidebar + main)
+- Sidebar: ThreatList con filtri
+- Main: Tabs (Analysis, Maneuvers, History)
+- Integration con CesiumMap per visualizzazione
+- Real-time updates via SSE
+
+TASK 2.22: Frontend - Layer Cesium Detour
+-----------------------------------------
+FILE: frontend/src/components/CesiumMap/DetourLayer.tsx
+
+FUNZIONALITÀ:
+- Visualizzazione congiunzioni sulla mappa
+- Marker oggetti primary/secondary
+- Linea di approccio TCA
+- Heatmap risk level
+- Click handler per selezione
+
+=================================================================
+PARTE 3: PIANO TESTING COMPLETO
+=================================================================
+
+3.1 UNIT TESTS - PHYSICS MODULE
+-------------------------------
+FILE: backend/tests/physics/test_propagator.py
+
+TEST CASES:
+1. test_propagate_tle_valid_input()
+   - Input: TLE ISS, lista 10 epoche
+   - Assert: Output array shape (10, 6), valori ragionevoli
+   - Verifica: posizioni coerenti con orbita circolare
+
+2. test_propagate_tle_invalid_tle()
+   - Input: TLE malformato
+   - Assert: Raise ValueError con messaggio specifico
+
+3. test_tle_to_state_vector_epoch()
+   - Input: TLE, epoch specifico
+   - Assert: Stato ECI a quell'epoch
+   - Verifica: Confronto con propagazione manuale
+
+FILE: backend/tests/physics/test_screening.py
+
+TEST CASES:
+1. test_screen_conjunctions_no_threats()
+   - Input: Satellite GEO, catalogo solo LEO
+   - Assert: Lista candidati vuota
+   - Verifica: Nessuna congiunzione possibile
+
+2. test_screen_conjunctions_finds_threats()
+   - Input: Satellite LEO, catalogo con oggetti simili
+   - Assert: Lista candidati non vuota
+   - Verifica: TCA approssimato ragionevole
+
+3. test_refine_conjunction_precision()
+   - Input: Candidato da screening
+   - Assert: TCA preciso, miss distance accurata
+   - Verifica: Miglioramento precisione vs screening
+
+FILE: backend/tests/physics/test_risk.py
+
+TEST CASES:
+1. test_collision_probability_high_risk()
+   - Input: Covarianze grandi, miss distance piccola
+   - Assert: Pc > 0.1
+   - Verifica: Formula Chan corretta
+
+2. test_collision_probability_low_risk()
+   - Input: Miss distance grande
+   - Assert: Pc < 1e-6
+
+3. test_risk_level_classification()
+   - Input: Diverse combinazioni Pc e miss distance
+   - Assert: Classificazione corretta (low/medium/high/critical)
+
+FILE: backend/tests/physics/test_maneuver.py
+
+TEST CASES:
+1. test_in_plane_maneuver_reduces_risk()
+   - Input: Congiunzione critica
+   - Assert: Manovra proposta riduce rischio > 50%
+
+2. test_out_of_plane_maneuver_efficiency()
+   - Input: Congiunzione con geometria specifica
+   - Assert: Manovra out-of-plane ottimale per quella geometria
+
+3. test_maneuver_fuel_cost_calculation()
+   - Input: Manovra con delta-v noto
+   - Assert: Costo fuel calcolato correttamente
+   - Verifica: Formula Tsiolkovsky
+
+3.2 INTEGRATION TESTS - AGENT PIPELINE
+--------------------------------------
+FILE: backend/tests/agents/detour/test_graph.py
+
+TEST CASES:
+1. test_scout_to_analyst_flow()
+   - Setup: Grafo con solo scout -> analyst
+   - Input: Satellite con 1 congiunzione nota
+   - Assert: Analyst riceve correttamente risultato screening
+   - Verifica: State aggiornato correttamente
+
+2. test_analyst_to_planner_conditional()
+   - Caso A: Risk high -> planner chiamato
+   - Caso B: Risk low -> skip planner, vai a ops_brief
+   - Assert: Routing corretto basato su risk level
+
+3. test_planner_safety_loop()
+   - Setup: Plan che safety rigetta 2 volte, approva 3a
+   - Assert: Max 3 iterazioni planner-safety
+   - Verifica: Stato finale ha plan approvato o rejected
+
+4. test_complete_pipeline_end_to_end()
+   - Input: Congiunzione critica reale (dati test)
+   - Esecuzione: Pipeline completa
+   - Assert: Ops brief generato, plan approvato o manual review
+   - Verifica: Eventi SSE emessi correttamente
+
+FILE: backend/tests/agents/detour/test_tools.py
+
+TEST CASES:
+1. test_screen_conjunctions_tool()
+   - Chiamata tool con satellite_id valido
+   - Assert: JSON risultato parseable, contiene candidates
+
+2. test_assess_risk_tool()
+   - Chiamata con conjunction_event_id
+   - Assert: Ritorna risk assessment completo
+
+3. test_propose_maneuvers_tool()
+   - Chiamata con conjunction_event_id
+   - Assert: Lista manovre proposte
+
+3.3 INTEGRATION TESTS - API ENDPOINTS
+-------------------------------------
+FILE: backend/tests/api/v1/test_detour.py
+
+TEST CASES:
+1. test_analyze_conjunction_success()
+   - POST /detour/conjunctions/{id}/analyze
+   - Auth: token valido operator
+   - Assert: 200 OK, session_id ritornato
+   - Verifica: Sessione creata in DB
+
+2. test_analyze_conjunction_unauthorized()
+   - POST senza token o con token viewer
+   - Assert: 401 o 403
+
+3. test_get_analysis_status_streaming()
+   - GET /detour/sessions/{id}/status (SSE)
+   - Assert: Content-Type text/event-stream
+   - Verifica: Eventi ricevuti in ordine corretto
+
+4. test_approve_maneuver_success()
+   - POST /detour/maneuvers/{id}/approve
+   - Setup: Plan in stato proposed
+   - Auth: operator
+   - Assert: 200 OK, stato cambiato ad approved
+
+5. test_execute_maneuver_requires_approval()
+   - POST execute su plan non approvato
+   - Assert: 400 Bad Request
+
+6. test_execute_maneuver_admin_only()
+   - POST execute con token operator
+   - Assert: 403 Forbidden
+
+3.4 DATABASE TESTS
+------------------
+FILE: backend/tests/db/test_detour_models.py
+
+TEST CASES:
+1. test_satellite_state_crud()
+   - Create, Read, Update, Delete
+   - Assert: Tutte le operazioni funzionano
+
+2. test_conjunction_analysis_foreign_keys()
+   - Creazione analysis con conjunction_event_id valido
+   - Tentativo con ID invalido
+   - Assert: FK constraint violata
+
+3. test_maneuver_plan_workflow()
+   - proposed -> approved -> executed
+   - Verifica: Stati intermedi bloccano transizioni illegali
+
+3.5 FRONTEND TESTS
+------------------
+FILE: frontend/src/lib/api/__tests__/detour.test.ts
+
+TEST CASES:
+1. test_analyze_conjunction_api_call()
+   - Mock fetch
+   - Chiamata analyzeConjunction
+   - Assert: URL corretto, metodo POST, body corretto
+
+2. test_subscribe_to_sse_events()
+   - Mock EventSource
+   - Sottoscrizione stream
+   - Assert: Callback chiamata per ogni evento
+   - Verifica: Riconnessione su errore
+
+FILE: frontend/src/components/Detour/__tests__/CollisionAnalyzer.test.tsx
+
+TEST CASES:
+1. test_renders_risk_gauge()
+   - Render con analysis completa
+   - Assert: Gauge mostra probabilità corretta
+
+2. test_approve_button_disabled_without_selection()
+   - Render senza manovra selezionata
+   - Assert: Bottone approva disabilitato
+
+3. test_shows_agent_events_in_real_time()
+   - Simulazione eventi SSE
+   - Assert: Lista eventi aggiornata
+
+3.6 END-TO-END TESTS
+--------------------
+FILE: backend/tests/e2e/test_detour_workflow.py
+
+SCENARIO 1: Complete Collision Avoidance Workflow
+-------------------------------------------------
+SETUP:
+1. Creare satellite test nel DB
+2. Inserire TLE valido
+3. Creare catalogo con oggetto che causa congiunzione
+
+PASSAGGI:
+1. POST /detour/screening/run
+   - Verifica: Trova congiunzione
+   
+2. POST /detour/conjunctions/{id}/analyze
+   - Verifica: Ritorna session_id
+   
+3. SSE /detour/sessions/{id}/status
+   - Verifica: Riceve eventi:
+     * scout_started
+     * screening_completed (1 threat)
+     * analyst_started
+     * risk_assessed (high risk)
+     * planner_started
+     * maneuvers_proposed (3 options)
+     * safety_reviewing
+     * plan_approved
+     * ops_brief_generated
+     * completed
+
+4. GET /detour/sessions/{id}/results
+   - Verifica: Risultati completi
+   - Controlla: collision_probability, risk_level, plans, ops_brief
+
+5. POST /detour/maneuvers/{best_plan_id}/approve
+   - Auth: operator
+   - Verifica: 200 OK
+
+6. POST /detour/maneuvers/{plan_id}/execute
+   - Auth: admin
+   - Verifica: 200 OK, stato executed
+
+7. GET /detour/satellites/{id}/state
+   - Verifica: fuel aggiornato post-maneuver
+
+ASSERT FINALI:
+- Storia completa persistita in DB
+- Tutti gli stati intermedi tracciati
+- Eventi SSE coerenti con esecuzione reale
+
+SCENARIO 2: Low Risk Conjunction (No Maneuver)
+----------------------------------------------
+SETUP: Congiunzione con miss distance grande
+
+PASSAGGI:
+1-4 come sopra
+
+VERIFICHE:
+- Analyst classifica risk low
+- Planner SKIPPED (no node execution)
+- Safety SKIPPED
+- Ops brief: "Monitor only, no action required"
+
+SCENARIO 3: Concurrent Analyses
+-------------------------------
+SETUP: 3 congiunzioni simultanee per stesso satellite
+
+PASSAGGI:
+- Avvia 3 analisi in parallelo
+
+VERIFICHE:
+- Nessun conflitto di stato
+- Ogni sessione indipendente
+- Resource contention gestita correttamente
+
+3.7 PERFORMANCE TESTS
+---------------------
+FILE: backend/tests/performance/test_detour_performance.py
+
+TEST CASES:
+
+1. test_screening_performance_1000_objects()
+   - Input: Catalogo 1000 oggetti, 72h window
+   - Assert: Completamento < 5 secondi
+   - Metriche: Tempo medio per oggetto
+
+2. test_pipeline_latency()
+   - Setup: Congiunzione critica
+   - Misura: Tempo da start ad ops_brief
+   - Assert: < 30 secondi (con LLM cloud)
+
+3. test_sse_event_delivery()
+   - Setup: 100 client connessi a stesso stream
+   - Assert: Tutti ricevono tutti gli eventi
+   - Latenza: < 100ms da evento a delivery
+
+4. test_database_queries_optimization()
+   - Setup: 1000 manovre in history
+   - Query: GET /detour/satellites/{id}/maneuvers
+   - Assert: < 100ms
+   - Verifica: N+1 query non presenti
+
+3.8 SECURITY TESTS
+------------------
+FILE: backend/tests/security/test_detour_security.py
+
+TEST CASES:
+
+1. test_cross_tenant_isolation()
+   - Tenant A tenta accesso a sessione Tenant B
+   - Assert: 404 Not Found (non 403, per non leak info)
+
+2. test_maneuver_execution_rbac()
+   - Operator tenta execute_maneuver
+   - Assert: 403 Forbidden
+   - Admin esegue correttamente
+
+3. test_sql_injection_in_analysis_id()
+   - Input: "'; DROP TABLE detour_sessions; --"
+   - Assert: Query sanitizzata, nessun errore SQL
+
+4. test_sse_authentication()
+   - Connessione SSE senza token
+   - Assert: Connessione rifiutata immediatamente
+
+5. test_rate_limiting_on_analysis_trigger()
+   - 100 richieste analyze in 1 secondo
+   - Assert: Dopo N richieste, 429 Too Many Requests
+
+=================================================================
+PARTE 4: ORDINE DI IMPLEMENTAZIONE CONSIGLIATO
+=================================================================
+
+FASE 1: Foundation (Settimana 1)
+--------------------------------
+- Task 2.1: Setup dipendenze
+- Task 2.2: Costanti physics
+- Task 2.3: Propagator base
+- Task 2.4: Screening algoritmo
+- Task 2.7: Modelli database
+- Migration Alembic
+
+FASE 2: Core Physics (Settimana 1-2)
+------------------------------------
+- Task 2.5: Risk calculation
+- Task 2.6: Maneuver planning
+- Task 3.1: Unit tests physics
+
+FASE 3: Agent Framework (Settimana 2-3)
+---------------------------------------
+- Task 2.8: State manager
+- Task 2.9: Graph state schema
+- Task 2.10: Prompts
+- Task 2.11: Tools
+- Task 2.12: Nodes
+- Task 2.13: Graph builder
+- Task 2.14: LLM config
+
+FASE 4: Backend API (Settimana 3)
+---------------------------------
+- Task 2.15: Collision service
+- Task 2.16: API endpoints
+- Task 2.17: Schemas
+- Task 3.2, 3.3: Integration tests
+
+FASE 5: Frontend (Settimana 4)
+------------------------------
+- Task 2.18: API client
+- Task 2.19: Store
+- Task 2.20: Componenti
+- Task 2.21: Pagina
+- Task 2.22: Cesium layer
+- Task 3.5: Frontend tests
+
+FASE 6: Testing & Refinement (Settimana 5)
+------------------------------------------
+- Task 3.4: DB tests
+- Task 3.6: E2E tests
+- Task 3.7: Performance tests
+- Task 3.8: Security tests
+- Bug fixing
+
+FASE 7: Deployment Prep (Settimana 6)
+-------------------------------------
+- Documentazione API
+- Docker optimization
+- Monitoring setup
+- Load testing
+
+=================================================================
+PARTE 5: CONSIDERAZIONI AGGIUNTIVE
+=================================================================
+
+5.1 INTEGRAZIONE CON SISTEMA ESISTENTE
+--------------------------------------
+- Il sistema Detour si integra con:
+  * OntologyService per dati satelliti
+  * IncidentService per creazione incidenti da congiunzioni critiche
+  * AuditService per logging operazioni
+  * AIService esistente per fallback o integrazioni
+
+- Aggiungere in app/api/v1/router.py:
+  ```python
+  from app.api.v1 import detour
+  router.include_router(detour.router, prefix="/detour", tags=["detour"])
+  ```
+
+5.2 CONFIGURAZIONE ENVIRONMENT
+------------------------------
+Variabili da aggiungere a .env:
+
+```
+# Detour Configuration
+DETOUR_ENABLED=true
+DETOUR_SCREENING_THRESHOLD_KM=5.0
+DETOUR_SCREENING_WINDOW_HOURS=72
+DETOUR_MAX_ITERATIONS_PLANNER=3
+DETOUR_AUTO_APPROVE_LOW_RISK=false
+
+# Regolo.ai specific per Detour (opzionale, usa default AIService)
+DETOUR_REGOLO_MODEL=gpt-oss-120b
+DETOUR_REGOLO_TEMPERATURE=0.2
+DETOUR_REGOLO_MAX_TOKENS=4096
+DETOUR_REGOLO_TIMEOUT_SECONDS=60
+
+# Physics cache
+DETOUR_CACHE_TLE_HOURS=6
+DETOUR_PROPAGATOR_STEP_MINUTES=10
+```
+
+5.3 MONITORING & OBSERVABILITY
+------------------------------
+- Aggiungere metriche Prometheus:
+  * detour_analyses_total
+  * detour_analysis_duration_seconds
+  * detour_maneuvers_executed_total
+  * detour_collision_probability_histogram
+
+- Logging strutturato per ogni agente:
+  ```json
+  {
+    "event": "agent_step_completed",
+    "agent": "scout",
+    "session_id": "...",
+    "duration_ms": 1234,
+    "threats_found": 2
+  }
+  ```
+
+5.4 BACKUP & RECOVERY
+--------------------
+- Backup tabelle detour_* incluso in backup DB standard
+- Disaster recovery: ricostruzione stato da logs
+
+5.5 SCALING CONSIDERATIONS
+--------------------------
+- Pipeline LangGraph eseguita in Celery workers
+- SSE gestite via Redis pub/sub per multi-instance
+- Cache TLE in Redis con TTL
+- Considerare sharding per cataloghi > 100k oggetti
+
+=================================================================
+NOTE FINALI PER RALPH CODING AGENT
+=================================================================
+
+1. CODICE: Seguire SEMPRE le convenzioni in AGENTS.md
+2. TYPE HINTS: Obbligatori ovunque, strict mode mypy
+3. ERROR HANDLING: Usare SDAException con HTTP status appropriati
+4. LOGGING: Usare structlog con context (session_id, tenant_id)
+5. TESTS: Ogni funzione >10 linee DEVE avere test
+6. DB: Usare async SQLAlchemy, tutte le query parametrizzate
+7. SECURITY: Validare TUTTI gli input, RBAC su ogni endpoint
+8. DOCUMENTATION: Docstring per ogni funzione pubblica
+9. FRONTEND: Componenti React functional con hooks, no class components
+10. API CLIENT: Usare SWR per data fetching, Zustand per stato globale
+
+RICORDA: Questo sistema gestisce operazioni critiche per la sicurezza
+spaziale. La precisione dei calcoli orbitali è fondamentale.
+Testare accuratamente con dati reali prima del deployment in produzione.
