@@ -335,7 +335,7 @@ Implement debris visualization on the 3D Cesium map inspired by the TreeHacks 20
   - Test orbit propagation performance (< 100ms)
   - Use React DevTools Profiler
 
-- [ ] Task 5.3: E2E Tests
+- [x] Task 5.3: E2E Tests
   - Navigate to map → debris visible
   - Toggle debris → hide/show
   - Select debris → info card appears

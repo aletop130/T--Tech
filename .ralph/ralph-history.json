@@ -465,9 +465,41 @@
         "Error: Cannot find module '@/lib/api/debris'",
         "FAIL  src/app/(main)/map/__tests__/page.test.tsx > Map page integration – debris features > refreshes debris every 15 seconds"
       ]
+    },
+    {
+      "iteration": 25,
+      "startedAt": "2026-02-16T16:46:52.048Z",
+      "endedAt": "2026-02-16T16:56:45.121Z",
+      "durationMs": 591786,
+      "agent": "opencode",
+      "model": "regolo-ai/gpt-oss-120b",
+      "toolsUsed": {},
+      "filesModified": [
+        ".ralph/ralph-tasks.md",
+        "frontend/next-env.d.ts",
+        "frontend/package-lock.json",
+        "frontend/package.json",
+        "frontend/playwright.config.ts",
+        "frontend/test-results/",
+        "frontend/tests/"
+      ],
+      "exitCode": 0,
+      "completionDetected": false,
+      "errors": [
+        "Error: Cannot find module '@playwright/test'",
+        "Error: Playwright Test did not expect test.describe() to be called here.",
+        "Error: No tests found",
+        "Error: Playwright Test did not expect test.beforeEach() to be called here.",
+        "Error: Playwright Test did not expect test() to be called here.",
+        "Error: No tests found.",
+        "\u001b[2m[WebServer] \u001b[22m\u001b[31m\u001b[1m⨯\u001b[22m\u001b[39m ERROR: This build is using Turbopack, with a `webpack` config and no `turbopack` config.",
+        "Error: browserType.launch: Executable doesn't exist at /root/.cache/ms-playwright/chromium_headless_shell-1208/chrome-headless-shell-linux64/chrome-headless-shell",
+        "Error: page.goto: net::ERR_CONNECTION_REFUSED at http://127.0.0.1:3000/map",
+        "Error: page.goto: net::ERR_ABORTED; maybe frame was detached?"
+      ]
     }
   ],
-  "totalDurationMs": 1729697,
+  "totalDurationMs": 2321483,
   "struggleIndicators": {
     "repeatedErrors": {
       "FAIL  src/app/(main)/map/__tests__/page.test.tsx [ src/app/(main)/map/__tests__/page.test.tsx ]": 2,
@@ -483,7 +515,17 @@
       "⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯": 1,
       "FAIL  src/app/(main)/map/__tests__/page.test.tsx > Map page integration – debris features > loads de": 1,
       "Error: Cannot find module '@/lib/api/debris'": 1,
-      "FAIL  src/app/(main)/map/__tests__/page.test.tsx > Map page integration – debris features > refreshe": 1
+      "FAIL  src/app/(main)/map/__tests__/page.test.tsx > Map page integration – debris features > refreshe": 1,
+      "Error: Cannot find module '@playwright/test'": 1,
+      "Error: Playwright Test did not expect test.describe() to be called here.": 1,
+      "Error: No tests found": 1,
+      "Error: Playwright Test did not expect test.beforeEach() to be called here.": 1,
+      "Error: Playwright Test did not expect test() to be called here.": 1,
+      "Error: No tests found.": 1,
+      "\u001b[2m[WebServer] \u001b[22m\u001b[31m\u001b[1m⨯\u001b[22m\u001b[39m ERROR: This build is using Turbopack, with a `webpack` con": 1,
+      "Error: browserType.launch: Executable doesn't exist at /root/.cache/ms-playwright/chromium_headless_": 1,
+      "Error: page.goto: net::ERR_CONNECTION_REFUSED at http://127.0.0.1:3000/map": 1,
+      "Error: page.goto: net::ERR_ABORTED; maybe frame was detached?": 1
     },
     "noProgressIterations": 0,
     "shortIterations": 0
