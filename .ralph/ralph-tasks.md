@@ -133,7 +133,7 @@ Implement debris visualization on the 3D Cesium map inspired by the TreeHacks 20
   - Implement 15-second refresh cycle like keanucz/detour
   - Error handling with exponential backoff
 
-- [ ] Task 2.3: Unit Tests - API Client (`frontend/src/lib/api/__tests__/debris.test.ts`)
+- [x] Task 2.3: Unit Tests - API Client (`frontend/src/lib/api/__tests__/debris.test.ts`)
   - Test API methods with mocked fetch
   - Test refresh cycle logic
   - Test error handling

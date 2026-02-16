@@ -120,11 +120,49 @@
       "exitCode": 0,
       "completionDetected": false,
       "errors": []
+    },
+    {
+      "iteration": 8,
+      "startedAt": "2026-02-16T16:23:08.990Z",
+      "endedAt": "2026-02-16T16:24:25.824Z",
+      "durationMs": 75593,
+      "agent": "opencode",
+      "model": "regolo-ai/gpt-oss-120b",
+      "toolsUsed": {},
+      "filesModified": [
+        ".ralph/ralph-tasks.md",
+        "frontend/src/lib/api/__tests__/debris.test.ts"
+      ],
+      "exitCode": 0,
+      "completionDetected": false,
+      "errors": [
+        "❯ src/lib/api/__tests__/debris.test.ts (5 tests | 3 failed) 10031ms",
+        "⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯",
+        "FAIL  src/lib/api/__tests__/debris.test.ts > debris API client > getDebris should accept custom limit and orbitClasses",
+        "AssertionError: expected \"spy\" to be called with arguments: [ StringContaining{…}, Anything ]\u001b[90m",
+        "FAIL  src/lib/api/__tests__/debris.test.ts > debris API client > fetchWithBackoff retries on failure and succeeds",
+        "Error: Test timed out in 5000ms.",
+        "FAIL  src/lib/api/__tests__/debris.test.ts > debris API client > fetchWithBackoff fails after max attempts",
+        "Test Files  1 failed | 2 passed (3)",
+        "Tests  3 failed | 10 passed (13)",
+        "Error: Network error"
+      ]
     }
   ],
-  "totalDurationMs": 365859,
+  "totalDurationMs": 441452,
   "struggleIndicators": {
-    "repeatedErrors": {},
+    "repeatedErrors": {
+      "❯ src/lib/api/__tests__/debris.test.ts (5 tests | 3 failed) 10031ms": 1,
+      "⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯": 1,
+      "FAIL  src/lib/api/__tests__/debris.test.ts > debris API client > getDebris should accept custom limi": 1,
+      "AssertionError: expected \"spy\" to be called with arguments: [ StringContaining{…}, Anything ]\u001b[90m": 1,
+      "FAIL  src/lib/api/__tests__/debris.test.ts > debris API client > fetchWithBackoff retries on failure": 1,
+      "Error: Test timed out in 5000ms.": 1,
+      "FAIL  src/lib/api/__tests__/debris.test.ts > debris API client > fetchWithBackoff fails after max at": 1,
+      "Test Files  1 failed | 2 passed (3)": 1,
+      "Tests  3 failed | 10 passed (13)": 1,
+      "Error: Network error": 1
+    },
     "noProgressIterations": 0,
     "shortIterations": 0
   }
