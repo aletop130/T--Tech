@@ -1,0 +1,152 @@
+'''Detour API endpoints.
+
+This module defines the HTTP API for the Detour collision‑avoidance subsystem.
+It provides endpoints for triggering analyses, retrieving status/results, managing
+maneuver plans, querying satellite detour state, and running manual screening.
+'''
+from typing import Annotated, List
+
+from fastapi import APIRouter, Depends, Path, Body, HTTPException, status
+
+from app.api.deps import get_current_user, get_audit_service, get_db
+try:
+    from app.core.security import TokenData
+except ImportError:  # pragma: no cover
+    class TokenData:  # dummy placeholder
+        sub: str = ''
+        tenant_id: str = ''
+        roles: list[str] = []
+from app.core.exceptions import NotFoundError
+from app.db.models.detour import DetourManeuverPlan
+from app.services.detour.collision_service import CollisionAvoidanceService
+from app.services.detour.state_manager import DetourStateManager
+from app.schemas.detour import (
+    ConjunctionAnalysisResponse,
+    ManeuverPlanSchema,
+    SatelliteStateSchema,
+    ScreeningRequest,
+    ManeuverApprovalRequest,
+)
+
+from pydantic import BaseModel, Field
+from sqlalchemy.ext.asyncio import AsyncSession
+
+class ManeuverRejectRequest(BaseModel):
+    '''Payload to reject a maneuver plan.'''
+    reason: str = Field(..., description='Reason for rejection')
+
+router = APIRouter()
+
+async def get_detour_state_manager(db: AsyncSession = Depends(get_db)) -> DetourStateManager:
+    """Provide a DetourStateManager instance for the request."""
+    return DetourStateManager(db)
+
+async def get_detour_service(
+    db: AsyncSession = Depends(get_db),
+    state_manager: DetourStateManager = Depends(get_detour_state_manager),
+    audit = Depends(get_audit_service),
+) -> CollisionAvoidanceService:
+    """Provide the CollisionAvoidanceService used by the endpoints."""
+    return CollisionAvoidanceService(db, state_manager, audit)
+
+@router.post('/conjunctions/{conjunction_id}/analyze', response_model=dict)
+async def trigger_conjunction_analysis(
+    conjunction_id: str = Path(..., description='Conjunction event identifier'),
+    user: TokenData = Depends(get_current_user),
+    service: CollisionAvoidanceService = Depends(get_detour_service),
+):
+    """Trigger the Detour pipeline for a specific conjunction event.
+
+    Returns the newly created session identifier.
+    """
+    session_id = await service.trigger_conjunction_analysis(conjunction_id, user.tenant_id)
+    return {'session_id': session_id}
+
+@router.get('/sessions/{session_id}/status', response_model=dict)
+async def get_analysis_status(
+    session_id: str = Path(..., description='Detour analysis session identifier'),
+    user: TokenData = Depends(get_current_user),
+    service: CollisionAvoidanceService = Depends(get_detour_service),
+):
+    """Return the current status of a Detour analysis session."""
+    return await service.get_analysis_status(session_id)
+
+@router.get('/sessions/{session_id}/results', response_model=dict)
+async def get_analysis_results(
+    session_id: str = Path(..., description='Detour analysis session identifier'),
+    user: TokenData = Depends(get_current_user),
+    service: CollisionAvoidanceService = Depends(get_detour_service),
+):
+    """Retrieve the final results of a completed analysis session."""
+    return await service.get_analysis_results(session_id)
+
+@router.post('/maneuvers/{plan_id}/approve', response_model=ManeuverPlanSchema)
+async def approve_maneuver_plan(
+    plan_id: str = Path(..., description='Maneuver plan identifier'),
+    request: ManeuverApprovalRequest = Body(...),
+    user: TokenData = Depends(get_current_user),
+    service: CollisionAvoidanceService = Depends(get_detour_service),
+):
+    """Approve a proposed maneuver plan."""
+    plan = await service.approve_maneuver_plan(plan_id, user.sub)
+    return ManeuverPlanSchema.model_validate(plan)
+
+@router.post('/maneuvers/{plan_id}/reject', response_model=ManeuverPlanSchema)
+async def reject_maneuver_plan(
+    plan_id: str = Path(..., description='Maneuver plan identifier'),
+    request: ManeuverRejectRequest = Body(...),
+    user: TokenData = Depends(get_current_user),
+    service: CollisionAvoidanceService = Depends(get_detour_service),
+):
+    """Reject a proposed maneuver plan, persisting the rejection reason."""
+    plan = await service.reject_maneuver_plan(plan_id, request.reason, user.sub)
+    return ManeuverPlanSchema.model_validate(plan)
+
+@router.post('/maneuvers/{plan_id}/execute', response_model=dict)
+async def execute_maneuver_plan(
+    plan_id: str = Path(..., description='Maneuver plan identifier'),
+    user: TokenData = Depends(get_current_user),
+    service: CollisionAvoidanceService = Depends(get_detour_service),
+):
+    """Execute an approved maneuver plan. Admin role required."""
+    if 'admin' not in getattr(user, 'roles', []):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail='Admin role required to execute maneuver')
+    return await service.execute_maneuver_plan(plan_id, user.sub)
+
+@router.get('/satellites/{satellite_id}/state', response_model=SatelliteStateSchema)
+async def get_satellite_state(
+    satellite_id: str = Path(..., description='Satellite identifier'),
+    user: TokenData = Depends(get_current_user),
+    state_manager: DetourStateManager = Depends(get_detour_state_manager),
+):
+    """Fetch the detour‑specific state for a satellite."""
+    state = await state_manager.get_satellite_state(satellite_id, user.tenant_id)
+    if not state:
+        raise NotFoundError('DetourSatelliteState', f'{satellite_id}:{user.tenant_id}')
+    return SatelliteStateSchema.model_validate(state)
+
+@router.get('/satellites/{satellite_id}/maneuvers', response_model=list[ManeuverPlanSchema])
+async def list_maneuver_history(
+    satellite_id: str = Path(..., description='Satellite identifier'),
+    user: TokenData = Depends(get_current_user),
+    state_manager: DetourStateManager = Depends(get_detour_state_manager),
+):
+    """Return all maneuver plans that affected the given satellite."""
+    plans = await state_manager.get_maneuver_history(satellite_id, user.tenant_id)
+    return [ManeuverPlanSchema.model_validate(p) for p in plans]
+
+@router.post('/screening/run', response_model=dict)
+async def run_screening(
+    request: ScreeningRequest = Body(...),
+    user: TokenData = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Execute a manual conjunction screening operation."""
+    from app.agents.detour.tools import screen_conjunctions_tool
+    result = await screen_conjunctions_tool(
+        request.satellite_id,
+        request.time_window_hours,
+        request.threshold_km,
+        db=db,
+    )
+    return result

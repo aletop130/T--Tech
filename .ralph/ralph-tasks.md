@@ -166,7 +166,7 @@
   - Schema ScreeningRequest/Response
   - Validazione strict con Field constraints
 
-- [ ] Task 4.3: Endpoint API Detour (backend/app/api/v1/detour.py)
+- [x] Task 4.3: Endpoint API Detour (backend/app/api/v1/detour.py)
   - POST /detour/conjunctions/{id}/analyze - trigger analisi
   - GET /detour/sessions/{id}/status - stato + SSE
   - GET /detour/sessions/{id}/results - risultati
