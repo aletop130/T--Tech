@@ -333,7 +333,7 @@
 - [x] API documentata
 - [x] Frontend funzionante
 - [x] SSE streaming testato
-- [ ] RBAC verificato su tutti endpoint
+- [x] RBAC verificato su tutti endpoint
 
 ---
 

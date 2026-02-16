@@ -8,7 +8,7 @@ from fastapi.responses import StreamingResponse, JSONResponse
 from sqlalchemy import text, select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user, get_db
+from app.api.deps import get_current_user, get_db, require_role
 from app.core.security import TokenData
 from app.core.config import settings
 from app.core.exceptions import SDAException
@@ -18,7 +18,7 @@ router = APIRouter()
 
 @router.post("/cache/clear")
 async def clear_cache(
-    user: Annotated[TokenData, Depends(get_current_user)],
+    user: Annotated[TokenData, Depends(require_role('admin'))],
 ):
     """Clear Redis cache."""
     try:
@@ -41,7 +41,7 @@ async def clear_cache(
 
 @router.post("/database/vacuum")
 async def run_database_vacuum(
-    user: Annotated[TokenData, Depends(get_current_user)],
+    user: Annotated[TokenData, Depends(require_role('admin'))],
     background_tasks: BackgroundTasks,
 ):
     """Run PostgreSQL VACUUM ANALYZE as background task."""
@@ -64,7 +64,7 @@ async def run_database_vacuum(
 
 @router.get("/audit/export")
 async def export_audit_logs(
-    user: Annotated[TokenData, Depends(get_current_user)],
+    user: Annotated[TokenData, Depends(require_role('admin'))],
     db: Annotated[AsyncSession, Depends(get_db)],
     start_date: Optional[datetime] = Query(None, description="Start date for logs"),
     end_date: Optional[datetime] = Query(None, description="End date for logs"),
@@ -118,7 +118,7 @@ async def export_audit_logs(
 
 @router.get("/system/report")
 async def download_system_report(
-    user: Annotated[TokenData, Depends(get_current_user)],
+    user: Annotated[TokenData, Depends(require_role('admin'))],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     """Generate comprehensive system health report."""
@@ -200,7 +200,7 @@ async def download_system_report(
 
 @router.get("/stats")
 async def get_admin_stats(
-    user: Annotated[TokenData, Depends(get_current_user)],
+    user: Annotated[TokenData, Depends(require_role('admin'))],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     """Get real-time admin dashboard statistics."""

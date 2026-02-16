@@ -11,7 +11,7 @@ from typing import Annotated, List, Optional, Any
 from fastapi import APIRouter, Depends, Path, Body, HTTPException, status, Request
 from fastapi.responses import StreamingResponse
 
-from app.api.deps import get_current_user, get_audit_service, get_db
+from app.api.deps import get_current_user, get_audit_service, get_db, require_role
 from app.core.exceptions import NotFoundError
 from app.db.models.detour import DetourManeuverPlan
 from app.services.detour.collision_service import CollisionAvoidanceService
@@ -50,7 +50,8 @@ async def get_detour_service(
 @router.post('/conjunctions/{conjunction_id}/analyze', response_model=dict, summary='Trigger Conjunction Analysis', description='Triggers the detour pipeline for a specific conjunction event and returns the session identifier.')
 async def trigger_conjunction_analysis(
     conjunction_id: str = Path(..., description='Conjunction event identifier'),
-    user = Depends(get_current_user),
+    user = Depends(require_role('operator')),
+
     service: CollisionAvoidanceService = Depends(get_detour_service),
 ):
     """Trigger the Detour pipeline for a specific conjunction event.
@@ -72,7 +73,7 @@ async def trigger_conjunction_analysis(
 async def get_analysis_status(
     request: Request,
     session_id: str = Path(..., description='Detour analysis session identifier'),
-    user = Depends(get_current_user),
+    user = Depends(require_role('viewer')),
     service: CollisionAvoidanceService = Depends(get_detour_service),
 ):
     """Return the current status of a Detour analysis session.
@@ -93,11 +94,10 @@ async def get_analysis_status(
         return StreamingResponse(event_generator(), media_type='text/event-stream')
     return await service.get_analysis_status(session_id)
 
-
 @router.get('/sessions/{session_id}/results', response_model=dict, summary='Get Analysis Results', description='Retrieve the final results of a completed analysis session.')
 async def get_analysis_results(
     session_id: str = Path(..., description='Detour analysis session identifier'),
-    user = Depends(get_current_user),
+    user = Depends(require_role('viewer')),
     service: CollisionAvoidanceService = Depends(get_detour_service),
 ):
     """Retrieve the final results of a completed analysis session.
@@ -106,11 +106,6 @@ async def get_analysis_results(
 
     Returns:
         dict: ``{'session_id': str, 'status': str, 'output_data': dict}``
-
-    Example:
-        >>> response = client.get("/detour/sessions/123/results")
-        >>> response.json()
-        {'session_id': '123', 'status': 'completed', 'output_data': {...}}
     """
     return await service.get_analysis_results(session_id)
 
@@ -118,7 +113,7 @@ async def get_analysis_results(
 async def approve_maneuver_plan(
     plan_id: str = Path(..., description='Maneuver plan identifier'),
     request: Optional[ManeuverApprovalRequest] = Body(None),
-    user = Depends(get_current_user),
+    user = Depends(require_role('operator')),
     service: CollisionAvoidanceService = Depends(get_detour_service),
 ):
     """Approve a proposed maneuver plan.
@@ -127,11 +122,6 @@ async def approve_maneuver_plan(
 
     Returns:
         ManeuverPlanSchema: The updated maneuver plan with status ``approved``.
-
-    Example:
-        >>> response = client.post("/detour/maneuvers/plan123/approve")
-        >>> response.json()["status"]
-        "approved"
     """
     plan = await service.approve_maneuver_plan(plan_id, user.sub)
     return ManeuverPlanSchema.model_validate(plan)
@@ -140,7 +130,7 @@ async def approve_maneuver_plan(
 async def reject_maneuver_plan(
     plan_id: str = Path(..., description='Maneuver plan identifier'),
     request: ManeuverRejectRequest = Body(...),
-    user = Depends(get_current_user),
+    user = Depends(require_role('operator')),
     service: CollisionAvoidanceService = Depends(get_detour_service),
 ):
     """Reject a proposed maneuver plan, persisting the rejection reason.
@@ -149,11 +139,6 @@ async def reject_maneuver_plan(
 
     Returns:
         ManeuverPlanSchema: The updated maneuver plan with status ``rejected``.
-
-    Example:
-        >>> response = client.post("/detour/maneuvers/plan123/reject", json={"reason": "Unsafe maneuver"})
-        >>> response.json()["status"]
-        "rejected"
     """
     plan = await service.reject_maneuver_plan(plan_id, request.reason, user.sub)
     return ManeuverPlanSchema.model_validate(plan)
@@ -166,15 +151,10 @@ async def execute_maneuver_plan(
 ):
     """Execute an approved maneuver plan. Admin role required.
 
-    Checks that the authenticated user has an ``admin`` role; otherwise a 403 error is raised. The plan status must be ``approved``; the service will update the plan to ``executed``, record the execution timestamp, and adjust the satellite's fuel and delta‑v budget.
+    Checks that the authenticated user has an ``admin`` role; otherwise a 403 error is raised. The plan status must be ``approved``; the service will update the plan to ``executed`` and record the execution timestamp.
 
     Returns:
         dict: ``{'plan_id': str, 'status': str, 'executed_at': str}``
-
-    Example:
-        >>> response = client.post("/detour/maneuvers/plan123/execute")
-        >>> response.json()["status"]
-        "executed"
     """
     if 'admin' not in getattr(user, 'roles', []):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail='Admin role required to execute maneuver')
@@ -183,7 +163,7 @@ async def execute_maneuver_plan(
 @router.get('/satellites/{satellite_id}/state', response_model=SatelliteStateSchema, summary='Get Satellite Detour State', description='Fetch the detour‑specific state for a satellite.')
 async def get_satellite_state(
     satellite_id: str = Path(..., description='Satellite identifier'),
-    user = Depends(get_current_user),
+    user = Depends(require_role('viewer')),
     state_manager: DetourStateManager = Depends(get_detour_state_manager),
 ):
     """Fetch the detour‑specific state for a satellite.
@@ -192,11 +172,6 @@ async def get_satellite_state(
 
     Returns:
         SatelliteStateSchema: The current detour state for the satellite.
-
-    Example:
-        >>> response = client.get("/detour/satellites/123/state")
-        >>> response.json()["fuel_remaining_kg"]
-        100.0
     """
     state = await state_manager.get_satellite_state(satellite_id, user.tenant_id)
     if not state:
@@ -206,7 +181,7 @@ async def get_satellite_state(
 @router.get('/satellites/{satellite_id}/maneuvers', response_model=list[ManeuverPlanSchema], summary='List Maneuver History', description='Return all maneuver plans that affected the given satellite.')
 async def list_maneuver_history(
     satellite_id: str = Path(..., description='Satellite identifier'),
-    user = Depends(get_current_user),
+    user = Depends(require_role('viewer')),
     state_manager: DetourStateManager = Depends(get_detour_state_manager),
 ):
     """Return all maneuver plans that affected the given satellite.
@@ -215,11 +190,6 @@ async def list_maneuver_history(
 
     Returns:
         List[ManeuverPlanSchema]: List of maneuver plans.
-
-    Example:
-        >>> response = client.get("/detour/satellites/123/maneuvers")
-        >>> len(response.json())
-        3
     """
     plans = await state_manager.get_maneuver_history(satellite_id, user.tenant_id)
     return [ManeuverPlanSchema.model_validate(p) for p in plans]
@@ -227,7 +197,7 @@ async def list_maneuver_history(
 @router.post('/screening/run', response_model=dict, summary='Run Manual Screening', description='Execute a manual conjunction screening operation.')
 async def run_screening(
     request: ScreeningRequest = Body(...),
-    user = Depends(get_current_user),
+    user = Depends(require_role('operator')),
     db: AsyncSession = Depends(get_db),
 ):
     """Execute a manual conjunction screening operation.
@@ -236,11 +206,6 @@ async def run_screening(
 
     Returns:
         dict: The raw result from the screening tool, typically containing a list of candidates and metadata.
-
-    Example:
-        >>> response = client.post("/detour/screening/run", json={"satellite_id": "sat123", "time_window_hours": 72, "threshold_km": 5.0})
-        >>> response.json()["candidates"]
-        []
     """
     from app.agents.detour.tools import screen_conjunctions_tool
     result = await screen_conjunctions_tool(

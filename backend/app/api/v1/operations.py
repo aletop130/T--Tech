@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import (
     get_current_user,
+    require_role,
     get_route_planning_service,
     get_formation_service,
     get_collision_detection_service,

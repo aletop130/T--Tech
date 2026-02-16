@@ -57,6 +57,32 @@ async def get_current_user(
         roles=["admin", "analyst"],
     )
 
+# Role hierarchy for RBAC
+ROLE_RANK = {
+    "viewer": 1,
+    "operator": 2,
+    "admin": 3,
+}
+
+def require_role(required_role: str):
+    """FastAPI dependency to enforce a minimum role.
+
+    Raises HTTPException 403 if the user does not have the required role or a higher role.
+    """
+    async def _dependency(user: TokenData = Depends(get_current_user)):
+        user_roles = getattr(user, "roles", []) or []
+        # Determine highest role rank the user possesses
+        max_user_rank = max([ROLE_RANK.get(r, 0) for r in user_roles] or [0])
+        required_rank = ROLE_RANK.get(required_role, 0)
+        if max_user_rank < required_rank:
+            from fastapi import HTTPException, status
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"{required_role.capitalize()} role required",
+            )
+        return user
+    return _dependency
+
 
 async def get_audit_service(
     db: Annotated[AsyncSession, Depends(get_db)],
