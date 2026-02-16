@@ -184,4 +184,84 @@ Use these endpoints to generate client SDKs or explore the API.
 
 ---
 
+## Debris Endpoints
+
+| Method | Path | Summary | RBAC |
+| ------ | ---- | ------- | ---- |
+| **GET** | `/debris` | Retrieve debris objects for visualization | viewer |
+| **GET** | `/debris/with-orbits` | Retrieve debris objects with full TLE data | viewer |
+| **GET** | `/orbit` | Propagate orbit for a given NORAD ID | viewer |
+
+### 1. Get Debris
+
+```http
+GET /debris?limit=2500&orbitClasses=LEO HTTP/1.1
+Authorization: Bearer <jwt>
+```
+
+**Response** (`200 OK`):
+
+```json
+{
+  "timeUtc": "2026-01-01T00:00:00Z",
+  "objects": [
+    {
+      "noradId": 12345,
+      "lat": 51.5,
+      "lon": -0.1,
+      "altKm": 408.0
+    }
+  ]
+}
+```
+
+### 2. Get Debris with Orbits
+
+```http
+GET /debris/with-orbits?limit=2500&orbitClasses=LEO HTTP/1.1
+Authorization: Bearer <jwt>
+```
+
+**Response** (`200 OK`):
+
+```json
+[
+  {
+    "noradId": 12345,
+    "lat": 51.5,
+    "lon": -0.1,
+    "altKm": 408.0,
+    "tleLine1": "...",
+    "tleLine2": "..."
+  }
+]
+```
+
+### 3. Get Orbit Propagation
+
+```http
+GET /orbit?norad=25544&minutes=180&stepSec=60 HTTP/1.1
+Authorization: Bearer <jwt>
+```
+
+**Response** (`200 OK`):
+
+```json
+{
+  "noradId": 25544,
+  "timeStartUtc": "2026-01-01T00:00:00Z",
+  "stepSec": 60,
+  "points": [
+    {
+      "tUtc": "2026-01-01T00:00:00Z",
+      "lat": 51.5,
+      "lon": -0.1,
+      "altKm": 408.0
+    }
+  ]
+}
+```
+
+---
+
 *Generated on $(date)*

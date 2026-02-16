@@ -364,7 +364,7 @@ Implement debris visualization on the 3D Cesium map inspired by the TreeHacks 20
 
 ## FASE 7: Documentation
 
-- [ ] Task 7.1: Update API Documentation
+- [x] Task 7.1: Update API Documentation
   - Document `/api/debris` endpoint
   - Document `/api/orbit` endpoint
   - Include keanucz/detour style examples
