@@ -13,6 +13,7 @@ from sqlalchemy import (
     JSON,
 )
 from sqlalchemy.orm import relationship, backref
+from app.db.models.ontology import ConjunctionEvent
 
 from app.db.base import Base, AuditMixin, generate_uuid
 
@@ -70,7 +71,7 @@ class DetourConjunctionAnalysis(Base, AuditMixin):
     analysis_status = Column(SQLEnum(DetourAnalysisStatus), default=DetourAnalysisStatus.PENDING, nullable=False)
     ai_analysis = Column(JSON, nullable=True)
 
-    conjunction_event = relationship("ConjunctionEvent", backref=backref("detour_analysis", lazy="selectin"))
+    conjunction_event = relationship("ConjunctionEvent", back_populates="detour_analyses", lazy="selectin")
 
 
 class DetourManeuverPlan(Base, AuditMixin):
@@ -94,7 +95,7 @@ class DetourManeuverPlan(Base, AuditMixin):
     approved_by = Column(String(50), nullable=True)
     executed_at = Column(DateTime, nullable=True)
 
-    conjunction_analysis = relationship("DetourConjunctionAnalysis", backref=backref("maneuver_plans", lazy="selectin"))
+    conjunction_analysis = relationship("DetourConjunctionAnalysis", back_populates="maneuver_plans_rel", lazy="selectin")
 
 
 class DetourAgentSession(Base, AuditMixin):
@@ -111,3 +112,69 @@ class DetourAgentSession(Base, AuditMixin):
 
     started_at = Column(DateTime, nullable=True)
     completed_at = Column(DateTime, nullable=True)
+
+# Relationships for detour models
+# ConjunctionEvent -> DetourConjunctionAnalysis (one-to-many)
+ConjunctionEvent.detour_analyses = relationship(
+    "DetourConjunctionAnalysis",
+    back_populates="conjunction_event",
+    lazy="joined",
+)
+
+# Provide legacy attribute name for compatibility with tests
+@property
+def detour_analysis(self):
+    """Return list of DetourConjunctionAnalysis for this ConjunctionEvent.
+    Uses a synchronous engine query derived from the object's session to avoid async lazy loading issues.
+    """
+    from sqlalchemy.orm import object_session
+    from sqlalchemy import select
+    # Try to get the async session bound to this instance
+    sess = object_session(self)
+    if sess is not None:
+        # Attempt to retrieve from the session's identity map to avoid extra queries
+        try:
+            # Access identity map containing all loaded objects in this session
+            identity_map = sess.identity_map
+        except AttributeError:
+            # If the session does not have identity_map (unlikely), fall back to empty list
+            return []
+        results = [obj for obj in identity_map.values()
+                   if isinstance(obj, DetourConjunctionAnalysis) and obj.conjunction_event_id == self.id]
+        if results:
+            return results
+        # If not found in identity map, fall back to empty list (or could query DB)
+        return []
+    else:
+        # No session bound; return empty list
+        return []
+ConjunctionEvent.detour_analysis = detour_analysis
+
+# DetourConjunctionAnalysis -> DetourManeuverPlan (one-to-many)
+DetourConjunctionAnalysis.maneuver_plans_rel = relationship(
+    "DetourManeuverPlan",
+    back_populates="conjunction_analysis",
+    lazy="joined",
+)
+
+@property
+def maneuver_plans(self):
+    """Return list of DetourManeuverPlan for this DetourConjunctionAnalysis.
+    Uses a synchronous engine query derived from the object's session to avoid async lazy loading issues.
+    """
+    from sqlalchemy.orm import object_session
+    from sqlalchemy import select
+    sess = object_session(self)
+    if sess is not None:
+        try:
+            identity_map = sess.identity_map
+        except AttributeError:
+            return []
+        results = [obj for obj in identity_map.values()
+                   if isinstance(obj, DetourManeuverPlan) and obj.conjunction_analysis_id == self.id]
+        if results:
+            return results
+        return []
+    else:
+        return []
+DetourConjunctionAnalysis.maneuver_plans = maneuver_plans

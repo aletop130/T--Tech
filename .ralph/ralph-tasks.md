@@ -249,7 +249,7 @@
 
 ## FASE 6: Testing Completo
 
-- [/] Task 6.1: Database Tests (backend/tests/db/test_detour_models.py)
+- [x] Task 6.1: Database Tests (backend/tests/db/test_detour_models.py)
   - Test CRUD satellite_state
   - Test FK constraints
   - Test maneuver plan workflow: proposed -> approved -> executed
