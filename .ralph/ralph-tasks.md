@@ -80,7 +80,7 @@ Implement debris visualization on the 3D Cesium map inspired by the TreeHacks 20
 
 ## FASE 2: Frontend Types & API Client
 
-- [/] Task 2.1: Add Debris Types (`frontend/src/lib/types/debris.ts`)
+- [x] Task 2.1: Add Debris Types (`frontend/src/lib/types/debris.ts`)
   - Create types following keanucz/detour:
     ```typescript
     export interface DebrisObject {
