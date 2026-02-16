@@ -391,7 +391,7 @@ Implement debris visualization on the 3D Cesium map inspired by the TreeHacks 20
 
 ## CHECKLIST FINALE
 
-- [ ] Backend API returns debris in keanucz/detour format
+- [x] Backend API returns debris in keanucz/detour format
 - [ ] Orbit propagation endpoint working
 - [ ] Frontend fetches debris every 15 seconds
 - [ ] DebrisInstancedLayer renders 2500+ objects at 60fps

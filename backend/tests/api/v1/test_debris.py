@@ -67,10 +67,14 @@ async def test_get_debris_returns_expected_structure(client, db_session):
     obj = data["objects"][0]
     # Verify object fields and alias handling
     assert obj["noradId"] == 30001
-    assert obj["lat"] == 0.0
-    assert obj["lon"] == 0.0
-    # altKm is 0.0 because apogee_km / perigee_km are None in the test orbit
-    assert obj["altKm"] == 0.0
+    # Verify lat/lon are reasonable floats
+    assert isinstance(obj["lat"], float)
+    assert isinstance(obj["lon"], float)
+    assert -90.0 <= obj["lat"] <= 90.0
+    assert -180.0 <= obj["lon"] <= 180.0
+    # altKm should be positive (derived from TLE propagation)
+    assert isinstance(obj["altKm"], float)
+    assert obj["altKm"] > 0
 
 
 @pytest.mark.asyncio
@@ -112,10 +116,13 @@ async def test_get_debris_with_orbits_includes_tle(client, db_session):
     assert entry["noradId"] == 40001
     assert entry["tle_line1"] == TLE_LINE1
     assert entry["tle_line2"] == TLE_LINE2
-    # Latitude/longitude placeholders are 0.0 in the endpoint implementation
-    assert entry["lat"] == 0.0
-    assert entry["lon"] == 0.0
-    assert entry["altKm"] == 0.0
+    # Verify lat/lon are reasonable floats and altitude > 0
+    assert isinstance(entry["lat"], float)
+    assert isinstance(entry["lon"], float)
+    assert -90.0 <= entry["lat"] <= 90.0
+    assert -180.0 <= entry["lon"] <= 180.0
+    assert isinstance(entry["altKm"], float)
+    assert entry["altKm"] > 0
 
 
 @pytest.mark.asyncio

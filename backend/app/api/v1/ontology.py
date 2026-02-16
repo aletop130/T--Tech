@@ -128,21 +128,29 @@ async def get_debris(
     debris_with_orbits = await service.get_debris_with_orbits(user.tenant_id)
     # Limit results
     limited = debris_with_orbits[:limit]
+    # Compute current time and skyfield timescale once for efficiency
+    from skyfield.api import EarthSatellite, load
+    ts = load.timescale()
+    now = datetime.utcnow()
+    t = ts.utc(now.year, now.month, now.day, now.hour, now.minute, now.second + now.microsecond / 1_000_000)
     objects = []
     for sat, orb in limited:
-        # Compute approximate altitude km
-        if orb.apogee_km is not None and orb.perigee_km is not None:
-            alt_km = (orb.apogee_km + orb.perigee_km) / 2
-        elif orb.apogee_km is not None:
-            alt_km = orb.apogee_km
-        elif orb.perigee_km is not None:
-            alt_km = orb.perigee_km
-        else:
+        # Compute position from TLE at current time
+        try:
+            sat_ephem = EarthSatellite(orb.tle_line1, orb.tle_line2, name=str(sat.norad_id), ts=ts)
+            subpoint = sat_ephem.at(t).subpoint()
+            lat = subpoint.latitude.degrees
+            lon = subpoint.longitude.degrees
+            alt_km = subpoint.elevation.km
+        except Exception:
+            # Fallback to zeroes if any error occurs
+            lat = 0.0
+            lon = 0.0
             alt_km = 0.0
         objects.append(DebrisObject(
             norad_id=sat.norad_id,
-            lat=0.0,
-            lon=0.0,
+            lat=lat,
+            lon=lon,
             alt_km=alt_km,
         ))
     return DebrisResponse(
@@ -161,19 +169,36 @@ async def get_debris_with_orbits(
     debris_with_orbits = await service.get_debris_with_orbits(user.tenant_id)
     limited = debris_with_orbits[:limit]
     result = []
+    # Compute current time and skyfield timescale once
+    from skyfield.api import EarthSatellite, load
+    ts = load.timescale()
+    now = datetime.utcnow()
+    t = ts.utc(now.year, now.month, now.day, now.hour, now.minute, now.second + now.microsecond / 1_000_000)
     for sat, orb in limited:
-        if orb.apogee_km is not None and orb.perigee_km is not None:
-            alt_km = (orb.apogee_km + orb.perigee_km) / 2
-        elif orb.apogee_km is not None:
-            alt_km = orb.apogee_km
-        elif orb.perigee_km is not None:
-            alt_km = orb.perigee_km
-        else:
-            alt_km = 0.0
+        # Compute position from TLE at current time
+        try:
+            sat_ephem = EarthSatellite(orb.tle_line1, orb.tle_line2, name=str(sat.norad_id), ts=ts)
+            subpoint = sat_ephem.at(t).subpoint()
+            lat = subpoint.latitude.degrees
+            lon = subpoint.longitude.degrees
+            alt_km = subpoint.elevation.km
+        except Exception:
+            # Fallback to 0 if any error
+            lat = 0.0
+            lon = 0.0
+            # Use apogee/perigee if available for altitude fallback
+            if orb.apogee_km is not None and orb.perigee_km is not None:
+                alt_km = (orb.apogee_km + orb.perigee_km) / 2
+            elif orb.apogee_km is not None:
+                alt_km = orb.apogee_km
+            elif orb.perigee_km is not None:
+                alt_km = orb.perigee_km
+            else:
+                alt_km = 0.0
         result.append(DebrisOrbitInfo(
             norad_id=sat.norad_id,
-            lat=0.0,
-            lon=0.0,
+            lat=lat,
+            lon=lon,
             alt_km=alt_km,
             tle_line1=orb.tle_line1,
             tle_line2=orb.tle_line2,
