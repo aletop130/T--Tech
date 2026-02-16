@@ -98,7 +98,7 @@ export default function DetourPage() {
 
         {/* Main panel with tabs */}
         <main className="flex-1 overflow-y-auto p-4">
-          <Tabs id="detour-tabs" selectedTabId={activeTab} onChange={setActiveTab} large={false}>
+          <Tabs id="detour-tabs" selectedTabId={activeTab} onChange={(newTabId: string, _prevTabId?: string, _event?: any) => setActiveTab(newTabId)} large={false}>
             <Tab id="analysis" title="Analysis" panel={renderAnalysisTab()} />
             <Tab id="maneuvers" title="Maneuvers" panel={renderManeuversTab()} />
             <Tab id="history" title="History" panel={renderHistoryTab()} />

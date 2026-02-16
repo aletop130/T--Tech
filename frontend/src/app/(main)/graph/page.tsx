@@ -143,8 +143,8 @@ export default function GraphPage() {
               if (i >= j) return;
               
               // Check if satellites have similar inclination (could be in same orbital plane)
-              const orbit1 = sat1.orbit;
-              const orbit2 = sat2.orbit;
+              const orbit1 = sat1.latest_orbit;
+              const orbit2 = sat2.latest_orbit;
               
               let similarOrbit = false;
               if (orbit1 && orbit2) {
@@ -184,20 +184,22 @@ export default function GraphPage() {
         });
 
         proximityAlerts.forEach((alert: ProximityAlert) => {
-          const linkKey = `prox-${alert.primary_satellite_id}-${alert.secondary_satellite_id}`;
-          if (!seenLinks.has(linkKey)) {
-            seenLinks.add(linkKey);
-            const incident = allIncidents.find(i => 
-              i.affected_assets?.some(a => a.id === alert.primary_satellite_id || a.id === alert.secondary_satellite_id)
-            );
-            graphLinks.push({
-              id: linkKey,
-              source: alert.primary_satellite_id,
-              target: alert.secondary_satellite_id,
-              type: 'proximity',
-              severity: alert.alert_level,
-              incident: incident,
-            });
+          if (alert.primary_satellite_id && alert.secondary_satellite_id) {
+            const linkKey = `prox-${alert.primary_satellite_id}-${alert.secondary_satellite_id}`;
+            if (!seenLinks.has(linkKey)) {
+              seenLinks.add(linkKey);
+              const incident = allIncidents.find(i => 
+                i.affected_assets?.some(a => a.id === alert.primary_satellite_id || a.id === alert.secondary_satellite_id)
+              );
+              graphLinks.push({
+                id: linkKey,
+                source: alert.primary_satellite_id,
+                target: alert.secondary_satellite_id,
+                type: 'proximity',
+                severity: alert.alert_level,
+                incident: incident,
+              });
+            }
           }
         });
 

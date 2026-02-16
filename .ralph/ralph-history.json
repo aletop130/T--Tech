@@ -414,11 +414,50 @@
       "exitCode": 0,
       "completionDetected": false,
       "errors": []
+    },
+    {
+      "iteration": 20,
+      "startedAt": "2026-02-16T13:42:09.797Z",
+      "endedAt": "2026-02-16T13:51:09.250Z",
+      "durationMs": 538227,
+      "agent": "opencode",
+      "model": "regolo-ai/gpt-oss-120b",
+      "toolsUsed": {},
+      "filesModified": [
+        "frontend/next-env.d.ts",
+        "frontend/package-lock.json",
+        "frontend/package.json",
+        "frontend/src/app/(main)/detour/page.tsx",
+        "frontend/src/app/(main)/explorer/page.tsx",
+        "frontend/src/app/(main)/graph/page.tsx",
+        "frontend/src/app/(main)/map/page.tsx",
+        "frontend/src/lib/api.ts",
+        "frontend/tsconfig.json"
+      ],
+      "exitCode": 0,
+      "completionDetected": false,
+      "errors": [
+        "Type error: Type 'Dispatch<SetStateAction<string>>' is not assignable to type '(newTabId: TabId, prevTabId: TabId | undefined, event: MouseEvent<HTMLElement, MouseEvent>) => void'.",
+        "Type error: Argument of type 'Satellite' is not assignable to parameter of type 'SetStateAction<SatelliteDetail | null>'.",
+        "Type error: Property 'orbit' does not exist on type 'SatelliteDetail'.",
+        "Type error: Property 'primary_satellite_id' does not exist on type 'ProximityAlert'. Did you mean 'primary_satellite_name'?",
+        "Type error: Property 'affected_assets' does not exist on type 'Incident'.",
+        "Type error: Type 'string | undefined' is not assignable to type 'string'.",
+        "Type error: Cannot access 'CesiumModule.Viewer' because 'CesiumModule' is a type, but not a namespace. Did you mean to retrieve the type of the property 'Viewer' in 'CesiumModule' with 'CesiumModule[\""
+      ]
     }
   ],
-  "totalDurationMs": 3282405,
+  "totalDurationMs": 3820632,
   "struggleIndicators": {
-    "repeatedErrors": {},
+    "repeatedErrors": {
+      "Type error: Type 'Dispatch<SetStateAction<string>>' is not assignable to type '(newTabId: TabId, pre": 1,
+      "Type error: Argument of type 'Satellite' is not assignable to parameter of type 'SetStateAction<Sate": 1,
+      "Type error: Property 'orbit' does not exist on type 'SatelliteDetail'.": 1,
+      "Type error: Property 'primary_satellite_id' does not exist on type 'ProximityAlert'. Did you mean 'p": 1,
+      "Type error: Property 'affected_assets' does not exist on type 'Incident'.": 1,
+      "Type error: Type 'string | undefined' is not assignable to type 'string'.": 1,
+      "Type error: Cannot access 'CesiumModule.Viewer' because 'CesiumModule' is a type, but not a namespac": 1
+    },
     "noProgressIterations": 0,
     "shortIterations": 0
   }

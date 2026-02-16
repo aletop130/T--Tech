@@ -83,6 +83,7 @@ export interface Incident {
   detected_at: string;
   assigned_to?: string;
   priority: number;
+  affected_assets?: Array<{ id: string; type: string; name?: string }>;
 }
 
 export interface ConjunctionEvent {
@@ -147,6 +148,8 @@ export interface ProximityEvent {
 
 export interface ProximityAlert {
   event_id: string;
+  primary_satellite_id?: string;
+  secondary_satellite_id?: string;
   primary_satellite_name: string;
   secondary_satellite_name: string;
   distance_km: number;

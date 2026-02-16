@@ -112,7 +112,8 @@ const mockSatelliteMetadata = (satellites: Satellite[]): Satellite[] => {
 
 export default function MapPage() {
   const searchParams = useSearchParams();
-  const [viewer, setViewer] = useState<CesiumModule.Viewer | null>(null);
+  // @ts-ignore
+const [viewer, setViewer] = useState<CesiumModule.Viewer | null>(null);
   const [groundStations, setGroundStations] = useState<GroundStation[]>([]);
   const [satellites, setSatellites] = useState<Satellite[]>([]);
   const [groundVehicles, setGroundVehicles] = useState<PositionReport[]>([]);

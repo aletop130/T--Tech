@@ -16,7 +16,7 @@ import {
   FormGroup,
   Switch,
 } from '@blueprintjs/core';
-import { api, Satellite, GroundStation, SatelliteDetail } from '@/lib/api';
+import { api, Satellite, GroundStation } from '@/lib/api';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { format } from 'date-fns';
 import { SatelliteInfoCard } from '@/components/CesiumMap/SatelliteInfoCard';
@@ -62,7 +62,7 @@ export default function ExplorerPage() {
     isActive: true,
   });
   
-  const [selectedSatellite, setSelectedSatellite] = useState<SatelliteDetail | null>(null);
+  const [selectedSatellite, setSelectedSatellite] = useState<Satellite | null>(null);
   const [selectedSatelliteOrbit, setSelectedSatelliteOrbit] = useState<OrbitData | null>(null);
   const [loadingSelected, setLoadingSelected] = useState(false);
   const pageSize = 20;
@@ -128,17 +128,18 @@ export default function ExplorerPage() {
         const satData = await api.getSatellite(item.id);
         setSelectedSatellite(satData);
         
-        if (satData.latest_orbit) {
-          setSelectedSatelliteOrbit({
-            satellite_id: satData.id,
-            positions: [],
-            tle_line1: satData.latest_orbit.tle_line1,
-            tle_line2: satData.latest_orbit.tle_line2,
-            epoch: satData.latest_orbit.epoch,
-          });
-        } else {
-          setSelectedSatelliteOrbit(null);
-        }
+        const orbit = (satData as any).latest_orbit;
+          if (orbit) {
+            setSelectedSatelliteOrbit({
+              satellite_id: satData.id,
+              positions: [],
+              tle_line1: orbit.tle_line1,
+              tle_line2: orbit.tle_line2,
+              epoch: orbit.epoch,
+            });
+          } else {
+            setSelectedSatelliteOrbit(null);
+          }
       } catch (error) {
         console.error('Failed to load satellite details:', error);
       } finally {
