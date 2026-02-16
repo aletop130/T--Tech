@@ -12,8 +12,10 @@
 import React from 'react';
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { getDebris } from '@/lib/api/debris';
 
 // --- Mock external modules -------------------------------------------------
+const mockComponent = (testId: string) => (props: any) => <div data-testid={testId} {...props} />;
 
 // Mock the API client for debris fetching and other backend calls.
 vi.mock('@/lib/api/debris', () => {
@@ -85,6 +87,11 @@ vi.mock('@/components/CesiumMap/GroundStationLayer', () => ({ GroundStationLayer
 vi.mock('@/components/CesiumMap/GroundVehicleLayer', () => ({ GroundVehicleLayer: (props: any) => <div data-testid="ground-vehicle-layer" {...props} /> }));
 vi.mock('@/components/CesiumMap/MilitaryVehicleLayer', () => ({ MilitaryVehicleLayer: (props: any) => <div data-testid="military-vehicle-layer" {...props} /> }));
 vi.mock('@/components/CesiumMap/ConjunctionLayer', () => ({ ConjunctionLayer: (props: any) => <div data-testid="conjunction-layer" {...props} /> }));
+vi.mock('next/navigation', () => ({
+  useSearchParams: vi.fn(() => ({
+    get: vi.fn(() => null),
+  })),
+}));
 vi.mock('@/components/CesiumMap/SatelliteInfoCard', () => ({ SatelliteInfoCard: (props: any) => <div data-testid="satellite-info-card" {...props} /> }));
 vi.mock('@/components/CesiumMap/GroundStationInfoCard', () => ({ GroundStationInfoCard: (props: any) => <div data-testid="ground-station-info-card" {...props} /> }));
 vi.mock('@/components/CesiumMap/GroundVehicleInfoCard', () => ({ GroundVehicleInfoCard: (props: any) => <div data-testid="ground-vehicle-info-card" {...props} /> }));
@@ -96,21 +103,16 @@ vi.mock('@/components/CesiumMap/SolarSystemLayer', () => ({ SolarSystemLayer: (p
 vi.mock('@/components/CesiumMap/PlanetInfoBox', () => ({ PlanetInfoBox: (props: any) => <div data-testid="planet-info-box" {...props} /> }));
 vi.mock('@/components/Chat/AgentChat', () => ({ AgentChat: (props: any) => <div data-testid="agent-chat" {...props} /> }));
 vi.mock('@/components/ProximityAlertPanel/UnifiedAlertsPanel', () => ({ UnifiedAlertsPanel: (props: any) => <div data-testid="unified-alerts-panel" {...props} /> }));
-vi.mock('@/components/CesiumMap/SimulatedSatelliteLayer', () => ({ SimulatedSatelliteLayer: mockComponent('simulated-satellite-layer') }));
-vi.mock('@/components/CesiumMap/MilitarySymbolLayer', () => ({ MilitarySymbolLayer: mockComponent('military-symbol-layer') }));
-vi.mock('@/components/Simulation/MissionNarrative', () => ({ MissionNarrative: mockComponent('mission-narrative') }));
-vi.mock('@/components/Simulation/MissionHUD', () => ({ MissionHUD: mockComponent('mission-hud') }));
+vi.mock('@/components/CesiumMap/SimulatedSatelliteLayer', () => ({ SimulatedSatelliteLayer: (props: any) => <div data-testid="simulated-satellite-layer" {...props} /> }));
+vi.mock('@/components/CesiumMap/MilitarySymbolLayer', () => ({ MilitarySymbolLayer: (props: any) => <div data-testid="military-symbol-layer" {...props} /> }));
+vi.mock('@/components/Simulation/MissionNarrative', () => ({ MissionNarrative: (props: any) => <div data-testid="mission-narrative" {...props} /> }));
+vi.mock('@/components/Simulation/MissionHUD', () => ({ MissionHUD: (props: any) => <div data-testid="mission-hud" {...props} /> }));
 
 // --------------------------------------------------------------------------
 
 import MapPage from '../page'; // The default export renders the page inside Suspense.
 
-/** Helper to get the mocked getDebris function with proper typing. */
-const getDebrisMock = () => {
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const { getDebris } = require('@/lib/api/debris');
-  return getDebris as typeof import('@/lib/api/debris').getDebris;
-};
+
 
 /** Small utility to render the page and wait for the initial debris load. */
 async function renderPageAndWait() {
@@ -136,7 +138,7 @@ describe('Map page integration – debris features', () => {
       timeUtc: '2026-01-01T00:00:00Z',
       objects: [{ noradId: 1, lat: 10, lon: 20, altKm: 400 }],
     };
-    getDebrisMock().mockResolvedValueOnce(mockData);
+    getDebris.mockResolvedValueOnce(mockData);
 
     await renderPageAndWait();
 
@@ -153,7 +155,7 @@ describe('Map page integration – debris features', () => {
       { noradId: 1, lat: 0, lon: 0, altKm: 400 },
       { noradId: 2, lat: 1, lon: 1, altKm: 410 },
     ] };
-    const mock = getDebrisMock();
+    const mock = getDebris;
     mock.mockResolvedValueOnce(first).mockResolvedValueOnce(second);
 
     await renderPageAndWait();
@@ -174,7 +176,7 @@ describe('Map page integration – debris features', () => {
       timeUtc: '2026-01-01T00:00:00Z',
       objects: [{ noradId: 1, lat: 10, lon: 20, altKm: 400 }],
     };
-    getDebrisMock().mockResolvedValueOnce(mockData);
+    getDebris.mockResolvedValueOnce(mockData);
 
     await renderPageAndWait();
     const checkbox = screen.getByRole('checkbox', { name: /Debris/i });
@@ -198,7 +200,7 @@ describe('Map page integration – debris features', () => {
       timeUtc: '2026-01-01T00:00:00Z',
       objects: [],
     };
-    getDebrisMock().mockResolvedValueOnce(mockData);
+    getDebris.mockResolvedValueOnce(mockData);
 
     await renderPageAndWait();
     const slider = screen.getByRole('slider');

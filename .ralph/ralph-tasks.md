@@ -329,7 +329,7 @@ Implement debris visualization on the 3D Cesium map inspired by the TreeHacks 20
   - Test speed control updates animation
   - Test debris selection flow
 
-- [/] Task 5.2: Performance Tests
+- [x] Task 5.2: Performance Tests
   - Test 2500+ debris objects at 60fps
   - Test memory usage over 5 minutes
   - Test orbit propagation performance (< 100ms)
