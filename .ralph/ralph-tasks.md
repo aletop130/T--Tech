@@ -134,7 +134,7 @@
   - Funzione async stream_detour_pipeline(...) -> AsyncGenerator[AgentEvent, None]
   - Testare routing condizionale, verificare loop detection
 
-- [ ] Task 3.7: Configurazione LLM Regolo.ai (backend/app/agents/detour/config.py)
+- [x] Task 3.7: Configurazione LLM Regolo.ai (backend/app/agents/detour/config.py)
   - Classe DetourLLMConfig
   - Modello: gpt-oss-120b (o da env), Base URL: https://api.regolo.ai/v1
   - Temperature: 0.2, Max tokens: 4096, Timeout: 60s
