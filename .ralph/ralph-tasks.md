@@ -309,7 +309,7 @@ Implement debris visualization on the 3D Cesium map inspired by the TreeHacks 20
   - Add `<DebrisInfoCard />` when `selectedDebris` is set
   - Clear other selections when debris selected
 
-- [ ] Task 4.7: Add Orbital Track for Selected Objects (`frontend/src/app/(main)/map/page.tsx`)
+- [x] Task 4.7: Add Orbital Track for Selected Objects (`frontend/src/app/(main)/map/page.tsx`)
   - When satellite/debris selected:
     - Fetch orbit from `/api/orbit?norad={id}&minutes=180&stepSec=60`
     - Convert to `OrbitTrackState`

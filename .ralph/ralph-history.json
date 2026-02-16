@@ -376,15 +376,28 @@
       "errors": [
         "tests/db/test_detour_models.py::test_detour_satellite_state_fk_failure PASSED [ 38%]"
       ]
+    },
+    {
+      "iteration": 21,
+      "startedAt": "2026-02-16T16:40:11.902Z",
+      "endedAt": "2026-02-16T16:41:21.623Z",
+      "durationMs": 68480,
+      "agent": "opencode",
+      "model": "regolo-ai/gpt-oss-120b",
+      "toolsUsed": {},
+      "filesModified": [
+        ".ralph/ralph-tasks.md",
+        "frontend/src/app/(main)/map/page.tsx",
+        "frontend/tsconfig.tsbuildinfo"
+      ],
+      "exitCode": 0,
+      "completionDetected": false,
+      "errors": []
     }
   ],
-  "totalDurationMs": 1343399,
+  "totalDurationMs": 1411879,
   "struggleIndicators": {
-    "repeatedErrors": {
-      "⨯ ERROR: This build is using Turbopack, with a `webpack` config and no `turbopack` config.": 1,
-      "Error: Call retries were exceeded": 1,
-      "tests/db/test_detour_models.py::test_detour_satellite_state_fk_failure PASSED [ 38%]": 1
-    },
+    "repeatedErrors": {},
     "noProgressIterations": 0,
     "shortIterations": 0
   }

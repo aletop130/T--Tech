@@ -5,9 +5,9 @@ import dynamic from 'next/dynamic';
 import { useSearchParams } from 'next/navigation';
 import { Spinner, Tag, Icon, Button, Checkbox, Intent } from '@blueprintjs/core';
 import { api, GroundStation, Satellite, ConjunctionEvent, PositionReport } from '@/lib/api';
-import { getDebris } from '@/lib/api/debris';
+import { getDebris, getOrbit } from '@/lib/api/debris';
 import { getCesium, type CesiumModule } from '@/lib/cesium/loader';
-import type { DebrisObject } from '@/lib/types/debris';
+import type { DebrisObject, OrbitTrackState } from '@/lib/types/debris';
 import { CesiumViewer } from '@/components/CesiumMap/CesiumViewer';
 import { SatelliteLayer } from '@/components/CesiumMap/SatelliteLayer';
 import { GroundStationLayer } from '@/components/CesiumMap/GroundStationLayer';
@@ -20,6 +20,8 @@ import { GroundVehicleInfoCard } from '@/components/CesiumMap/GroundVehicleInfoC
 import { ConjunctionInfoCard } from '@/components/CesiumMap/ConjunctionInfoCard';
 import { DebrisInstancedLayer } from '@/components/CesiumMap/DebrisInstancedLayer';
 import { DebrisInfoCard } from '@/components/CesiumMap/DebrisInfoCard';
+import { OrbitalTrackLayer } from '@/components/CesiumMap/OrbitalTrackLayer';
+import { MovingSatelliteMarker } from '@/components/CesiumMap/MovingSatelliteMarker';
 import { SolarSystemLayer } from '@/components/CesiumMap/SolarSystemLayer';
 import { PlanetInfoBox } from '@/components/CesiumMap/PlanetInfoBox';
 import { PLANETS, type CelestialBody } from '@/lib/solarSystem/data';
@@ -161,6 +163,7 @@ const [viewer, setViewer] = useState<InstanceType<CesiumModule['Viewer']> | null
   const [selectedDebris, setSelectedDebris] = useState<DebrisObject | null>(null);
   const [speed, setSpeed] = useState(1);
   const speedRef = useRef(1);
+  const [orbitTrack, setOrbitTrack] = useState<OrbitTrackState | null>(null);
   const SPEED_STEPS = [1, 2, 5, 10, 25, 50, 100];
 // Debris data loading configuration
 const DEBRIS_REFRESH_MS = 15_000;
@@ -396,6 +399,50 @@ useEffect(() => {
     abortController.abort();
   };
 }, [isSimulationMode, viewer]);
+
+  // Load and refresh orbit track for selected satellite or debris
+  useEffect(() => {
+    let cancelled = false;
+    const loadOrbitTrack = async () => {
+      if (!viewer) return;
+      try {
+        if (selectedSatellite) {
+          const orbit = orbits.find((o) => o.satellite_id === selectedSatellite.id);
+          if (orbit && orbit.positions && orbit.positions.length > 0) {
+            const Cesium = await getCesium();
+            const points = orbit.positions.map((p) => Cesium.Cartesian3.fromDegrees(p.lon, p.lat, p.alt * 1000));
+            const timeStartMs = orbit.positions[0]?.time ? new Date(orbit.positions[0].time).getTime() : Date.now();
+            setOrbitTrack({ points, timeStartMs, stepSec: 60 });
+          } else {
+            setOrbitTrack(null);
+          }
+        } else if (selectedDebris) {
+          const response = await getOrbit(selectedDebris.noradId);
+          const Cesium = await getCesium();
+          const points = response.points.map((p) => Cesium.Cartesian3.fromDegrees(p.lon, p.lat, p.altKm * 1000));
+          const timeStartMs = new Date(response.timeStartUtc).getTime();
+          setOrbitTrack({ points, timeStartMs, stepSec: response.stepSec });
+        } else {
+          setOrbitTrack(null);
+        }
+      } catch (e) {
+        if (!cancelled) console.error('Failed to load orbit track', e);
+      }
+    };
+
+    // Initial load
+    loadOrbitTrack();
+
+    // Refresh every 30 seconds
+    const interval = setInterval(() => {
+      loadOrbitTrack();
+    }, 30_000);
+
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [selectedSatellite, selectedDebris, viewer, orbits]);
 
 const fetchFamousSatellites = async () => {
     setFetchingFamous(true);
@@ -822,6 +869,12 @@ const fetchFamousSatellites = async () => {
     debris={selectedDebris}
     onClose={() => setSelectedDebris(null)}
   />
+)}
+{orbitTrack && viewer && !isSimulationMode && (
+  <>
+    <OrbitalTrackLayer viewer={viewer} orbitTrack={orbitTrack} />
+    <MovingSatelliteMarker viewer={viewer} orbitTrack={orbitTrack} />
+  </>
 )}
                     {isSimulationMode && (
                       <>
