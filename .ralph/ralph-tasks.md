@@ -70,7 +70,7 @@
   - Funzione optimize_maneuver_timing(maneuvers, conjunction) -> ManeuverOption
   - Funzione calculate_delta_v_cost(maneuver, satellite) -> float (Tsiolkovsky)
 
-- [ ] Task 2.5: Unit Tests Physics
+- [/] Task 2.5: Unit Tests Physics
   - backend/tests/physics/test_propagator.py: valid input, invalid TLE, epoch specific
   - backend/tests/physics/test_screening.py: no threats (GEO vs LEO), finds threats, refinement precision
   - backend/tests/physics/test_risk.py: high/low Pc, risk classification

@@ -110,7 +110,7 @@ class Satellite(Base, AuditMixin):
     
     # Description for vector search
     description = Column(Text, nullable=True)
-    description_embedding = Column(ARRAY(Float), nullable=True)
+    description_embedding = Column(JSON, nullable=True)
     
     # Relationships
     orbits = relationship(
@@ -207,7 +207,7 @@ class Sensor(Base, AuditMixin):
     country = Column(String(50), nullable=True)
     
     description = Column(Text, nullable=True)
-    description_embedding = Column(ARRAY(Float), nullable=True)
+    description_embedding = Column(JSON, nullable=True)
     
     # Link to ground station
     ground_station_id = Column(
@@ -242,7 +242,7 @@ class GroundStation(Base, AuditMixin):
     country = Column(String(50), nullable=True)
     
     description = Column(Text, nullable=True)
-    description_embedding = Column(ARRAY(Float), nullable=True)
+    description_embedding = Column(JSON, nullable=True)
     
     # Relationships
     sensors = relationship("Sensor", back_populates="ground_station")
