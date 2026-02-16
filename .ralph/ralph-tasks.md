@@ -194,7 +194,7 @@
 
 ## FASE 5: Frontend
 
-- [ ] Task 5.1: API Client Detour (frontend/src/lib/api/detour.ts)
+- [x] Task 5.1: API Client Detour (frontend/src/lib/api/detour.ts)
   - Funzione analyzeConjunction(conjunctionId) -> session_id
   - Funzione getAnalysisStatus(sessionId) -> status
   - Funzione subscribeToAnalysisStream(sessionId, onEvent) -> EventSource

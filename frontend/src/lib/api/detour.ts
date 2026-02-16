@@ -1,0 +1,183 @@
+/* Detour API client
+   Provides convenience functions for the Detour collision‑avoidance subsystem.
+   Mirrors the backend endpoints defined in backend/app/api/v1/detour.py.
+*/
+
+// Base API URL – matches the logic used in src/lib/api.ts
+const API_BASE: string = typeof window !== 'undefined'
+  ? '' // Browser: relative URLs go through Next.js rewrites
+  : (process.env.NEXT_PUBLIC_API_URL || '');
+
+// Default tenant – in a real app this would be dynamic based on auth context.
+const DEFAULT_TENANT_ID = 'default';
+
+/** Helper to perform a fetch request with JSON handling and proper headers. */
+async function fetchJson<T>(url: string, init: RequestInit = {}): Promise<T> {
+  const headers = {
+    'Content-Type': 'application/json',
+    'X‑Tenant‑ID': DEFAULT_TENANT_ID,
+    ...(init.headers ?? {}),
+  } as Record<string, string>;
+
+  const response = await fetch(url, { ...init, headers });
+  if (!response.ok) {
+    const errBody = await response.json().catch(() => ({}));
+    const message = errBody.detail || `API error: ${response.status}`;
+    throw new Error(message);
+  }
+  // Some endpoints return no body (e.g., DELETE). Guard against empty responses.
+  const text = await response.text();
+  return text ? (JSON.parse(text) as T) : ({} as T);
+}
+
+/** Types matching the backend schemas. */
+export interface DetourAnalysisStatus {
+  session_id: string;
+  status: string;
+  started_at?: string;
+  completed_at?: string;
+  events?: unknown[];
+}
+
+export interface DetourAnalysisResults {
+  session_id: string;
+  status: string;
+  output_data: Record<string, unknown>;
+}
+
+export interface SatelliteState {
+  id: string;
+  satellite_id: string;
+  fuel_remaining_kg?: number;
+  delta_v_budget_m_s?: number;
+}
+
+export interface ManeuverPlan {
+  id: string;
+  conjunction_analysis_id: string;
+  maneuver_type: string;
+  delta_v_m_s?: number;
+  fuel_cost_kg?: number;
+  execution_window?: Record<string, unknown>;
+  expected_miss_distance_km?: number;
+  risk_reduction_percent?: number;
+  status: string;
+  ai_recommendation?: Record<string, unknown>;
+  approved_by?: string;
+  executed_at?: string;
+}
+
+export interface ScreeningCandidate {
+  candidate_id: string;
+  satellite_id: string;
+  tca: string;
+  miss_distance_km: number;
+  collision_probability?: number;
+  risk_level?: string;
+}
+
+export interface ScreeningResult {
+  candidates: ScreeningCandidate[];
+  generated_at: string;
+}
+
+/** Trigger a Detour analysis for a specific conjunction event.
+ *  Returns the newly created session identifier. */
+export async function analyzeConjunction(conjunctionId: string): Promise<string> {
+  const url = `${API_BASE}/api/v1/detour/conjunctions/${encodeURIComponent(conjunctionId)}/analyze`;
+  const data = await fetchJson<{ session_id: string }>(url, { method: 'POST' });
+  return data.session_id;
+}
+
+/** Retrieve the current status of an analysis session. */
+export async function getAnalysisStatus(sessionId: string): Promise<DetourAnalysisStatus> {
+  const url = `${API_BASE}/api/v1/detour/sessions/${encodeURIComponent(sessionId)}/status`;
+  return fetchJson<DetourAnalysisStatus>(url);
+}
+
+/** Subscribe to an EventSource stream that emits status updates for a session.
+ *  The backend currently returns JSON via a regular GET endpoint, but the
+ *  client treats it as an SSE stream for forward compatibility.
+ *  The function automatically reconnects on errors.
+ */
+export function subscribeToAnalysisStream(
+  sessionId: string,
+  onEvent: (event: MessageEvent) => void
+): EventSource {
+  const url = `${API_BASE}/api/v1/detour/sessions/${encodeURIComponent(sessionId)}/status`;
+  let es: EventSource | null = null;
+  const connect = () => {
+    es = new EventSource(url);
+    es.onmessage = onEvent;
+    es.onerror = () => {
+      // Clean up and attempt reconnection after a short delay.
+      es?.close();
+      setTimeout(connect, 3000);
+    };
+  };
+  connect();
+  // Return the EventSource so callers can close it when done.
+  return es as EventSource;
+}
+
+/** Retrieve the final results of a completed analysis session. */
+export async function getAnalysisResults(sessionId: string): Promise<DetourAnalysisResults> {
+  const url = `${API_BASE}/api/v1/detour/sessions/${encodeURIComponent(sessionId)}/results`;
+  return fetchJson<DetourAnalysisResults>(url);
+}
+
+/** Approve a proposed maneuver plan. */
+export async function approveManeuver(planId: string, notes?: string): Promise<ManeuverPlan> {
+  const url = `${API_BASE}/api/v1/detour/maneuvers/${encodeURIComponent(planId)}/approve`;
+  const body = notes ? { notes } : {};
+  return fetchJson<ManeuverPlan>(url, { method: 'POST', body: JSON.stringify(body) });
+}
+
+/** Reject a proposed maneuver plan, providing a reason. */
+export async function rejectManeuver(planId: string, reason: string): Promise<ManeuverPlan> {
+  const url = `${API_BASE}/api/v1/detour/maneuvers/${encodeURIComponent(planId)}/reject`;
+  return fetchJson<ManeuverPlan>(url, { method: 'POST', body: JSON.stringify({ reason }) });
+}
+
+/** Execute an approved maneuver plan. */
+export async function executeManeuver(planId: string): Promise<Record<string, unknown>> {
+  const url = `${API_BASE}/api/v1/detour/maneuvers/${encodeURIComponent(planId)}/execute`;
+  return fetchJson<Record<string, unknown>>(url, { method: 'POST' });
+}
+
+/** Get the Detour‑specific state for a satellite. */
+export async function getSatelliteState(satelliteId: string): Promise<SatelliteState> {
+  const url = `${API_BASE}/api/v1/detour/satellites/${encodeURIComponent(satelliteId)}/state`;
+  return fetchJson<SatelliteState>(url);
+}
+
+/** Run a manual conjunction screening operation for a satellite.
+ *  timeWindowHours and thresholdKm default to the values defined in the
+ *  backend schema (72 h and 5 km respectively).
+ */
+export async function runScreening(
+  satelliteId: string,
+  timeWindowHours: number = 72,
+  thresholdKm: number = 5.0
+): Promise<ScreeningResult> {
+  const url = `${API_BASE}/api/v1/detour/screening/run`;
+  const payload = {
+    satellite_id: satelliteId,
+    time_window_hours: timeWindowHours,
+    threshold_km: thresholdKm,
+  };
+  return fetchJson<ScreeningResult>(url, { method: 'POST', body: JSON.stringify(payload) });
+}
+
+// Export a reusable instance if callers prefer a class‑style API.
+export const detourApi = {
+  analyzeConjunction,
+  getAnalysisStatus,
+  subscribeToAnalysisStream,
+  getAnalysisResults,
+  approveManeuver,
+  rejectManeuver,
+  executeManeuver,
+  getSatelliteState,
+  runScreening,
+};
