@@ -178,7 +178,7 @@
   - POST /detour/screening/run - screening manuale
   - RBAC: viewer/operator/admin, SSE: text/event-stream, Error RFC 7807
 
-- [ ] Task 4.4: Integration Router (backend/app/api/v1/router.py)
+- [x] Task 4.4: Integration Router (backend/app/api/v1/router.py)
   - Aggiungere: from app.api.v1 import detour
   - Aggiungere: router.include_router(detour.router, prefix="/detour", tags=["detour"])
   - Verificare che tutti i router siano inclusi

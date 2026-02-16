@@ -9,6 +9,7 @@ from app.api.v1 import (
     analytics,
     ai,
     audit,
+    detour,
     search,
     operations,
     proximity,
@@ -69,6 +70,12 @@ api_router.include_router(
     proximity.router,
     prefix="/proximity",
     tags=["Proximity Detection"],
+)
+
+api_router.include_router(
+    detour.router,
+    prefix="/detour",
+    tags=["detour"],
 )
 
 api_router.include_router(
