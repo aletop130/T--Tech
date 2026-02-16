@@ -326,7 +326,7 @@
 - [x] Dipendenze installate
 - [x] Database migrato
 - [x] Unit tests passano (>90% coverage physics)
-- [ ] Integration tests passano
+- [x] Integration tests passano
 - [ ] E2E tests passano
 - [ ] Performance tests soddisfano requisiti
 - [ ] Security tests passano
