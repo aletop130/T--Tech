@@ -497,36 +497,27 @@
         "Error: page.goto: net::ERR_CONNECTION_REFUSED at http://127.0.0.1:3000/map",
         "Error: page.goto: net::ERR_ABORTED; maybe frame was detached?"
       ]
+    },
+    {
+      "iteration": 26,
+      "startedAt": "2026-02-16T16:56:47.463Z",
+      "endedAt": "2026-02-16T16:57:32.492Z",
+      "durationMs": 43774,
+      "agent": "opencode",
+      "model": "regolo-ai/gpt-oss-120b",
+      "toolsUsed": {},
+      "filesModified": [
+        ".ralph/ralph-tasks.md",
+        "backend/scripts/seed_debris.py"
+      ],
+      "exitCode": 0,
+      "completionDetected": false,
+      "errors": []
     }
   ],
-  "totalDurationMs": 2321483,
+  "totalDurationMs": 2365257,
   "struggleIndicators": {
-    "repeatedErrors": {
-      "FAIL  src/app/(main)/map/__tests__/page.test.tsx [ src/app/(main)/map/__tests__/page.test.tsx ]": 2,
-      "Error: Failed to resolve import \"@testing-library/react\" from \"src/app/(main)/map/__tests__/page.tes": 1,
-      "Test Files  1 failed | 4 passed (5)": 1,
-      "Error: Cannot find module '@testing-library/dom'": 1,
-      "Error: [vitest] There was an error when mocking a module. If you are using \"vi.mock\" factory, make s": 2,
-      "Caused by: ReferenceError: Cannot access 'mockComponent' before initialization": 2,
-      "\u001b[91m\u001b[1mError: \u001b[0m\"regolo.ServiceUnavailableError: regolo.MidStreamFallbackError: regolo.APIConnec": 2,
-      "Caused by: ReferenceError: mockComponent is not defined": 1,
-      "Test Files  1 failed | 6 passed (7)": 1,
-      "❯ src/app/(main)/map/__tests__/page.test.tsx (4 tests | 4 failed) 14ms": 1,
-      "⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯": 1,
-      "FAIL  src/app/(main)/map/__tests__/page.test.tsx > Map page integration – debris features > loads de": 1,
-      "Error: Cannot find module '@/lib/api/debris'": 1,
-      "FAIL  src/app/(main)/map/__tests__/page.test.tsx > Map page integration – debris features > refreshe": 1,
-      "Error: Cannot find module '@playwright/test'": 1,
-      "Error: Playwright Test did not expect test.describe() to be called here.": 1,
-      "Error: No tests found": 1,
-      "Error: Playwright Test did not expect test.beforeEach() to be called here.": 1,
-      "Error: Playwright Test did not expect test() to be called here.": 1,
-      "Error: No tests found.": 1,
-      "\u001b[2m[WebServer] \u001b[22m\u001b[31m\u001b[1m⨯\u001b[22m\u001b[39m ERROR: This build is using Turbopack, with a `webpack` con": 1,
-      "Error: browserType.launch: Executable doesn't exist at /root/.cache/ms-playwright/chromium_headless_": 1,
-      "Error: page.goto: net::ERR_CONNECTION_REFUSED at http://127.0.0.1:3000/map": 1,
-      "Error: page.goto: net::ERR_ABORTED; maybe frame was detached?": 1
-    },
+    "repeatedErrors": {},
     "noProgressIterations": 0,
     "shortIterations": 0
   }

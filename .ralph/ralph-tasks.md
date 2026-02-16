@@ -346,7 +346,7 @@ Implement debris visualization on the 3D Cesium map inspired by the TreeHacks 20
 
 ## FASE 6: Data Seeding
 
-- [ ] Task 6.1: Create Debris Seed Script (`backend/scripts/seed_debris.py`)
+- [x] Task 6.1: Create Debris Seed Script (`backend/scripts/seed_debris.py`)
   - Fetch real debris from CelesTrack:
     - LEO debris: "COSMOS 2251 Debris", "Fengyun-1C Debris"
     - Rocket bodies: "R/B" suffix
