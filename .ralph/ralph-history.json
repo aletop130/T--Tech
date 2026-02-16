@@ -361,12 +361,35 @@
       "exitCode": 0,
       "completionDetected": false,
       "errors": []
+    },
+    {
+      "iteration": 17,
+      "startedAt": "2026-02-16T13:34:47.496Z",
+      "endedAt": "2026-02-16T13:39:29.110Z",
+      "durationMs": 280376,
+      "agent": "opencode",
+      "model": "regolo-ai/gpt-oss-120b",
+      "toolsUsed": {},
+      "filesModified": [
+        ".ralph/ralph-tasks.md",
+        "backend/app/agents/detour/tools.py",
+        "backend/tests/performance/test_detour_performance.py"
+      ],
+      "exitCode": 0,
+      "completionDetected": false,
+      "errors": [
+        "E       AssertionError: Screening took too long: 185.99s",
+        "FAILED backend/tests/performance/test_detour_performance.py::test_screening_performance"
+      ]
     }
   ],
-  "totalDurationMs": 2850420,
+  "totalDurationMs": 3130796,
   "struggleIndicators": {
-    "repeatedErrors": {},
+    "repeatedErrors": {
+      "E       AssertionError: Screening took too long: 185.99s": 1,
+      "FAILED backend/tests/performance/test_detour_performance.py::test_screening_performance": 1
+    },
     "noProgressIterations": 0,
-    "shortIterations": 1
+    "shortIterations": 0
   }
 }
