@@ -56,7 +56,7 @@ export default function DashboardPage() {
         satelliteCount: satellites.total,
       });
     } catch (error) {
-      console.error('Failed to load dashboard:', error);
+      console.warn('Failed to load dashboard:', error);
     } finally {
       setLoading(false);
     }

@@ -130,7 +130,7 @@ export function AgentChat({ onSendMessage, initialMessages = [], useStreaming = 
           },
           
           onError: (error: string, details?: string) => {
-            console.error('SSE Error:', error, details);
+            console.warn('SSE Error:', error, details);
             setMessages((msgs) =>
               msgs.map((msg) =>
                 msg.id === assistantMessageId
@@ -196,7 +196,7 @@ export function AgentChat({ onSendMessage, initialMessages = [], useStreaming = 
         setIsLoading(false);
       }
     } catch (error) {
-      console.error('Chat error:', error);
+      console.warn('Chat error:', error);
       const errorMessage: ChatDisplayMessage = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',

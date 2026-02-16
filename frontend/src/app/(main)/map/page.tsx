@@ -368,7 +368,7 @@ updatedOrbits.forEach((orbit) => {
         }
       });
     } catch (error) {
-      console.error('Failed to load map data:', error);
+      console.warn('Failed to load map data:', error);
     } finally {
       setLoading(false);
     }
@@ -383,7 +383,7 @@ const loadDebris = async () => {
       try {
         const response = await getDebris(DISPLAY_OBJECT_LIMIT, DEBRIS_ORBIT_CLASSES);
         if (!response || !Array.isArray(response.objects)) {
-          console.error('Failed to load debris: invalid response', response);
+          console.warn('Failed to load debris: invalid response', response);
           setDebris([]);
           setDebrisPositions([]);
           return;
@@ -402,7 +402,7 @@ const loadDebris = async () => {
         setDebris(response.objects);
         setDebrisPositions(positions);
       } catch (err) {
-        console.error('Failed to load debris:', err);
+        console.warn('Failed to load debris:', err);
       }
     };
 
@@ -449,7 +449,7 @@ const loadDebris = async () => {
           setOrbitTrack(null);
         }
       } catch (e) {
-        if (!cancelled) console.error('Failed to load orbit track', e);
+        if (!cancelled) console.warn('Failed to load orbit track', e);
       }
     };
 
@@ -538,7 +538,7 @@ const fetchFamousSatellites = async () => {
         }
       }
     } catch (e) {
-      console.error('Error propagating TLE:', e);
+      console.warn('Error propagating TLE:', e);
     }
 
     return {

@@ -39,7 +39,7 @@ export default function TimelinePage() {
       
       setEvents(loadedEvents);
     } catch (error) {
-      console.error('Failed to load timeline events:', error);
+      console.warn('Failed to load timeline events:', error);
     } finally {
       setLoading(false);
     }

@@ -111,7 +111,7 @@ function ExplorerContent() {
       setItems(result);
       setTotal(totalCount);
     } catch (error) {
-      console.error('Failed to load objects:', error);
+      console.warn('Failed to load objects:', error);
     } finally {
       setLoading(false);
     }
@@ -141,7 +141,7 @@ function ExplorerContent() {
             setSelectedSatelliteOrbit(null);
           }
       } catch (error) {
-        console.error('Failed to load satellite details:', error);
+        console.warn('Failed to load satellite details:', error);
       } finally {
         setLoadingSelected(false);
       }

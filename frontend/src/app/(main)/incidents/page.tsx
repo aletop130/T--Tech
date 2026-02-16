@@ -63,7 +63,7 @@ export default function IncidentsPage() {
       });
       setIncidents(data.items);
     } catch (error) {
-      console.error('Failed to load incidents:', error);
+      console.warn('Failed to load incidents:', error);
     } finally {
       setLoading(false);
     }

@@ -827,21 +827,62 @@
         "FAIL  src/app/(main)/map/__tests__/page.test.tsx > Map page integration – debris features > refreshes debris every 15 seconds",
         "FAIL  src/app/(main)/map/__tests__/page.test.tsx > Map page integration – debris features > toggles debris visibility using the checkbox"
       ]
+    },
+    {
+      "iteration": 42,
+      "startedAt": "2026-02-16T17:15:43.757Z",
+      "endedAt": "2026-02-16T17:17:18.050Z",
+      "durationMs": 93043,
+      "agent": "opencode",
+      "model": "regolo-ai/gpt-oss-120b",
+      "toolsUsed": {},
+      "filesModified": [
+        ".ralph/ralph-tasks.md",
+        "frontend/src/app/(main)/admin/page.tsx",
+        "frontend/src/app/(main)/dashboard/page.tsx",
+        "frontend/src/app/(main)/detour/page.tsx",
+        "frontend/src/app/(main)/explorer/page.tsx",
+        "frontend/src/app/(main)/graph/page.tsx",
+        "frontend/src/app/(main)/incidents/page.tsx",
+        "frontend/src/app/(main)/map/page.tsx",
+        "frontend/src/app/(main)/timeline/page.tsx",
+        "frontend/src/app/page.tsx",
+        "frontend/src/components/CesiumMap/CesiumViewer.tsx",
+        "frontend/src/components/Chat/AgentChat.tsx",
+        "frontend/src/components/Layout/TopBar.tsx",
+        "frontend/src/components/Operations/OperationsDashboard.tsx",
+        "frontend/src/components/Simulation/AINarrative.tsx"
+      ],
+      "exitCode": 0,
+      "completionDetected": false,
+      "errors": [
+        "❯ src/app/(main)/map/__tests__/page.test.tsx (4 tests | 4 failed) 20043ms",
+        "FAIL  tests/e2e/debris.e2e.spec.ts [ tests/e2e/debris.e2e.spec.ts ]",
+        "Error: Playwright Test did not expect test.beforeEach() to be called here.",
+        "FAIL  tests/e2e/simple.test.ts [ tests/e2e/simple.test.ts ]",
+        "Error: Playwright Test did not expect test() to be called here.",
+        "⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯",
+        "FAIL  src/app/(main)/map/__tests__/page.test.tsx > Map page integration – debris features > loads debris on mount and displays count",
+        "Error: Test timed out in 5000ms.",
+        "FAIL  src/app/(main)/map/__tests__/page.test.tsx > Map page integration – debris features > refreshes debris every 15 seconds",
+        "FAIL  src/app/(main)/map/__tests__/page.test.tsx > Map page integration – debris features > toggles debris visibility using the checkbox"
+      ]
     }
   ],
-  "totalDurationMs": 3401805,
+  "totalDurationMs": 3494848,
   "struggleIndicators": {
     "repeatedErrors": {
       "❯ src/app/(main)/map/__tests__/page.test.tsx (4 tests | 4 failed) 20042ms": 1,
-      "FAIL  tests/e2e/debris.e2e.spec.ts [ tests/e2e/debris.e2e.spec.ts ]": 1,
-      "Error: Playwright Test did not expect test.beforeEach() to be called here.": 1,
-      "FAIL  tests/e2e/simple.test.ts [ tests/e2e/simple.test.ts ]": 1,
-      "Error: Playwright Test did not expect test() to be called here.": 1,
-      "⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯": 1,
-      "FAIL  src/app/(main)/map/__tests__/page.test.tsx > Map page integration – debris features > loads de": 1,
-      "Error: Test timed out in 5000ms.": 1,
-      "FAIL  src/app/(main)/map/__tests__/page.test.tsx > Map page integration – debris features > refreshe": 1,
-      "FAIL  src/app/(main)/map/__tests__/page.test.tsx > Map page integration – debris features > toggles ": 1
+      "FAIL  tests/e2e/debris.e2e.spec.ts [ tests/e2e/debris.e2e.spec.ts ]": 2,
+      "Error: Playwright Test did not expect test.beforeEach() to be called here.": 2,
+      "FAIL  tests/e2e/simple.test.ts [ tests/e2e/simple.test.ts ]": 2,
+      "Error: Playwright Test did not expect test() to be called here.": 2,
+      "⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯": 2,
+      "FAIL  src/app/(main)/map/__tests__/page.test.tsx > Map page integration – debris features > loads de": 2,
+      "Error: Test timed out in 5000ms.": 2,
+      "FAIL  src/app/(main)/map/__tests__/page.test.tsx > Map page integration – debris features > refreshe": 2,
+      "FAIL  src/app/(main)/map/__tests__/page.test.tsx > Map page integration – debris features > toggles ": 2,
+      "❯ src/app/(main)/map/__tests__/page.test.tsx (4 tests | 4 failed) 20043ms": 1
     },
     "noProgressIterations": 0,
     "shortIterations": 0

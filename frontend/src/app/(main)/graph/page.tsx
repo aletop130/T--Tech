@@ -257,7 +257,7 @@ export default function GraphPage() {
           maneuverAlerts: maneuverAlerts.length,
         });
       } catch (error) {
-        console.error('Failed to load graph data:', error);
+        console.warn('Failed to load graph data:', error);
       } finally {
         setLoading(false);
       }

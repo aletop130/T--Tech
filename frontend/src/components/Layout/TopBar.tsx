@@ -30,7 +30,7 @@ export function TopBar() {
       const results = await api.search(query);
       setSearchResults(results);
     } catch (error) {
-      console.error('Search error:', error);
+      console.warn('Search error:', error);
     } finally {
       setIsSearching(false);
     }

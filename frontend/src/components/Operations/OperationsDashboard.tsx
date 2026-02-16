@@ -57,7 +57,7 @@ export default function OperationsDashboard() {
         setCollisions([]);
       }
     } catch (error) {
-      console.error('Failed to load operations data:', error);
+      console.warn('Failed to load operations data:', error);
       const errMsg = error instanceof Error ? error.message : String(error);
       setError(errMsg);
     } finally {
@@ -75,7 +75,7 @@ export default function OperationsDashboard() {
       await loadData();
       setDispatchDialogOpen(false);
     } catch (error) {
-      console.error('Failed to dispatch operation:', error);
+      console.warn('Failed to dispatch operation:', error);
     }
   };
 
@@ -97,7 +97,7 @@ export default function OperationsDashboard() {
         });
       });
     } catch (error) {
-      console.error('Failed to detect collisions:', error);
+      console.warn('Failed to detect collisions:', error);
     }
   };
 
@@ -473,7 +473,7 @@ function CollisionsTab({
       });
       console.log('Avoidance maneuver created:', result);
     } catch (error) {
-      console.error('Failed to create avoidance maneuver:', error);
+      console.warn('Failed to create avoidance maneuver:', error);
     }
   };
 
@@ -549,7 +549,7 @@ function CreateOperationForm({ onSuccess }: { onSuccess: () => void }) {
       });
       onSuccess();
     } catch (error) {
-      console.error('Failed to create operation:', error);
+      console.warn('Failed to create operation:', error);
     } finally {
       setSubmitting(false);
     }

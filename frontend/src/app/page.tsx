@@ -11,7 +11,7 @@ export default function Home() {
       try {
         router.push('/map');
       } catch (e) {
-        console.error('Router navigation failed:', e);
+        console.warn('Router navigation failed:', e);
         window.location.href = '/map';
       }
     }, 100);

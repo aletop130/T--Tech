@@ -18,7 +18,7 @@ export default function AdminPage() {
       const data = await api.getAdminStats();
       setStats(data);
     } catch (error) {
-      console.error('Failed to load stats:', error);
+      console.warn('Failed to load stats:', error);
     }
   };
 

@@ -181,7 +181,7 @@ export function AINarrative({
         }]);
       }
     } catch (error) {
-      console.error('AI streaming error:', error);
+      console.warn('AI streaming error:', error);
       setCurrentMessage(prev => prev ? {
         ...prev,
         content: prev.content + ' [AI unavailable]'

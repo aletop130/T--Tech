@@ -77,7 +77,7 @@ const ViewerConfig = memo(function ViewerConfig({
         viewer.imageryLayers.addImageryProvider(satelliteProvider);
 
       } catch (error) {
-        console.error('Error configuring imagery:', error);
+        console.warn('Error configuring imagery:', error);
       }
 
       viewer.camera.setView({
