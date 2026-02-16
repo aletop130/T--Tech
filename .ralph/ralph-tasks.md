@@ -117,7 +117,7 @@
   - @tool execute_maneuver_tool(maneuver_plan_id)
   - Formattare output JSON per LLM, gestire errori gracefully
 
-- [ ] Task 3.5: Implementazione Nodi Grafo (backend/app/agents/detour/nodes.py)
+- [x] Task 3.5: Implementazione Nodi Grafo (backend/app/agents/detour/nodes.py)
   - Funzione scout_node(state, config): screening iniziale
   - Funzione analyst_node(state, config): risk analysis
   - Funzione planner_node(state, config): maneuver planning
