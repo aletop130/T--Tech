@@ -16,7 +16,7 @@
   - Eseguire: `pip install -r requirements.txt`
   - Verificare compatibilità Python 3.11+
 
-- [ ] Task 1.2: Creazione Struttura Directory
+- [x] Task 1.2: Creazione Struttura Directory
   - Creare: backend/app/physics/__init__.py
   - Creare: backend/app/agents/detour/__init__.py
   - Creare: backend/app/services/detour/__init__.py
