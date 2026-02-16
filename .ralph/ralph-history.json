@@ -242,9 +242,38 @@
         "TypeError: Cannot read properties of undefined (reading 'bind')",
         "❯ src/components/CesiumMap/__tests__/DebrisInstancedLayer.test.tsx (3 tests | 3 failed) 19ms"
       ]
+    },
+    {
+      "iteration": 14,
+      "startedAt": "2026-02-16T16:32:28.599Z",
+      "endedAt": "2026-02-16T16:34:51.544Z",
+      "durationMs": 141694,
+      "agent": "opencode",
+      "model": "regolo-ai/gpt-oss-120b",
+      "toolsUsed": {},
+      "filesModified": [
+        ".ralph/ralph-tasks.md",
+        "frontend/package-lock.json",
+        "frontend/package.json",
+        "frontend/src/components/CesiumMap/__tests__/DebrisInstancedLayer.test.tsx"
+      ],
+      "exitCode": 0,
+      "completionDetected": false,
+      "errors": [
+        "❯ src/components/CesiumMap/__tests__/DebrisInstancedLayer.test.tsx (3 tests | 3 failed) 19ms",
+        "⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯",
+        "FAIL  src/components/CesiumMap/__tests__/DebrisInstancedLayer.test.tsx > DebrisInstancedLayer component > creates a Cesium primitive and adds it to the viewer",
+        "TypeError: targetContainer.addEventListener is not a function",
+        "FAIL  src/components/CesiumMap/__tests__/DebrisInstancedLayer.test.tsx > DebrisInstancedLayer component > limits debris count to maxDisplayObjects",
+        "FAIL  src/components/CesiumMap/__tests__/DebrisInstancedLayer.test.tsx > DebrisInstancedLayer component > removes the primitive when the component unmounts",
+        "Test Files  1 failed | 3 passed (4)",
+        "Tests  3 failed | 13 passed (16)",
+        "❯ src/components/CesiumMap/__tests__/DebrisInstancedLayer.test.tsx (3 tests | 3 failed) 25ms",
+        "TypeError: Cannot read properties of undefined (reading 'toLowerCase')"
+      ]
     }
   ],
-  "totalDurationMs": 904519,
+  "totalDurationMs": 1046213,
   "struggleIndicators": {
     "repeatedErrors": {
       "Error: Cannot find package 'jsdom' imported from /root/T--Tech/frontend/node_modules/vitest/dist/chu": 1,
@@ -254,9 +283,15 @@
       "Error: Cannot find package 'happy-dom' imported from /root/T--Tech/frontend/node_modules/vitest/dist": 1,
       "FAIL  src/components/CesiumMap/__tests__/DebrisInstancedLayer.test.tsx [ src/components/CesiumMap/__": 1,
       "TypeError: Cannot read properties of undefined (reading 'indexOf')": 1,
-      "Test Files  1 failed | 3 passed (4)": 1,
+      "Test Files  1 failed | 3 passed (4)": 2,
       "TypeError: Cannot read properties of undefined (reading 'bind')": 1,
-      "❯ src/components/CesiumMap/__tests__/DebrisInstancedLayer.test.tsx (3 tests | 3 failed) 19ms": 1
+      "❯ src/components/CesiumMap/__tests__/DebrisInstancedLayer.test.tsx (3 tests | 3 failed) 19ms": 2,
+      "⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯": 1,
+      "FAIL  src/components/CesiumMap/__tests__/DebrisInstancedLayer.test.tsx > DebrisInstancedLayer compon": 3,
+      "TypeError: targetContainer.addEventListener is not a function": 1,
+      "Tests  3 failed | 13 passed (16)": 1,
+      "❯ src/components/CesiumMap/__tests__/DebrisInstancedLayer.test.tsx (3 tests | 3 failed) 25ms": 1,
+      "TypeError: Cannot read properties of undefined (reading 'toLowerCase')": 1
     },
     "noProgressIterations": 0,
     "shortIterations": 0

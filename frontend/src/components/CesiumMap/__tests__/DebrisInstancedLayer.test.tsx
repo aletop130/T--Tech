@@ -5,6 +5,12 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { act } from 'react-dom/test-utils';
 import { createRoot } from 'react-dom/client';
 
+// Ensure navigator is defined for React 19
+if (typeof navigator === 'undefined') {
+  // @ts-ignore
+  (global as any).navigator = { userAgent: 'node.js' };
+}
+
 // Mock the Cesium loader to provide a lightweight Cesium module
 vi.mock('@/lib/cesium/loader', () => {
   const mockCesium: any = {
@@ -26,7 +32,6 @@ vi.mock('@/lib/cesium/loader', () => {
     GeometryInstance: vi.fn(),
     PerInstanceColorAppearance: vi.fn(),
     Primitive: vi.fn(function (args: any) {
-      // Store args so tests can inspect them later
       (this as any).args = args;
       (this as any).geometryInstances = args.geometryInstances;
       (this as any).appearance = args.appearance;
@@ -67,10 +72,10 @@ describe('DebrisInstancedLayer component', () => {
     const debris = [{ lon: 0, lat: 0, altKm: 400, noradId: 1 }];
 
     await act(async () => {
-      const container = { nodeType: 1, addEventListener: () => {}, removeEventListener: () => {}, ownerDocument: { defaultView: {} } };
-        const root = createRoot(container);
+      const container = document.createElement('div');
+      document.body.appendChild(container);
+      const root = createRoot(container);
       root.render(<DebrisInstancedLayer viewer={viewer as any} debris={debris} />);
-      // Wait for the mocked getCesium promise to resolve
       await Promise.resolve();
     });
 
@@ -90,14 +95,11 @@ describe('DebrisInstancedLayer component', () => {
     }));
 
     await act(async () => {
-      const container = { nodeType: 1, addEventListener: () => {}, removeEventListener: () => {}, ownerDocument: { defaultView: {} } };
-        const root = createRoot(container);
+      const container = document.createElement('div');
+      document.body.appendChild(container);
+      const root = createRoot(container);
       root.render(
-        <DebrisInstancedLayer
-          viewer={viewer as any}
-          debris={debris}
-          maxDisplayObjects={10}
-        />
+        <DebrisInstancedLayer viewer={viewer as any} debris={debris} maxDisplayObjects={10} />
       );
       await Promise.resolve();
     });
@@ -108,9 +110,11 @@ describe('DebrisInstancedLayer component', () => {
   });
 
   it('removes the primitive when the component unmounts', async () => {
-    const container = { nodeType: 1, addEventListener: () => {}, removeEventListener: () => {}, ownerDocument: { defaultView: {} } };
     const { viewer, add, remove } = createMockViewer();
+    const container = document.createElement('div');
+    document.body.appendChild(container);
     let root: any;
+
     await act(async () => {
       root = createRoot(container);
       root.render(<DebrisInstancedLayer viewer={viewer as any} debris={[]} />);

@@ -44,7 +44,9 @@
     "autoprefixer": "^10.4.17",
     "eslint": "^9.0.0",
     "eslint-config-next": "^16.1.6",
+    "jsdom": "^28.1.0",
     "postcss": "^8.4.34",
+    "react-test-renderer": "^19.2.4",
     "tailwindcss": "^3.4.1",
     "typescript": "^5.3.3",
     "vitest": "^3.0.0"
