@@ -14,7 +14,7 @@ WRITE_CONTENT_LENGTH=2000
   - Run `npm ci` inside `./frontend`
   - If installation fails, output `DEPENDENCY_INSTALL_FAILED` and abort the plan.
 
-- [ ] Step 3 – Build loop
+- [x] Step 3 – Build loop
   - Increment a counter `BUILD_ATTEMPT_<n>` before each attempt.
   - Execute `npm run build`.
   - If exit code is `0`:

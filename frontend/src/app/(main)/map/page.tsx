@@ -222,6 +222,48 @@ const DEBRIS_ORBIT_CLASSES = "LEO";
     }
   }, []);
 
+    // Helper functions to fly camera to objects
+  const flyToSatellite = useCallback((sat: Satellite) => {
+    if (!viewer) return;
+    const entityId = `satellite-${sat.id}`;
+    cesiumController.dispatch({ type: 'cesium.flyTo', payload: { entityId } });
+  }, [viewer]);
+
+  const flyToDebris = useCallback((debrisObj: DebrisObject) => {
+    if (!viewer) return;
+    cesiumController.dispatch({
+      type: 'cesium.flyTo',
+      payload: {
+        longitude: debrisObj.lon,
+        latitude: debrisObj.lat,
+        altitude: (debrisObj.altKm ?? 0) * 1000,
+      },
+    });
+  }, [viewer]);
+
+  const flyToStation = useCallback((station: GroundStation) => {
+    if (!viewer) return;
+    cesiumController.dispatch({
+      type: 'cesium.flyTo',
+      payload: {
+        longitude: station.longitude,
+        latitude: station.latitude,
+        altitude: (station.elevation_m ?? 0) + 10000,
+      },
+    });
+  }, [viewer]);
+
+  // Callback to manage planet (placeholder)
+  const handleManagePlanet = useCallback((planetId: string) => {
+    console.log('Manage planet:', planetId);
+  }, []);
+
+  // Callback to go back to overview (close planet info)
+  const handleBackToOverview = useCallback(() => {
+    setFocusedBody(null);
+    setShowPlanetInfo(false);
+  }, []);
+
   // Handle highlight parameter from explorer
   useEffect(() => {
     const highlightId = searchParams.get('highlight');
