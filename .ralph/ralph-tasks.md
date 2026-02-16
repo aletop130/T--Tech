@@ -69,7 +69,7 @@ Implement debris visualization on the 3D Cesium map inspired by the TreeHacks 20
   - Parameters: `norad`, `minutes` (default 180), `stepSec` (default 60)
   - Use existing physics engine from `app/physics/propagator.py`
 
-- [ ] Task 1.4: Unit Tests - Backend (`backend/tests/api/v1/test_debris.py`)
+- [x] Task 1.4: Unit Tests - Backend (`backend/tests/api/v1/test_debris.py`)
   - Test `GET /api/debris` returns correct format
   - Test orbit propagation accuracy
   - Test LEO/MEO/GEO filtering
