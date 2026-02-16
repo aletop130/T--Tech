@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useRef, useCallback } from 'react';
+import { useEffect, useState, useRef, useCallback, Suspense } from 'react';
 import dynamic from 'next/dynamic';
 import { useSearchParams } from 'next/navigation';
 import { Spinner, Tag, Icon, Button, Checkbox, Intent } from '@blueprintjs/core';
@@ -110,7 +110,7 @@ const mockSatelliteMetadata = (satellites: Satellite[]): Satellite[] => {
   });
 };
 
-export default function MapPage() {
+function MapPageContent() {
   const searchParams = useSearchParams();
   // @ts-ignore
 const [viewer, setViewer] = useState<InstanceType<CesiumModule['Viewer']> | null>(null);
@@ -1362,5 +1362,21 @@ updatedOrbits.forEach((orbit) => {
         </>
       )}
     </div>
+  );
+}
+
+function MapLoading() {
+  return (
+    <div className="h-full flex items-center justify-center">
+      <Spinner />
+    </div>
+  );
+}
+
+export default function MapPage() {
+  return (
+    <Suspense fallback={<MapLoading />}>
+      <MapPageContent />
+    </Suspense>
   );
 }

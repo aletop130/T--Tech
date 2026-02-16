@@ -232,7 +232,7 @@ export default function OperationsDashboard() {
         isOpen={createDialogOpen}
         onClose={() => setCreateDialogOpen(false)}
         title="Create New Operation"
-        className="bp5-dark"
+        className="bp6-dark"
         style={{ width: 600 }}
       >
         <div className={Classes.DIALOG_BODY}>
@@ -244,7 +244,7 @@ export default function OperationsDashboard() {
         isOpen={!!selectedOperation && dispatchDialogOpen}
         onClose={() => setDispatchDialogOpen(false)}
         title="Dispatch Operation"
-        className="bp5-dark"
+        className="bp6-dark"
         style={{ width: 400 }}
       >
         <div className={Classes.DIALOG_BODY}>

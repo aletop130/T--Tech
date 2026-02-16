@@ -160,7 +160,7 @@ export const ProximityAlertPanel: React.FC<ProximityAlertPanelProps> = ({
                   />
                   <span className={styles.satelliteNames}>
                     {alert.primary_satellite_name}
-                    <Icon icon="arrow-right" iconSize={12} />
+                    <Icon icon="arrow-right" size={12} />
                     {alert.secondary_satellite_name}
                   </span>
                 </div>

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, Suspense } from 'react';
 import {
   Card,
   Elevation,
@@ -45,7 +45,7 @@ interface FilterState {
   isActive: boolean;
 }
 
-export default function ExplorerPage() {
+function ExplorerContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   
@@ -208,7 +208,7 @@ export default function ExplorerPage() {
         isOpen={filterDialogOpen}
         onClose={() => setFilterDialogOpen(false)}
         title="Filters"
-        className="bp5-dark"
+        className="bp6-dark"
         style={{ width: 400 }}
       >
         <div className={Classes.DIALOG_BODY}>
@@ -360,6 +360,22 @@ export default function ExplorerPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+function ExplorerLoading() {
+  return (
+    <div className="h-full flex items-center justify-center">
+      <Spinner />
+    </div>
+  );
+}
+
+export default function ExplorerPage() {
+  return (
+    <Suspense fallback={<ExplorerLoading />}>
+      <ExplorerContent />
+    </Suspense>
   );
 }
 

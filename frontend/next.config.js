@@ -1,7 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  turbopack: {},
   transpilePackages: [
    "@blueprintjs/core",
     "@blueprintjs/icons",

@@ -64,39 +64,39 @@ kbd,
 
 /* Monospace fallback for general mono elements */
 .font-mono,
-.bp5-monospace-text,
+.bp6-monospace-text,
 [data-mono="true"] {
   font-family: var(--font-ibm-plex-mono), 'IBM Plex Mono', monospace;
 }
 
 /* Blueprint Dark Theme Overrides */
-.bp5-dark {
+.bp6-dark {
   --pt-app-background-color: var(--sda-bg-primary);
 }
 
-.bp5-dark .bp5-card {
+.bp6-dark .bp6-card {
   background-color: var(--sda-bg-secondary);
   border-color: var(--sda-border-default);
   border-radius: 8px;
 }
 
-.bp5-dark .bp5-input {
+.bp6-dark .bp6-input {
   background-color: var(--sda-bg-tertiary);
   border-color: var(--sda-border-default);
   border-radius: 8px;
 }
 
-.bp5-dark .bp5-button {
+.bp6-dark .bp6-button {
   background-color: var(--sda-bg-tertiary);
   border-radius: 8px;
 }
 
-.bp5-dark .bp5-menu {
+.bp6-dark .bp6-menu {
   background-color: var(--sda-bg-secondary);
   border-radius: 8px;
 }
 
-.bp5-dark .bp5-navbar {
+.bp6-dark .bp6-navbar {
   background-color: var(--sda-bg-secondary);
   border-bottom: 1px solid var(--sda-border-default);
 }

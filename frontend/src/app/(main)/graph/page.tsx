@@ -604,7 +604,7 @@ export default function GraphPage() {
         isOpen={!!selectedIncident}
         onClose={() => { setSelectedIncident(null); setSelectedLink(null); }}
         title={selectedIncident?.title || 'Incident Details'}
-        className="bp5-dark"
+        className="bp6-dark"
         style={{ width: 600 }}
       >
         {selectedIncident && (

@@ -80,7 +80,7 @@ export function SpaceWeatherDialog({ isOpen, onClose }: SpaceWeatherDialogProps)
       isOpen={isOpen}
       onClose={onClose}
       title="Space Weather Impact"
-      className="bp5-dark"
+      className="bp6-dark"
       style={{ width: '700px' }}
     >
       <div className={Classes.DIALOG_BODY}>

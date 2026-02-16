@@ -24,7 +24,7 @@ Implement debris visualization on the 3D Cesium map inspired by the TreeHacks 20
 
 ## FASE 1: Backend API (Foundation)
 
-- [x] Task 1.1: Create Debris Service (`backend/app/services/debris.py`)
+- [ ] Task 1.1: Create Debris Service (`backend/app/services/debris.py`)
   - Create `DebrisService` class following keanucz/detour patterns:
     - `list_debris(tenant_id, page, page_size, orbit_classes="LEO")` - list debris objects
     - `get_debris_batch(tenant_id, limit=2500)` - optimized for visualization

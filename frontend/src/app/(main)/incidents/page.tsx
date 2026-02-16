@@ -317,7 +317,7 @@ export default function IncidentsPage() {
         isOpen={aiChatOpen}
         onClose={() => setAiChatOpen(false)}
         title={`AI Assistant - ${aiChatIncident?.title || 'Incidents'}`}
-        className="bp5-dark"
+        className="bp6-dark"
         style={{ width: 700, height: 650 }}
       >
         <div className={Classes.DIALOG_BODY} style={{ height: '100%', padding: 0 }}>
@@ -345,7 +345,7 @@ export default function IncidentsPage() {
         isOpen={!!selectedIncident}
         onClose={() => setSelectedIncident(null)}
         title={selectedIncident?.title || ''}
-        className="bp5-dark"
+        className="bp6-dark"
         style={{ width: 600 }}
       >
         {selectedIncident && (
@@ -429,7 +429,7 @@ export default function IncidentsPage() {
         isOpen={createDialogOpen}
         onClose={() => setCreateDialogOpen(false)}
         title="Create Incident"
-        className="bp5-dark"
+        className="bp6-dark"
         style={{ width: 500 }}
       >
         <div className={Classes.DIALOG_BODY}>
@@ -492,7 +492,7 @@ export default function IncidentsPage() {
         isOpen={assignDialogOpen}
         onClose={() => setAssignDialogOpen(false)}
         title="Assign Incident"
-        className="bp5-dark"
+        className="bp6-dark"
         style={{ width: 400 }}
       >
         <div className={Classes.DIALOG_BODY}>
@@ -518,7 +518,7 @@ export default function IncidentsPage() {
         isOpen={commentDialogOpen}
         onClose={() => setCommentDialogOpen(false)}
         title="Add Comment"
-        className="bp5-dark"
+        className="bp6-dark"
         style={{ width: 500 }}
       >
         <div className={Classes.DIALOG_BODY}>

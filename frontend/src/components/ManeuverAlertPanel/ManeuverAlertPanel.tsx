@@ -167,7 +167,7 @@ export const ManeuverAlertPanel: React.FC<ManeuverAlertPanelProps> = ({
                     />
                     <span className={styles.satellites}>
                       {satellites.primary || 'Unknown'}
-                      <Icon icon="arrow-right" iconSize={12} />
+                      <Icon icon="arrow-right" size={12} />
                       {satellites.secondary || 'Unknown'}
                     </span>
                   </div>

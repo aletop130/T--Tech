@@ -104,7 +104,7 @@ export function ConjunctionAnalysisDialog({
       isOpen={isOpen}
       onClose={onClose}
       title="Run Conjunction Analysis"
-      className="bp5-dark"
+      className="bp6-dark"
       style={{ width: '600px' }}
     >
       <div className={Classes.DIALOG_BODY}>

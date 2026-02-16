@@ -120,7 +120,7 @@ export function UploadTLEDialog({
       isOpen={isOpen}
       onClose={handleClose}
       title="Upload TLE Data"
-      className="bp5-dark"
+      className="bp6-dark"
       style={{ width: '600px' }}
     >
       <div className={Classes.DIALOG_BODY}>
@@ -154,7 +154,7 @@ export function UploadTLEDialog({
                 className="border-2 border-dashed border-sda-border-default rounded p-8 text-center cursor-pointer hover:border-sda-accent-blue transition-colors"
                 onClick={() => fileInputRef.current?.click()}
               >
-                <Icon icon="cloud-upload" iconSize={48} className="text-sda-text-muted mb-2" />
+                <Icon icon="cloud-upload" size={48} className="text-sda-text-muted mb-2" />
                 <p className="text-sda-text-secondary mb-2">
                   Drag and drop a TLE file here, or click to browse
                 </p>

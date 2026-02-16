@@ -49,10 +49,13 @@ class AuditMixin(TenantMixin, TimestampMixin):
 @event.listens_for(Engine, "connect")
 def _set_sqlite_pragma(dbapi_connection, connection_record):
     """Set SQLite PRAGMA foreign_keys=ON."""
-    cursor = dbapi_connection.cursor()
-    cursor.execute("PRAGMA foreign_keys=ON")
-    cursor.close()
-
+    try:
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.close()
+    except Exception:
+        # Not a SQLite connection or pragma not supported
+        pass
 
 def generate_uuid() -> str:
     """Generate a new UUID string."""

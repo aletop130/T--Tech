@@ -88,7 +88,7 @@ export function CreateIncidentDialog({
       isOpen={isOpen}
       onClose={handleClose}
       title="Create Incident"
-      className="bp5-dark"
+      className="bp6-dark"
       style={{ width: '600px' }}
     >
       <div className={Classes.DIALOG_BODY}>
