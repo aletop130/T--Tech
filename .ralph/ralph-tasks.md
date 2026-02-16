@@ -399,7 +399,7 @@ Implement debris visualization on the 3D Cesium map inspired by the TreeHacks 20
 - [x] Orbital trails show 20% of orbit arc
 - [x] Speed control (1x-100x) working
 - [x] Maneuver animation (red flash) working
-- [ ] All tests pass (> 90% coverage)
+- [x] All tests pass (> 90% coverage)
 - [ ] Performance: 60fps with full debris load
 - [ ] No console errors
 - [ ] Visual design matches keanucz/detour aesthetic
