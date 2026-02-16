@@ -322,7 +322,7 @@ Implement debris visualization on the 3D Cesium map inspired by the TreeHacks 20
 
 ## FASE 5: Testing & Validation
 
-- [ ] Task 5.1: Integration Tests (`frontend/src/app/(main)/map/__tests__/page.test.tsx`)
+- [x] Task 5.1: Integration Tests (`frontend/src/app/(main)/map/__tests__/page.test.tsx`)
   - Test debris data loads on mount
   - Test 15-second refresh cycle
   - Test toggle hides/shows debris

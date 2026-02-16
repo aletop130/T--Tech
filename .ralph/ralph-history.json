@@ -393,11 +393,45 @@
       "exitCode": 0,
       "completionDetected": false,
       "errors": []
+    },
+    {
+      "iteration": 22,
+      "startedAt": "2026-02-16T16:41:23.874Z",
+      "endedAt": "2026-02-16T16:42:50.653Z",
+      "durationMs": 85556,
+      "agent": "opencode",
+      "model": "regolo-ai/gpt-oss-120b",
+      "toolsUsed": {},
+      "filesModified": [
+        ".ralph/ralph-tasks.md",
+        "frontend/package-lock.json",
+        "frontend/package.json",
+        "frontend/src/app/(main)/map/__tests__/"
+      ],
+      "exitCode": 0,
+      "completionDetected": false,
+      "errors": [
+        "FAIL  src/app/(main)/map/__tests__/page.test.tsx [ src/app/(main)/map/__tests__/page.test.tsx ]",
+        "Error: Failed to resolve import \"@testing-library/react\" from \"src/app/(main)/map/__tests__/page.test.tsx\". Does the file exist?",
+        "Test Files  1 failed | 4 passed (5)",
+        "Error: Cannot find module '@testing-library/dom'",
+        "Error: [vitest] There was an error when mocking a module. If you are using \"vi.mock\" factory, make sure there are no top level variables inside, since this call is hoisted to top of the file. Read mor",
+        "Caused by: ReferenceError: Cannot access 'mockComponent' before initialization",
+        "\u001b[91m\u001b[1mError: \u001b[0m\"regolo.ServiceUnavailableError: regolo.MidStreamFallbackError: regolo.APIConnectionError: APIConnectionError: OpenAIException - unexpected tokens remaining in message header: Some"
+      ]
     }
   ],
-  "totalDurationMs": 1411879,
+  "totalDurationMs": 1497435,
   "struggleIndicators": {
-    "repeatedErrors": {},
+    "repeatedErrors": {
+      "FAIL  src/app/(main)/map/__tests__/page.test.tsx [ src/app/(main)/map/__tests__/page.test.tsx ]": 1,
+      "Error: Failed to resolve import \"@testing-library/react\" from \"src/app/(main)/map/__tests__/page.tes": 1,
+      "Test Files  1 failed | 4 passed (5)": 1,
+      "Error: Cannot find module '@testing-library/dom'": 1,
+      "Error: [vitest] There was an error when mocking a module. If you are using \"vi.mock\" factory, make s": 1,
+      "Caused by: ReferenceError: Cannot access 'mockComponent' before initialization": 1,
+      "\u001b[91m\u001b[1mError: \u001b[0m\"regolo.ServiceUnavailableError: regolo.MidStreamFallbackError: regolo.APIConnec": 1
+    },
     "noProgressIterations": 0,
     "shortIterations": 0
   }
