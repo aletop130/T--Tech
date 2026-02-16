@@ -184,7 +184,7 @@
   - Verificare che tutti i router siano inclusi
   - Testare endpoint con curl/httpie
 
-- [ ] Task 4.5: Integration Tests
+- [x] Task 4.5: Integration Tests
   - backend/tests/agents/detour/test_graph.py: routing condizionale, loop detection, end-to-end
   - backend/tests/agents/detour/test_tools.py: chiamate tool, validazione output
   - backend/tests/api/v1/test_detour.py: success cases, auth failures, SSE streaming
