@@ -13,12 +13,14 @@ export interface CollisionAnalyzerProps {}
  * Uses Blueprint's ProgressBar as a placeholder visualisation.
  */
 export function CollisionAnalyzer(_: CollisionAnalyzerProps) {
-  const { selectedConjunction, screeningResults, isLoading } = useDetourStore();
+  // Pull needed values from the Detour store using selectors for reliable updates.
+  const { selectedConjunction, screeningResults, isLoading } = useDetourStore.getState();
 
   // Derive a dummy risk value – high risk if any candidate flagged high, else low.
-  const riskLevel = screeningResults?.candidates?.find((c) => c.risk_level === 'high')
-    ? 0.9
-    : 0.2;
+  const hasHighRisk = Boolean(
+    screeningResults?.candidates?.some((c) => (c as any).risk_level?.toLowerCase() === 'high')
+  );
+  const riskLevel = hasHighRisk ? 0.9 : 0.2;
 
   return (
     <Card>
