@@ -269,7 +269,7 @@
   - Test query history < 100ms
   - Usare pytest-benchmark, profilare con cProfile se necessario
 
-- [ ] Task 6.4: Security Tests (backend/tests/security/test_detour_security.py)
+- [x] Task 6.4: Security Tests (backend/tests/security/test_detour_security.py)
   - Test cross-tenant isolation (404 non 403)
   - Test maneuver execution RBAC
   - Test SQL injection sanitization
