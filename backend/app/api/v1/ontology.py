@@ -1,5 +1,5 @@
 """Ontology API endpoints."""
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Annotated, Optional
 
 from fastapi import APIRouter, Depends, Query, Path
@@ -39,6 +39,7 @@ from app.schemas.ontology import (
     DebrisResponse,
     DebrisObject,
     DebrisOrbitInfo,
+    OrbitPropagationResponse,
 )
 
 router = APIRouter()
@@ -178,6 +179,62 @@ async def get_debris_with_orbits(
         ))
     return result
 
+
+@router.get("/orbit", response_model=OrbitPropagationResponse)
+async def get_orbit(
+    user: Annotated[TokenData, Depends(get_current_user)],
+    service: Annotated[OntologyService, Depends(get_ontology_service)],
+    norad: int = Query(..., description="NORAD ID"),
+    minutes: int = Query(180, ge=1, description="Duration in minutes"),
+    stepSec: int = Query(60, gt=0, description="Time step in seconds"),
+):
+    """Propagate orbit for a given NORAD ID."""
+    # Retrieve satellite by NORAD ID
+    sat = await service.get_satellite_by_norad(norad, user.tenant_id)
+    if not sat:
+        raise NotFoundError("Satellite", f"NORAD {norad}")
+
+    # Retrieve latest orbit (TLE) for the satellite
+    latest_orbit = await service.get_latest_orbit(sat.id, user.tenant_id)
+    if not latest_orbit or not latest_orbit.tle_line1 or not latest_orbit.tle_line2:
+        raise NotFoundError("Orbit", f"NORAD {norad}")
+
+    # Prepare propagation using skyfield
+    from skyfield.api import EarthSatellite, load
+
+    ts = load.timescale()
+    start = datetime.utcnow()
+    total_seconds = minutes * 60
+    timestamps: list[datetime] = []
+    offset = 0
+    while offset <= total_seconds:
+        timestamps.append(start + timedelta(seconds=offset))
+        offset += stepSec
+
+    sat_ephem = EarthSatellite(
+        latest_orbit.tle_line1,
+        latest_orbit.tle_line2,
+        name=str(norad),
+        ts=ts,
+    )
+
+    points = []
+    for dt in timestamps:
+        t = ts.utc(dt.year, dt.month, dt.day, dt.hour, dt.minute, dt.second + dt.microsecond / 1_000_000)
+        subpoint = sat_ephem.at(t).subpoint()
+        points.append({
+            "tUtc": dt.isoformat() + "Z",
+            "lat": subpoint.latitude.degrees,
+            "lon": subpoint.longitude.degrees,
+            "altKm": subpoint.elevation.km,
+        })
+
+    return {
+        "noradId": norad,
+        "timeStartUtc": start.isoformat() + "Z",
+        "stepSec": stepSec,
+        "points": points,
+    }
 
 @router.post("/satellites", response_model=SatelliteResponse, status_code=201)
 async def create_satellite(

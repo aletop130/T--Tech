@@ -223,6 +223,20 @@ class DebrisOrbitInfo(BaseSchema):
     tle_line1: Optional[str] = None
     tle_line2: Optional[str] = None
 
+class OrbitPoint(BaseSchema):
+    """Single point in an orbit trajectory."""
+    t_utc: datetime = Field(..., alias="tUtc")
+    lat: float
+    lon: float
+    alt_km: float = Field(..., alias="altKm")
+
+class OrbitPropagationResponse(BaseSchema):
+    """Response model for orbit propagation endpoint."""
+    norad_id: int = Field(..., alias="noradId")
+    time_start_utc: datetime = Field(..., alias="timeStartUtc")
+    step_sec: int = Field(..., alias="stepSec")
+    points: list[OrbitPoint] = Field(default_factory=list)
+
 # ============== Conjunction Event ==============
 
 class ConjunctionEventBase(BaseSchema):
