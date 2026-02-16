@@ -31,7 +31,7 @@ vi.mock('@/lib/cesium/loader', () => {
     },
     GeometryInstance: vi.fn(),
     PerInstanceColorAppearance: vi.fn(),
-    Primitive: vi.fn(function (args: any) {
+    Primitive: vi.fn(function (this: any, args: any) {
       (this as any).args = args;
       (this as any).geometryInstances = args.geometryInstances;
       (this as any).appearance = args.appearance;

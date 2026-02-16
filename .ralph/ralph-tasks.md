@@ -227,7 +227,7 @@ Implement debris visualization on the 3D Cesium map inspired by the TreeHacks 20
 
 ## FASE 4: Map Page Integration (keanucz/detour Style)
 
-- [ ] Task 4.1: Add Debris State (`frontend/src/app/(main)/map/page.tsx`)
+- [x] Task 4.1: Add Debris State (`frontend/src/app/(main)/map/page.tsx`)
   - Add state variables:
     ```typescript
     const [debris, setDebris] = useState<DebrisObject[]>([]);

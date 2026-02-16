@@ -6,6 +6,7 @@ import { useSearchParams } from 'next/navigation';
 import { Spinner, Tag, Icon, Button, Checkbox, Intent } from '@blueprintjs/core';
 import { api, GroundStation, Satellite, ConjunctionEvent, PositionReport } from '@/lib/api';
 import { getCesium, type CesiumModule } from '@/lib/cesium/loader';
+import type { DebrisObject } from '@/lib/types/debris';
 import { CesiumViewer } from '@/components/CesiumMap/CesiumViewer';
 import { SatelliteLayer } from '@/components/CesiumMap/SatelliteLayer';
 import { GroundStationLayer } from '@/components/CesiumMap/GroundStationLayer';
@@ -27,6 +28,12 @@ import { MilitarySymbolLayer } from '@/components/CesiumMap/MilitarySymbolLayer'
 import { MissionNarrative } from '@/components/Simulation/MissionNarrative';
 import { MissionHUD } from '@/components/Simulation/MissionHUD';
 import { useSARSimulation } from '@/lib/simulation/useSARSimulation';
+
+declare global {
+  interface Window {
+    __DETOUR_SPEED__?: number;
+  }
+}
 
 // Dynamically import Cesium to avoid SSR issues
 const DynamicCesiumViewer = dynamic(
@@ -143,6 +150,14 @@ const [viewer, setViewer] = useState<InstanceType<CesiumModule['Viewer']> | null
   const [showPlanetInfo, setShowPlanetInfo] = useState(false);
   const [solarSimulationTime, setSolarSimulationTime] = useState(Date.now());
   const [isSimulationMode, setIsSimulationMode] = useState(false);
+
+  // Debris visualization state
+  const [debris, setDebris] = useState<DebrisObject[]>([]);
+  const [debrisPositions, setDebrisPositions] = useState<InstanceType<CesiumModule['Cartesian3']>[]>([]);
+  const [showDebris, setShowDebris] = useState(true);
+  const [selectedDebris, setSelectedDebris] = useState<DebrisObject | null>(null);
+  const [speed, setSpeed] = useState(1);
+  const speedRef = useRef(1);
   
   // SAR Simulation hook
   const {
