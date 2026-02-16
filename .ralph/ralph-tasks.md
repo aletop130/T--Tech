@@ -126,7 +126,7 @@
   - Ogni nodo: loggare evento inizio/fine, aggiornare state, emit eventi per SSE, gestire errori
   - Timeout 30s per nodo
 
-- [ ] Task 3.6: Costruzione Grafo LangGraph (backend/app/agents/detour/graph.py)
+- [x] Task 3.6: Costruzione Grafo LangGraph (backend/app/agents/detour/graph.py)
   - Funzione build_detour_graph() -> StateGraph
   - Nodi: scout, analyst, planner, safety, ops_brief
   - Archi condizionali basati su risk level, max 3 iterazioni planner-safety
