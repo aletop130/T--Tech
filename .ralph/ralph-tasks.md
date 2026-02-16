@@ -288,7 +288,7 @@
   - Aggiungere guida integrazione
   - Swagger UI automatico da FastAPI
 
-- [ ] Task 7.2: Configurazione Environment (.env.example)
+- [x] Task 7.2: Configurazione Environment (.env.example)
   - Aggiungere DETOUR_ENABLED=true
   - Aggiungere DETOUR_SCREENING_THRESHOLD_KM=5.0
   - Aggiungere DETOUR_SCREENING_WINDOW_HOURS=72
