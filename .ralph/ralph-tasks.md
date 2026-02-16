@@ -164,7 +164,7 @@ Implement debris visualization on the 3D Cesium map inspired by the TreeHacks 20
     - Update in requestAnimationFrame loop
   - Cleanup on unmount (remove primitives)
 
-- [ ] Task 3.2: Create Orbital Track Renderer (`frontend/src/components/CesiumMap/OrbitalTrackLayer.tsx`)
+- [x] Task 3.2: Create Orbital Track Renderer (`frontend/src/components/CesiumMap/OrbitalTrackLayer.tsx`)
   - Props:
     ```typescript
     interface OrbitalTrackLayerProps {
