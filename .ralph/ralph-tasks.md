@@ -81,7 +81,7 @@
 
 ## FASE 3: Agent Framework (LangGraph)
 
-- [ ] Task 3.1: State Manager Persistente (backend/app/services/detour/state_manager.py)
+- [x] Task 3.1: State Manager Persistente (backend/app/services/detour/state_manager.py)
   - Classe DetourStateManager
   - Metodo async get_satellite_state(satellite_id, tenant_id)
   - Metodo async update_satellite_state(satellite_id, tenant_id, updates)
