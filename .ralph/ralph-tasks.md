@@ -156,7 +156,7 @@
   - Metodo async execute_maneuver_plan(plan_id, user_id) -> dict
   - Integrare con AuditService, validare RBAC
 
-- [ ] Task 4.2: Schemas Pydantic (backend/app/schemas/detour.py)
+- [x] Task 4.2: Schemas Pydantic (backend/app/schemas/detour.py)
   - Schema SatelliteStateSchema
   - Schema ConjunctionAnalysisRequest/Response
   - Schema ManeuverPlanSchema
