@@ -217,7 +217,7 @@ Implement debris visualization on the 3D Cesium map inspired by the TreeHacks 20
   - Close button
   - Style consistently with existing info cards
 
-- [ ] Task 3.5: Unit Tests - Debris Components (`frontend/src/components/CesiumMap/__tests__/DebrisInstancedLayer.test.tsx`)
+- [/] Task 3.5: Unit Tests - Debris Components (`frontend/src/components/CesiumMap/__tests__/DebrisInstancedLayer.test.tsx`)
   - Test primitive creation
   - Test debris count limit
   - Test cleanup on unmount
