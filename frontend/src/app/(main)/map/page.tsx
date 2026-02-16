@@ -270,7 +270,8 @@ const DEBRIS_ORBIT_CLASSES = "LEO";
                 lon: radToDeg(latLonAlt.longitude),
                 alt: latLonAlt.height,
                 time: currentTime.toISOString(),
-              };
+}, []);
+
             }
             
             return { ...orbit, positions: newPositions };
@@ -554,7 +555,7 @@ const fetchFamousSatellites = async () => {
     return positions;
   }, []);
 
-  const handleViewerReady = async (cesiumViewer: InstanceType<CesiumModule['Viewer']>) => {
+  const handleViewerReady = useCallback(async (cesiumViewer: InstanceType<CesiumModule['Viewer']>) => {
     setViewer(cesiumViewer);
     await cesiumController.initialize(cesiumViewer);
 
