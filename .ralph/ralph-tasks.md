@@ -276,7 +276,7 @@ Implement debris visualization on the 3D Cesium map inspired by the TreeHacks 20
     - Border: `border-white/10`
   - Update `window.__DETOUR_SPEED__` on change
 
-- [ ] Task 4.4: Add Debris Toggle & Counter (`frontend/src/app/(main)/map/page.tsx`)
+- [x] Task 4.4: Add Debris Toggle & Counter (`frontend/src/app/(main)/map/page.tsx`)
   - Add to control bar:
     - Checkbox: "Debris" toggle
     - Tag counter: `<Tag minimal intent="warning">Debris: {debris.length}</Tag>`

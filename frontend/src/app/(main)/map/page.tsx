@@ -987,6 +987,17 @@ const fetchFamousSatellites = async () => {
                   label="Conj"
                   labelElement={<span className="text-xs text-sda-text-secondary">Conj</span>}
                 />
+                {/* Debris toggle and counter */}
+                <Checkbox
+                  checked={showDebris}
+                  onChange={(e) => setShowDebris(e.currentTarget.checked)}
+                  label="Debris"
+                  labelElement={<span className="text-xs text-sda-text-secondary">Debris</span>}
+                />
+                <span className="flex items-center gap-1 ml-2">
+                  <span className="w-2 h-2 rounded-full" style={{ backgroundColor: '#f59e0b' }}></span>
+                  <Tag minimal intent="warning">Debris: {debris.length}</Tag>
+                </span>
               </div>
             </>
           ) : (
