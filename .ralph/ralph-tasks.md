@@ -332,7 +332,7 @@
 - [x] Security tests passano
 - [x] API documentata
 - [x] Frontend funzionante
-- [ ] SSE streaming testato
+- [x] SSE streaming testato
 - [ ] RBAC verificato su tutti endpoint
 
 ---

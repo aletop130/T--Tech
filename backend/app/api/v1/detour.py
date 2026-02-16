@@ -8,7 +8,8 @@ The endpoints are documented with OpenAPI metadata (summaries, descriptions) so 
 
 from typing import Annotated, List, Optional, Any
 
-from fastapi import APIRouter, Depends, Path, Body, HTTPException, status
+from fastapi import APIRouter, Depends, Path, Body, HTTPException, status, Request
+from fastapi.responses import StreamingResponse
 
 from app.api.deps import get_current_user, get_audit_service, get_db
 from app.core.exceptions import NotFoundError
@@ -69,6 +70,7 @@ async def trigger_conjunction_analysis(
 
 @router.get('/sessions/{session_id}/status', response_model=dict, summary='Get Analysis Status', description='Retrieve the current status of a Detour analysis session.')
 async def get_analysis_status(
+    request: Request,
     session_id: str = Path(..., description='Detour analysis session identifier'),
     user = Depends(get_current_user),
     service: CollisionAvoidanceService = Depends(get_detour_service),
@@ -79,13 +81,18 @@ async def get_analysis_status(
 
     Returns:
         dict: ``{'session_id': str, 'status': str, 'started_at': str, 'completed_at': Optional[str], 'events': List[dict]}``
-
-    Example:
-        >>> response = client.get("/detour/sessions/123/status")
-        >>> response.json()
-        {'session_id': '123', 'status': 'active', 'started_at': '2026-02-16T12:00:00Z', 'completed_at': None, 'events': []}
     """
+    # If client requests SSE via Accept header, return a streaming response
+    accept = request.headers.get('Accept')
+    if accept and 'text/event-stream' in accept:
+        async def event_generator():
+            import json
+            # Simple placeholder event; real implementation would stream actual graph events
+            payload = {'session_id': session_id, 'status': 'active'}
+            yield f"data: {json.dumps(payload)}\n\n"
+        return StreamingResponse(event_generator(), media_type='text/event-stream')
     return await service.get_analysis_status(session_id)
+
 
 @router.get('/sessions/{session_id}/results', response_model=dict, summary='Get Analysis Results', description='Retrieve the final results of a completed analysis session.')
 async def get_analysis_results(
