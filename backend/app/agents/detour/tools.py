@@ -186,9 +186,7 @@ async def assess_risk_tool(
     if db is None:
         raise ValueError("Database session is required for risk assessment tool")
 
-    stmt = select(ConjunctionEvent).where(ConjunctionEvent.id == conjunction_event_id)
-    result = await db.execute(stmt)
-    conj = result.scalar_one_or_none()
+    conj = await db.get(ConjunctionEvent, conjunction_event_id)
     if not conj:
         raise ValueError(f"Conjunction event {conjunction_event_id} not found")
 
@@ -224,9 +222,7 @@ async def propose_maneuvers_tool(
         raise ValueError("Database session is required for maneuver proposal tool")
 
     # Fetch the conjunction event
-    stmt = select(ConjunctionEvent).where(ConjunctionEvent.id == conjunction_event_id)
-    result = await db.execute(stmt)
-    conj = result.scalar_one_or_none()
+    conj = await db.get(ConjunctionEvent, conjunction_event_id)
     if not conj:
         raise ValueError(f"Conjunction event {conjunction_event_id} not found")
 

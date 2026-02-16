@@ -61,12 +61,13 @@ class CollisionAvoidanceService:
         Validates the ConjunctionEvent exists, creates a DetourAgentSession,
         logs the action and returns the session identifier.
         """
-        stmt = select(ConjunctionEvent).where(
-            ConjunctionEvent.id == conjunction_event_id,
-            ConjunctionEvent.tenant_id == tenant_id,
-        )
-        result = await self.db.execute(stmt)
-        conj = result.scalar_one_or_none()
+        conj = await self.db.get(ConjunctionEvent, conjunction_event_id)
+        if not conj or conj.tenant_id != tenant_id:
+            raise NotFoundError(
+                resource_type='ConjunctionEvent',
+                resource_id=conjunction_event_id,
+                detail='Conjunction event not found',
+            )
         if not conj:
             raise NotFoundError(
                 resource_type='ConjunctionEvent',
@@ -83,8 +84,6 @@ class CollisionAvoidanceService:
             started_at=datetime.utcnow(),
         )
         self.db.add(session)
-        await self.db.flush()
-        await self.db.refresh(session)
 
         await self.audit.log(
             action='TRIGGER_ANALYSIS',
@@ -92,8 +91,7 @@ class CollisionAvoidanceService:
             entity_id=session.id,
             tenant_id=tenant_id,
             user_id=None,
-            detail='Started Detour conjunction analysis pipeline',
-            input_data=session.input_data,
+            metadata={'detail': 'Started Detour conjunction analysis pipeline', 'input_data': session.input_data},
         )
         self.logger.info(
             'detour_analysis_triggered',
@@ -179,7 +177,7 @@ class CollisionAvoidanceService:
             entity_id=plan.id,
             tenant_id=plan.tenant_id,
             user_id=user_id,
-            detail='Maneuver plan approved',
+            metadata={'detail': 'Maneuver plan approved'},
         )
         self.logger.info('detour_maneuver_plan_approved', plan_id=plan.id, user_id=user_id)
         return plan
@@ -214,8 +212,7 @@ class CollisionAvoidanceService:
             entity_id=plan.id,
             tenant_id=plan.tenant_id,
             user_id=user_id,
-            detail='Maneuver plan rejected',
-            metadata={'reason': reason},
+            metadata={'detail': 'Maneuver plan rejected', 'reason': reason},
         )
         self.logger.info(
             'detour_maneuver_plan_rejected',
@@ -276,7 +273,7 @@ class CollisionAvoidanceService:
             entity_id=plan.id,
             tenant_id=plan.tenant_id,
             user_id=user_id,
-            detail='Maneuver plan executed',
+            metadata={'detail': 'Maneuver plan executed'},
         )
         self.logger.info('detour_maneuver_executed', plan_id=plan.id, user_id=user_id)
         return {
