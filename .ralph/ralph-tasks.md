@@ -262,7 +262,7 @@
   - Setup: creare satellite test + TLE
   - Verificare: eventi SSE, stati DB, fuel update
 
-- [ ] Task 6.3: Performance Tests (backend/tests/performance/test_detour_performance.py)
+- [x] Task 6.3: Performance Tests (backend/tests/performance/test_detour_performance.py)
   - Test screening 1000 oggetti < 5s
   - Test pipeline latency < 30s (con LLM)
   - Test SSE delivery a 100 client
