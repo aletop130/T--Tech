@@ -262,7 +262,7 @@ Implement debris visualization on the 3D Cesium map inspired by the TreeHacks 20
   - Abort controller for cleanup
   - Pause updates during simulation mode (keanucz pattern)
 
-- [ ] Task 4.3: Add Speed Control UI (`frontend/src/app/(main)/map/page.tsx`)
+- [x] Task 4.3: Add Speed Control UI (`frontend/src/app/(main)/map/page.tsx`)
   - Add speed control overlay (keanucz style):
     ```typescript
     const SPEED_STEPS = [1, 2, 5, 10, 25, 50, 100];

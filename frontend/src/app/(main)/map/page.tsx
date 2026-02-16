@@ -159,6 +159,7 @@ const [viewer, setViewer] = useState<InstanceType<CesiumModule['Viewer']> | null
   const [selectedDebris, setSelectedDebris] = useState<DebrisObject | null>(null);
   const [speed, setSpeed] = useState(1);
   const speedRef = useRef(1);
+  const SPEED_STEPS = [1, 2, 5, 10, 25, 50, 100];
 // Debris data loading configuration
 const DEBRIS_REFRESH_MS = 15_000;
 const DISPLAY_OBJECT_LIMIT = 2500;
@@ -1018,7 +1019,29 @@ const fetchFamousSatellites = async () => {
         )}
       </div>
 
-      {/* Panels Container */}
+      {/* Speed Control Overlay */}
+<div className="absolute bottom-4 left-4 z-20 bg-black/70 backdrop-blur-sm border border-white/10 rounded-md px-3 py-2 flex items-center gap-2">
+  <span className="text-xs text-white font-medium">SPD</span>
+  <input
+    type="range"
+    min={0}
+    max={SPEED_STEPS.length - 1}
+    step={1}
+    value={SPEED_STEPS.indexOf(speed)}
+    onChange={(e) => {
+      const idx = Number(e.target.value);
+      const newSpeed = SPEED_STEPS[idx];
+      setSpeed(newSpeed);
+      speedRef.current = newSpeed;
+      if (typeof window !== 'undefined') {
+        window.__DETOUR_SPEED__ = newSpeed;
+      }
+    }}
+    className="w-24"
+  />
+  <span className={`text-xs font-medium ${speed > 1 ? 'text-yellow-300' : 'text-white'}`}>{speed}x</span>
+</div>
+{/* Panels Container */}
       <div className="absolute inset-0 z-10 pointer-events-none">
         {/* Left Panel - Elements */}
         {!isSimulationMode && (
