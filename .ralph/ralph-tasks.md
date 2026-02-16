@@ -283,7 +283,7 @@ Implement debris visualization on the 3D Cesium map inspired by the TreeHacks 20
     - Orange dot indicator (match debris color #f59e0b)
   - Show/hide DebrisInstancedLayer based on toggle
 
-- [ ] Task 4.5: Add Debris to Left Panel (`frontend/src/app/(main)/map/page.tsx`)
+- [x] Task 4.5: Add Debris to Left Panel (`frontend/src/app/(main)/map/page.tsx`)
   - Add "Space Debris" folder after "Enemy Forces":
     - Icon: `trash` or `scatter-plot` (Blueprint icons)
     - Color: orange/warning intent

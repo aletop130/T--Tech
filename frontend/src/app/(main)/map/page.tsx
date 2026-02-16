@@ -636,12 +636,54 @@ const fetchFamousSatellites = async () => {
         duration: 2,
       });
       // Set loading to false after animation
-      setTimeout(() => setLoadingSatellite(false), 2100);
-    } catch (error) {
-      console.error('Failed to fly to satellite:', error);
-      setLoadingSatellite(false);
-    }
-  };
+       setTimeout(() => setLoadingSatellite(false), 2100);
+     } catch (error) {
+       console.error('Failed to fly to satellite:', error);
+       setLoadingSatellite(false);
+     }
+   };
+
+   // Fly to Debris location
+   const flyToDebris = async (debrisItem: DebrisObject) => {
+     setSelectedDebris(debrisItem);
+     setSelectedSatellite(null);
+     setSelectedStation(null);
+     setSelectedVehicle(null);
+     setSelectedConjunction(null);
+     if (!viewer) {
+       console.warn('Viewer not ready');
+       return;
+     }
+
+     const { lat, lon, altKm } = debrisItem;
+     if (
+       typeof lat !== 'number' ||
+       typeof lon !== 'number' ||
+       typeof altKm !== 'number' ||
+       !Number.isFinite(lat) ||
+       !Number.isFinite(lon) ||
+       !Number.isFinite(altKm) ||
+       lat < -90 ||
+       lat > 90 ||
+       lon < -180 ||
+       lon > 180 ||
+       altKm < 0
+     ) {
+       console.error('Invalid debris position', debrisItem);
+       return;
+     }
+
+     const altitudeMeters = altKm * 1000 + 500; // small offset
+     try {
+       const Cesium = await getCesium();
+       viewer.camera.flyTo({
+         destination: Cesium.Cartesian3.fromDegrees(lon, lat, altitudeMeters),
+         duration: 2,
+       });
+     } catch (error) {
+       console.error('Failed to fly to debris:', error);
+     }
+   };
 
   const handleManagePlanet = useCallback(async (planetId: string) => {
     console.log('[MapPage] Managing planet:', planetId);
@@ -1133,9 +1175,38 @@ const fetchFamousSatellites = async () => {
                         </div>
                       ))}
                     </div>
-                  </div>
+</div>
 
-                  {/* Ground Stations */}
+                   {/* Debris Folder */}
+                   <div>
+                     <div className="flex items-center gap-2 mb-1">
+                       <Icon icon="folder-close" className="text-amber-500" size={14} />
+                       <span className="text-sm font-semibold text-amber-500 flex items-center gap-1">
+                         <span className="w-2 h-2 rounded-full" style={{ backgroundColor: '#f59e0b' }}></span>
+                         Space Debris
+                       </span>
+                       <Tag minimal intent="warning" className="ml-auto">{debris.length}</Tag>
+                     </div>
+                     <div className="space-y-1 ml-4 border-l-2 border-amber-500 pl-2 max-h-40 overflow-auto">
+                       {[...debris]
+                         .sort((a, b) => a.altKm - b.altKm)
+                         .slice(0, 10)
+                         .map((d) => (
+                           <div
+                             key={d.noradId}
+                             className={`p-2 text-sm hover:bg-sda-bg-tertiary rounded cursor-pointer ${selectedDebris?.noradId === d.noradId ? 'bg-sda-bg-tertiary' : ''}`}
+                             onClick={() => flyToDebris(d)}
+                           >
+                             <div className="flex items-center justify-between">
+                               <span className="font-medium">NORAD {d.noradId}</span>
+                               <Tag minimal intent="warning">{d.altKm.toFixed(1)} km</Tag>
+                             </div>
+                           </div>
+                         ))}
+                     </div>
+                   </div>
+
+                   {/* Ground Stations */}
                   <div className="mt-4 pt-4 border-t border-sda-border-default">
                     <h4 className="text-sm font-semibold text-sda-text-secondary mb-2 flex items-center gap-2">
                       <Icon icon="globe" className="text-sda-accent-cyan" />
