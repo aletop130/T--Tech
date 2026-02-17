@@ -25,6 +25,29 @@ python backend/scripts/fetch_celestrak_debris.py --tenant mytenant
 ```
 - **Maintained by**: Dr. T.S. Kelso (TS.Kelso@celestrak.org)
 
+### Debris Import via API
+
+The FastAPI endpoint allows importing debris programmatically.
+
+```bash
+# Using curl (requires an admin JWT)
+curl -X POST http://localhost:8000/api/v1/ontology/debris/fetch-celestrak \
+  -H "Authorization: Bearer <admin-token>" \
+  -H "X-Tenant-ID: default"
+```
+
+The endpoint returns JSON `{ "status": "ok", "imported": <count> }`.
+
+### Running Tests
+
+```bash
+# Run the new tests
+pytest backend/tests/api/v1/test_debris_import_parse.py -v
+pytest backend/tests/api/v1/test_debris_import_endpoint.py -v
+```
+
+These tests verify TLE parsing, HTTP fetching (mocked), and the import endpoint.
+
 ### Satellite Data Used
 
 The application fetches satellite orbital data using NORAD Catalog Numbers from CelesTrak's public API. The data includes:

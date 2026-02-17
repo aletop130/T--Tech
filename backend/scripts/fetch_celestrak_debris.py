@@ -73,7 +73,7 @@ def parse_tle(text: str) -> List[Tuple[int, str, str]]:
             else:
                 break
             try:
-                norad_id = int(line1.split()[1])
+                norad_id = int(''.join(ch for ch in line1.split()[1] if ch.isdigit()))
                 result.append((norad_id, line1, line2))
             except (IndexError, ValueError):
                 # Skip malformed entry

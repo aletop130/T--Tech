@@ -857,16 +857,14 @@ const fetchFamousSatellites = async () => {
       </div>
 
       {/* Simulation Mode Button - Top Left */}
-      <div className="absolute top-4 left-4 z-20">
+      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20">
         <Button
           intent={isSimulationMode ? Intent.DANGER : Intent.SUCCESS}
           onClick={() => {
             if (isSimulationMode) {
-              // Exit simulation
               simReset();
               setIsSimulationMode(false);
             } else {
-              // Enter simulation
               setIsSimulationMode(true);
             }
           }}
@@ -878,7 +876,7 @@ const fetchFamousSatellites = async () => {
       </div>
 
       {/* Unified Control Bar */}
-      <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20 bg-sda-bg-secondary/60 backdrop-blur-sm rounded-lg border border-sda-border-default px-4 py-2 shadow-lg">
+      <div className="absolute top-4 left-4 z-20 bg-sda-bg-secondary/60 backdrop-blur-sm rounded-lg border border-sda-border-default px-4 py-2 shadow-lg">
         {/* Row 1: Title + Counters + View Buttons */}
         <div className="flex items-center gap-4 mb-2">
           <h1 className="text-lg font-bold text-sda-text-primary flex items-center gap-2">
@@ -1404,7 +1402,7 @@ const fetchFamousSatellites = async () => {
 
         {/* Right Panel - Alerts & AI Chat - Hidden during simulation */}
         {!isSimulationMode && (
-        <div className="absolute right-4 top-24 bottom-4 w-96 pointer-events-auto flex flex-col gap-4">
+        <div className="absolute right-4 top-16 bottom-4 w-96 pointer-events-auto flex flex-col gap-4">
           {/* Unified Alerts Panel */}
           {viewMode === 'earth' && (
             <div className="h-80 bg-sda-bg-secondary/60 backdrop-blur-sm rounded-lg border border-sda-border-default shadow-lg overflow-hidden">
