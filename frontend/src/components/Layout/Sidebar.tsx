@@ -22,6 +22,7 @@ const navItems: NavItem[] = [
   { icon: 'globe', label: 'Map', href: '/map', colorVar: '--sda-accent-cyan' },
   { icon: 'warning-sign', label: 'Incidents', href: '/incidents', colorVar: '--sda-accent-red' },
   { icon: 'flows', label: 'Operations', href: '/operations', colorVar: '--sda-accent-blue' },
+  { icon: 'route', label: 'Detour', href: '/detour', colorVar: '#f78166' },
   { icon: 'import', label: 'Ingestion', href: '/ingestion', colorVar: '#8000ca' },
   { icon: 'cog', label: 'Admin', href: '/admin', colorVar: '#8b949e' },
 ];

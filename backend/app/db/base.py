@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import (
 from sqlalchemy.orm import DeclarativeBase
 
 from app.core.config import settings
+import app.db.patches
 
 
 class Base(DeclarativeBase):
@@ -49,6 +50,9 @@ class AuditMixin(TenantMixin, TimestampMixin):
 @event.listens_for(Engine, "connect")
 def _set_sqlite_pragma(dbapi_connection, connection_record):
     """Set SQLite PRAGMA foreign_keys=ON."""
+    # Only apply to SQLite connections
+    if not hasattr(dbapi_connection, 'execute') or 'sqlite' not in str(type(dbapi_connection)).lower():
+        return
     try:
         cursor = dbapi_connection.cursor()
         cursor.execute("PRAGMA foreign_keys=ON")

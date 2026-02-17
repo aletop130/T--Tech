@@ -1,27 +1,47 @@
-# Ralph Tasks - Production Build Automation
+// WRITE_TARGET="/root/T--Tech/.ralph/ralph-tasks.md"
+// WRITE_CONTENT_LENGTH=0
+# Ralph Tasks - Celestrak Debris Import
 
-> **Goal:** Run `docker-compose up --build` in production mode, ensure containers start healthy, and verify the platform is operational.
+> **Goal:** Add an automated pipeline to fetch space‑debris TLE data from Celestrak, ingest it into the SDA backend, and expose it to the front‑end.
 
 ---
 
-- [x] Step 1 – Prerequisites
-  - Verify Docker daemon is running (`docker info`).
-  - Confirm you are in the project root (`/root/T--Tech`).
+- [x] **Prerequisite Check**
+  - Docker daemon running, project root is `/root/T--Tech`.
 
-- [x] Step 2 – Stop existing containers
-  - Execute `docker-compose down -v --remove-orphans` to stop and remove any running services.
+- [x] **Phase 1 – Add Celestrak fetch script**
+  - Create `backend/scripts/fetch_celestrak_debris.py`.
+  - Use `httpx` to download `https://celestrak.com/NORAD/elements/debris.txt`.
+  - Configurable URL via `CELERTRAK_DEBRIS_URL` env var.
 
-- [ ] Step 3 – Build and start containers in production mode
-  - Run `FRONTEND_MODE=build docker-compose up --build`.
-  - Wait for health checks to pass:
-    - Backend: `curl -f http://localhost:8000/health`
-    - Frontend: `curl -f http://localhost:3000`
+- [ ] **Phase 2 – Parse & persist TLEs**
+  - Implement `parse_tle(text: str) -> List[Tuple[int, str, str]]`.
+  - Insert rows into `satellites` (`object_type='debris'`) and `orbits` using existing async session logic.
+  - Skip duplicates (`ON CONFLICT DO NOTHING`).
 
-- [ ] Step 4 – Verify services
-  - If both health checks succeed, output `BUILD_SUCCESS`.
-  - If a container fails, capture its logs (`docker-compose logs <service>`) and address the issue, then repeat from Step 2.
+- [ ] **Phase 3 – CLI entry point**
+  - Add `if __name__ == "__main__":` block to run import for a given tenant (default "default").
+  - Document usage in README.
 
-- [ ] Step 5 – Completion
-  - Print `COMPLETE` indicating the production build task finished successfully.
+- [ ] **Phase 4 – Optional FastAPI endpoint**
+  - Add `POST /api/v1/debris/fetch-celestrak` (admin‑only) calling the same import routine.
+  - Return simple JSON `{status: "ok", imported: <count>}`.
+
+- [ ] **Phase 5 – Optional UI button**
+  - In Dashboard, add a button *“Refresh Celestrak Debris”*.
+  - Calls the new endpoint, shows a spinner, and on success triggers `loadDebris()`.
+
+- [ ] **Phase 6 – Scheduling**
+  - Add a Celery beat task to run the import nightly (e.g., `crontab(hour=2)`).
+
+- [ ] **Phase 7 – Tests & Documentation**
+  - Unit test for `parse_tle` with a mocked HTTP response.
+  - Integration test for the endpoint (if implemented).
+  - Update `README.md` with commands and usage notes.
+
+- [ ] **Phase 8 – Verification**
+  - Run the script (`python backend/scripts/fetch_celestrak_debris.py`).
+  - Open `/map` and confirm new debris appear (orange spheres, updated count).
+  - Ensure periodic refresh works (15 s interval).
 
 ---

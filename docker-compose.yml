@@ -90,11 +90,11 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
-      start_period: 10s
+      start_period: 90s
     restart: unless-stopped
     command: >
-      sh -c "./scripts/wait-for-it.sh postgres 5432 -- alembic upgrade head && 
-             uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+      sh -c "./scripts/wait-for-it.sh postgres 5432 -- sleep 30 && alembic upgrade head && 
+              uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
 
   # Celery Worker
   celery-worker:
@@ -141,7 +141,7 @@ services:
     networks:
       - sda-network
     command: >
-      sh -c "./scripts/wait-for-it.sh postgres 5432 -- ./scripts/wait-for-it.sh redis 6379 -- celery -A app.celery_app beat --loglevel=info"
+      sh -c "./scripts/wait-for-it.sh postgres 5432 -- ./scripts/wait-for-it.sh redis 6379 -- celery -A app.celery_app beat --loglevel=info --schedule /tmp/celerybeat-schedule"
 
   # Next.js Frontend
   frontend:
@@ -170,7 +170,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-      start_period: 30s
+      start_period: 120s
     restart: unless-stopped
     command: >
       sh -c '
