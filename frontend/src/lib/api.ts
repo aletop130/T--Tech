@@ -581,6 +581,11 @@ export class ApiClient {
     });
   }
 
+  // Celestrak Debris Import
+  async fetchCelestrakDebris(): Promise<{ status: string; imported: number }> {
+    return this._fetch('/api/v1/debris/fetch-celestrak', { method: 'POST' });
+  }
+
   async hideAlliedSatellites(): Promise<{
     success: boolean;
     message: string;

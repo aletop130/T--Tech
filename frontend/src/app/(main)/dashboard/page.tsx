@@ -33,6 +33,7 @@ export default function DashboardPage() {
     satelliteCount: 0,
   });
   const [loading, setLoading] = useState(true);
+const [refreshingDebris, setRefreshingDebris] = useState(false);
   
   // Dialog states
   const [conjunctionDialogOpen, setConjunctionDialogOpen] = useState(false);
@@ -61,6 +62,21 @@ export default function DashboardPage() {
       setLoading(false);
     }
   };
+
+  const refreshCelestrakDebris = async () => {
+    setRefreshingDebris(true);
+    try {
+      await api.fetchCelestrakDebris();
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new Event('refreshDebris'));
+      }
+    } catch (error) {
+      console.warn('Failed to refresh Celestrak debris:', error);
+    } finally {
+      setRefreshingDebris(false);
+    }
+  };
+
 
   useEffect(() => {
     setMounted(true);
@@ -315,13 +331,23 @@ export default function DashboardPage() {
             >
               Create Incident
             </Button>
+<Button
+                icon="import"
+                className="justify-start"
+                outlined
+                onClick={() => setUploadDialogOpen(true)}
+              >
+                Upload TLE Data
+              </Button>
+
             <Button
-              icon="import"
-              className="justify-start"
-              outlined
-              onClick={() => setUploadDialogOpen(true)}
+                icon="refresh"
+                className="justify-start"
+                outlined
+                loading={refreshingDebris}
+                onClick={refreshCelestrakDebris}
             >
-              Upload TLE Data
+                Refresh Celestrak Debris
             </Button>
           </div>
         </Card>

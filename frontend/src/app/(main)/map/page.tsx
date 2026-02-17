@@ -324,7 +324,12 @@ const DEBRIS_ORBIT_CLASSES = "LEO";
                 lon: radToDeg(latLonAlt.longitude),
                 alt: latLonAlt.height,
                 time: currentTime.toISOString(),
-              };
+    };
+
+  // expose loadDebris for external refresh
+  // @ts-ignore
+  (window as any).loadDebris = loadDebris;
+
 
             }
             
@@ -455,7 +460,7 @@ const loadDebris = async () => {
     let interval: any = null;
     if (process.env.NODE_ENV !== 'test') {
       interval = setInterval(() => {
-        loadDebris();
+      (window as any).loadDebris?.();
       }, DEBRIS_REFRESH_MS);
     }
 
@@ -464,6 +469,18 @@ const loadDebris = async () => {
       abortController.abort();
     };
 }, [isSimulationMode]);
+
+  useEffect(() => {
+    const handler = () => {
+      // Call the globally exposed loadDebris function if available
+      // @ts-ignore
+      (window as any).loadDebris?.();
+    };
+    window.addEventListener('refreshDebris', handler);
+    return () => {
+      window.removeEventListener('refreshDebris', handler);
+    };
+  }, []);
 
   // Load and refresh orbit track for selected satellite or debris
   useEffect(() => {

@@ -27,7 +27,7 @@
   - Add `POST /api/v1/debris/fetch-celestrak` (admin‑only) calling the same import routine.
   - Return simple JSON `{status: "ok", imported: <count>}`.
 
-- [ ] **Phase 5 – Optional UI button**
+- [x] **Phase 5 – Optional UI button**
   - In Dashboard, add a button *“Refresh Celestrak Debris”*.
   - Calls the new endpoint, shows a spinner, and on success triggers `loadDebris()`.
 
