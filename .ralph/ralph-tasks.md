@@ -23,7 +23,7 @@
   - Add `if __name__ == "__main__":` block to run import for a given tenant (default "default").
   - Document usage in README.
 
-- [ ] **Phase 4 – Optional FastAPI endpoint**
+- [x] **Phase 4 – Optional FastAPI endpoint**
   - Add `POST /api/v1/debris/fetch-celestrak` (admin‑only) calling the same import routine.
   - Return simple JSON `{status: "ok", imported: <count>}`.
 

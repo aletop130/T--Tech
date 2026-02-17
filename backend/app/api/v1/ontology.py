@@ -8,12 +8,14 @@ from app.api.deps import (
     get_current_user,
     get_ontology_service,
     get_debris_service,
+    require_role,
 )
 from app.core.security import TokenData
 from app.core.exceptions import NotFoundError
 from app.services.ontology import OntologyService
 from app.services.debris import DebrisService
 from app.services.celestrack import CelesTrackService, get_celestrack_service, FAMOUS_SATELLITES, ALLIED_SATELLITES, ENEMY_SATELLITES
+from app.services.debris_import import fetch_debris_tle, import_debris
 from app.physics.propagator import propagate_tle
 from app.schemas.common import PaginatedResponse
 from app.schemas.ontology import (
@@ -114,6 +116,16 @@ async def list_satellites_with_orbits(
         ))
     
     return result
+
+# Phase 4 – FastAPI endpoint to import Celestrak debris
+@router.post("/debris/fetch-celestrak", status_code=200)
+async def fetch_debris_celestrak(
+    user: Annotated[TokenData, Depends(require_role('admin'))],
+):
+    """Fetch and import Celestrak debris TLE data (admin‑only)."""
+    tle_text = await fetch_debris_tle()
+    imported = await import_debris(tle_text, tenant_id=user.tenant_id, user_id=user.sub)
+    return {"status": "ok", "imported": imported}
 
 # Debris endpoints
 @router.get("/debris", response_model=DebrisResponse)
