@@ -14,7 +14,7 @@
   - Use `httpx` to download `https://celestrak.com/NORAD/elements/debris.txt`.
   - Configurable URL via `CELERTRAK_DEBRIS_URL` env var.
 
-- [ ] **Phase 2 – Parse & persist TLEs**
+- [x] **Phase 2 – Parse & persist TLEs**
   - Implement `parse_tle(text: str) -> List[Tuple[int, str, str]]`.
   - Insert rows into `satellites` (`object_type='debris'`) and `orbits` using existing async session logic.
   - Skip duplicates (`ON CONFLICT DO NOTHING`).
