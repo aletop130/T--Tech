@@ -114,6 +114,11 @@ async def import_debris(
                     object_type=ObjectType.DEBRIS,
                     is_active=True,
                     classification="unclassified",
+                    international_designator=None,
+                    country=None,
+                    operator=None,
+                    mass_kg=None,
+                    rcs_m2=None,
                     tags=[],
                 )
                 satellite = await ontology.create_satellite(sat_data, tenant_id, user_id)
@@ -150,12 +155,17 @@ async def import_debris(
         return processed
 
 
-async def main():
+async def main(tenant_id: str = "default"):
     tle_text = await fetch_debris_tle()
     line_count = tle_text.count("\n")
     print(f"Fetched debris TLE data: {line_count} lines")
-    await import_debris(tle_text)
+    await import_debris(tle_text, tenant_id=tenant_id)
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Fetch and import Celestrak debris TLE data")
+    parser.add_argument("--tenant", default="default", help="Tenant ID for import")
+    args = parser.parse_args()
+    asyncio.run(main(tenant_id=args.tenant))

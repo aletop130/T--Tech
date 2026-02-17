@@ -19,7 +19,7 @@
   - Insert rows into `satellites` (`object_type='debris'`) and `orbits` using existing async session logic.
   - Skip duplicates (`ON CONFLICT DO NOTHING`).
 
-- [ ] **Phase 3 – CLI entry point**
+- [x] **Phase 3 – CLI entry point**
   - Add `if __name__ == "__main__":` block to run import for a given tenant (default "default").
   - Document usage in README.
 

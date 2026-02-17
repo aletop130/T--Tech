@@ -11,6 +11,18 @@ This project uses satellite orbital data from **CelesTrak** (https://celestrak.o
 All Two-Line Element (TLE) data and General Perturbations (GP) orbital elements are sourced from:
 - **Website**: https://celestrak.org/NORAD/elements/
 - **API**: https://celestrak.org/NORAD/elements/gp.php
+
+### Debris Import Script
+
+Use the provided script to fetch and import the latest space‑debris TLE data:
+
+```bash
+# Import debris into the default tenant
+python backend/scripts/fetch_celestrak_debris.py
+
+# Specify a tenant ID
+python backend/scripts/fetch_celestrak_debris.py --tenant mytenant
+```
 - **Maintained by**: Dr. T.S. Kelso (TS.Kelso@celestrak.org)
 
 ### Satellite Data Used
