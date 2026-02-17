@@ -1,5 +1,6 @@
 """Celery application configuration."""
 from celery import Celery
+from celery.schedules import crontab
 
 from app.core.config import settings
 
@@ -43,6 +44,10 @@ celery_app.conf.beat_schedule = {
     "detect-maneuvers": {
         "task": "app.tasks.detect_maneuvers",
         "schedule": 300.0,  # Every 5 minutes
+    },
+    "fetch-celestrak-debris": {
+        "task": "app.tasks.fetch_celestrak_debris",
+        "schedule": crontab(hour=2, minute=0),
     },
 }
 

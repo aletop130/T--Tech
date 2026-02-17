@@ -302,3 +302,42 @@ async def _detect_maneuvers(tenant_id: str):
             "critical_events_checked": len(critical_events),
             "maneuvers_created": maneuvers_created,
         }
+
+@celery_app.task(name="app.tasks.fetch_celestrak_debris")
+def fetch_celestrak_debris(tenant_id: str = "default"):
+    """Fetch and import Celestrak debris TLE data.
+
+    This task runs the backend fetch script as a subprocess and returns the
+    number of imported debris objects.
+    """
+    import os
+    import sys
+    import subprocess
+    import re
+
+    # Resolve path to the fetch script relative to this file
+    script_path = os.path.abspath(
+        os.path.join(
+            os.path.dirname(__file__),
+            "..",
+            "..",
+            "scripts",
+            "fetch_celestrak_debris.py",
+        )
+    )
+    # Execute the script with the tenant argument
+    result = subprocess.run(
+        [sys.executable, script_path, "--tenant", tenant_id],
+        capture_output=True,
+        text=True,
+    )
+    # Extract import count from stdout (the script prints a line like "✅ Imported X debris objects")
+    match = re.search(r"✅ Imported (\d+) debris objects", result.stdout)
+    imported = int(match.group(1)) if match else 0
+    return {
+        "status": "completed",
+        "tenant_id": tenant_id,
+        "imported": imported,
+        "stdout": result.stdout,
+        "stderr": result.stderr,
+    }

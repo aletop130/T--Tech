@@ -31,7 +31,7 @@
   - In Dashboard, add a button *“Refresh Celestrak Debris”*.
   - Calls the new endpoint, shows a spinner, and on success triggers `loadDebris()`.
 
-- [ ] **Phase 6 – Scheduling**
+- [x] **Phase 6 – Scheduling**
   - Add a Celery beat task to run the import nightly (e.g., `crontab(hour=2)`).
 
 - [ ] **Phase 7 – Tests & Documentation**
