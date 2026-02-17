@@ -1,13 +1,37 @@
-Implementa il sistema Detour DESCRITTO in:
-docs/DETOUR_IMPLEMENTATION_PLAN.txt
+# Prompt - Production Build Automation
 
-Regole dure:
-- Per le dipendenze usa sempre questo ambiente virtuale : /root/T--Tech/backend/.venv , command : source ~/T--Tech/backend/.venv/bin/activate
-- Quel documento è la SPEC: struttura directory, task 2.x, test 3.x, regole finali “NOTE FINALI PER RALPH CODING AGENT”.
-- Non inventare architetture alternative. Se manca qualcosa nel repo, aggiungila come da spec.
-- Lavora a task atomici: completa UN task per iterazione, poi aggiorna .ralph/ralph-tasks.md marcando [x].
-- Mantieni type hints, error handling, logging, RBAC, test come richiesto dalla spec.
-- Alla fine di ogni iterazione:
-  1) esegui i check/test pertinenti
-  2) se il task è finito stampa ESATTAMENTE: READY_FOR_NEXT_TASK
-  3) se tutti i task sono finiti stampa: COMPLETE
+> **Goal:** Run the full platform build in production mode using Docker Compose and verify that all services start healthy.
+
+---
+
+- **Prerequisites**
+  - Docker daemon must be running (`docker info`).
+  - Execute commands from the project root (`/root/T--Tech`).
+
+- **Steps**
+  1. **Stop any existing containers**
+     ```bash
+     docker-compose down
+     ```
+  2. **Build and start containers in production mode**
+     ```bash
+     FRONTEND_MODE=build docker-compose up -d --build
+     ```
+  3. **Health‑check verification**
+     - Backend: `curl -f http://localhost:8000/health`
+     - Frontend: `curl -f http://localhost:3000`
+     - If a health check fails, capture logs with `docker-compose logs <service>` and resolve the issue, then repeat from step 1.
+  4. **Completion**
+     - When both health checks succeed, output `BUILD_SUCCESS`.
+     - Finally print `COMPLETE` to indicate the production build task is finished.
+
+---
+
+- **Iteration protocol**
+  - After each step, run the relevant checks.
+  - If the current step completes successfully, print **exactly** `READY_FOR_NEXT_TASK`.
+  - When all steps are done, print **exactly** `COMPLETE`.
+
+- **Notes**
+  - Do not modify application code; focus solely on the container build and deployment process.
+  - Update `.ralph/ralph-tasks.md` marking tasks as completed (`[x]`).

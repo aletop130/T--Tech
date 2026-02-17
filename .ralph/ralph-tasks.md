@@ -1,48 +1,27 @@
-WRITE_TARGET="/root/T--Tech/.ralph/ralph-tasks.md"
-WRITE_CONTENT_LENGTH=2000
-# Ralph Tasks - Frontend Build Automation
+# Ralph Tasks - Production Build Automation
 
-> **Goal:** Run `npm run build` repeatedly until it succeeds without errors.
+> **Goal:** Run `docker-compose up --build` in production mode, ensure containers start healthy, and verify the platform is operational.
 
 ---
 
-- [x] Step 1 – Clean environment
-  - Remove previous build artifacts: `rm -rf ./frontend/.next ./frontend/node_modules`
-  - Reset any local changes: `git reset --hard HEAD`
+- [x] Step 1 – Prerequisites
+  - Verify Docker daemon is running (`docker info`).
+  - Confirm you are in the project root (`/root/T--Tech`).
 
-- [x] Step 2 – Install exact dependencies
-  - Run `npm ci` inside `./frontend`
-  - If installation fails, output `DEPENDENCY_INSTALL_FAILED` and abort the plan.
+- [x] Step 2 – Stop existing containers
+  - Execute `docker-compose down -v --remove-orphans` to stop and remove any running services.
 
-- [x] Step 3 – Build loop
-  - Increment a counter `BUILD_ATTEMPT_<n>` before each attempt.
-  - Execute `npm run build`.
-  - If exit code is `0`:
-    - Print `BUILD_SUCCESS`
-    - Print `COMPLETE`
-    - End the plan.
-  - If the command fails:
-    - Capture the error output and print `ERROR_LOG`.
-    - **Error handling**:
-      - *Missing packages*: run `npm install` then retry.
-      - *TypeScript errors*: run `npm run lint` or `npx tsc --noEmit` to locate; apply fixes manually or with automated scripts.
-      - *Webpack/Turbopack config issues*: modify `next.config.js` to add the appropriate flag (`--webpack` or `--turbopack`).
-      - *Other failures*: print `BUILD_ERROR` and pause for manual intervention.
-    - After fixing, print `READY_FOR_NEXT_TASK` and loop back to the build step.
+- [ ] Step 3 – Build and start containers in production mode
+  - Run `FRONTEND_MODE=build docker-compose up --build`.
+  - Wait for health checks to pass:
+    - Backend: `curl -f http://localhost:8000/health`
+    - Frontend: `curl -f http://localhost:3000`
 
-- [x] Step 4 – Verify runtime
-  - Once the build succeeds, run `npm start` (with `FRONTEND_MODE=build`) to ensure the application starts correctly.
-  - Print `RUNTIME_VERIFIED` if the server starts without errors.
+- [ ] Step 4 – Verify services
+  - If both health checks succeed, output `BUILD_SUCCESS`.
+  - If a container fails, capture its logs (`docker-compose logs <service>`) and address the issue, then repeat from Step 2.
+
+- [ ] Step 5 – Completion
+  - Print `COMPLETE` indicating the production build task finished successfully.
 
 ---
-
-## Monitoring & Reporting
-- After each iteration, Ralph should emit:
-  - `BUILD_ATTEMPT_<n>` – the attempt number.
-  - `ERROR_LOG` – detailed error output (if any).
-  - `READY_FOR_NEXT_TASK` – when the current issue has been addressed.
-- Upon successful build, emit `BUILD_SUCCESS` followed by `COMPLETE`.
-
-## Notes
-- Ensure Docker containers are stopped before running local builds to avoid file locks.
-- Keep the console output clean for easy parsing by Ralph.
