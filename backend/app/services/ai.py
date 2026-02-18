@@ -12,6 +12,7 @@ from app.core.config import settings
 from app.core.logging import get_logger
 from app.core.exceptions import AIServiceError
 from app.db.base import generate_uuid
+from app.services.chat_memory import PostgreSQLChatMemory
 from app.schemas.ai import (
     ChatMessage,
     ChatRequest,
@@ -29,6 +30,7 @@ from app.schemas.ai import (
 from app.schemas.cesium import CESIUM_FUNCTION_DEFINITIONS, CesiumAction
 from app.services.ontology import OntologyService
 from app.services.audit import AuditService
+from app.agents.detour.state import DetourGraphState
 
 logger = get_logger(__name__)
 
@@ -859,4 +861,296 @@ Fornisci 2-3 opzioni realistiche in formato JSON:
         
         return context
     
+    async def orchestrate_detour_agents(
+        self,
+        message: str,
+        tenant_id: str,
+        user_id: Optional[str] = None,
+    ) -> AsyncGenerator[str, None]:
+        """Orchestrate 5 Detour agents with streaming and Cesium actions.
+        
+        This is the main entry point for active chat control of the platform.
+        Automatically detects if user wants conjunction analysis and runs all 5 agents.
+        """
+        from app.agents.detour.graph import stream_detour_pipeline
+        from app.agents.detour.state import DetourGraphState
+        from app.db.models.detour import DetourSatelliteState
+        
+        # Initialize memory manager
+        memory = PostgreSQLChatMemory(self.db, session_id=f"chat_{tenant_id}", tenant_id=tenant_id)
+        
+        # Add user message to memory
+        await memory.add_message(message, role="user")
+        
+        # Get memory usage
+        usage = await memory.get_window_usage()
+        yield f"data: {json.dumps({'type': 'memory_usage', 'percentage': usage['percentage']})}\n\n"
+        
+        # Determine intent using LLM
+        intent = await self._classify_intent(message)
+        
+        if intent == "conjunction_analysis":
+            # Extract satellite and conjunction IDs from message
+            satellite_id, conjunction_event_id = await self._extract_conjunction_context(message, tenant_id)
+            
+            if not satellite_id:
+                yield f"data: {json.dumps({'type': 'error', 'error': 'Non ho trovato il satellite menzionato. Per favore specifica il nome o ID del satellite.'})}\n\n"
+                return
+            
+            # Build initial state for Detour pipeline
+            state: DetourGraphState = {
+                "session_id": str(generate_uuid()),
+                "tenant_id": tenant_id,
+                "satellite_id": satellite_id,
+                "conjunction_event_id": conjunction_event_id,
+                "satellite_state": None,
+                "conjunction_data": None,
+                "screening_results": None,
+                "risk_assessment": None,
+                "maneuver_options": None,
+                "safety_review": None,
+                "ops_brief": None,
+                "current_agent": None,
+                "events": [],
+                "errors": [],
+                "completed": False,
+            }
+            
+            # Track active agents
+            active_agents = []
+            
+            try:
+                # Run the full pipeline with streaming
+                async for state_update in stream_detour_pipeline(state, self.db):
+                    current_agent = state_update.get("current_agent")
+                    
+                    if current_agent and current_agent not in active_agents:
+                        # New agent started
+                        active_agents.append(current_agent)
+                        await memory.update_active_agents(active_agents)
+                        
+                        # Send agent_start event
+                        agent_messages = {
+                            "scout": "🔍 Agente Scout: Analizzo oggetti vicini e potenziali minacce...",
+                            "analyst": "📊 Agente Analyst: Valuto il rischio di collisione...",
+                            "planner": "📋 Agente Planner: Genero opzioni di manovra...",
+                            "safety": "🛡️ Agente Safety: Valido il piano di manovra...",
+                            "ops_brief": "📢 Agente Ops Brief: Preparo il riepilogo operativo...",
+                        }
+                        
+                        yield f"data: {json.dumps({
+                            'type': 'agent_start',
+                            'agent': current_agent,
+                            'message': agent_messages.get(current_agent, f'Agente {current_agent} avviato...')
+                        })}\n\n"
+                        
+                        # Add to memory
+                        await memory.add_agent_event(
+                            agent_name=current_agent,
+                            event_type="start",
+                            message=agent_messages.get(current_agent, f"Agente {current_agent} avviato"),
+                        )
+                    
+                    # Process agent results and emit Cesium actions
+                    if "screening_results" in state_update and state_update["screening_results"]:
+                        results = state_update["screening_results"]
+                        if "cesium_actions" in results:
+                            for action in results["cesium_actions"]:
+                                yield f"data: {json.dumps({'type': 'cesium_action', 'action': action})}\n\n"
+                                await memory.add_agent_event(
+                                    agent_name="scout",
+                                    event_type="action",
+                                    message=f"Azione Cesium: {action['type']}",
+                                    cesium_action=action
+                                )
+                    
+                    if "risk_assessment" in state_update and state_update["risk_assessment"]:
+                        assessment = state_update["risk_assessment"]
+                        if "cesium_actions" in assessment:
+                            for action in assessment["cesium_actions"]:
+                                yield f"data: {json.dumps({'type': 'cesium_action', 'action': action})}\n\n"
+                                await memory.add_agent_event(
+                                    agent_name="analyst",
+                                    event_type="action",
+                                    message=f"Azione Cesium: {action['type']}",
+                                    cesium_action=action
+                                )
+                    
+                    if "maneuver_options" in state_update and state_update["maneuver_options"]:
+                        options = state_update["maneuver_options"]
+                        if "cesium_actions" in options:
+                            for action in options["cesium_actions"]:
+                                yield f"data: {json.dumps({'type': 'cesium_action', 'action': action})}\n\n"
+                                await memory.add_agent_event(
+                                    agent_name="planner",
+                                    event_type="action",
+                                    message=f"Azione Cesium: {action['type']}",
+                                    cesium_action=action
+                                )
+                    
+                    if "safety_review" in state_update and state_update["safety_review"]:
+                        review = state_update["safety_review"]
+                        if "cesium_actions" in review:
+                            for action in review["cesium_actions"]:
+                                yield f"data: {json.dumps({'type': 'cesium_action', 'action': action})}\n\n"
+                                await memory.add_agent_event(
+                                    agent_name="safety",
+                                    event_type="action",
+                                    message=f"Azione Cesium: {action['type']}",
+                                    cesium_action=action
+                                )
+                    
+                    if "ops_brief" in state_update and state_update["ops_brief"]:
+                        brief = state_update["ops_brief"]
+                        if "cesium_actions" in brief:
+                            for action in brief["cesium_actions"]:
+                                yield f"data: {json.dumps({'type': 'cesium_action', 'action': action})}\n\n"
+                                await memory.add_agent_event(
+                                    agent_name="ops_brief",
+                                    event_type="action",
+                                    message=f"Azione Cesium: {action['type']}",
+                                    cesium_action=action
+                                )
+                
+                # Pipeline complete - send summary
+                final_message = self._generate_pipeline_summary(state)
+                yield f"data: {json.dumps({'type': 'agent_complete', 'agent': 'all', 'message': final_message})}\n\n"
+                
+                # Add to memory
+                await memory.add_message(final_message, role="assistant")
+                
+                # Update memory usage
+                usage = await memory.get_window_usage()
+                yield f"data: {json.dumps({'type': 'memory_usage', 'percentage': usage['percentage']})}\n\n"
+                
+            except Exception as e:
+                logger.error(f"Detour pipeline error: {e}")
+                yield f"data: {json.dumps({'type': 'error', 'error': f'Errore durante l\'analisi: {str(e)}'})}\n\n"
+        
+        else:
+            # Handle generic chat with memory context
+            context_messages = await memory.get_context_as_messages(limit=20)
+            
+            async for chunk in self.stream_chat_with_memory(message, context_messages, tenant_id):
+                yield chunk
+            
+            # Update memory usage
+            usage = await memory.get_window_usage()
+            yield f"data: {json.dumps({'type': 'memory_usage', 'percentage': usage['percentage']})}\n\n"
+    
+    async def _classify_intent(self, message: str) -> str:
+        """Classify user intent to determine which workflow to run."""
+        conjunction_keywords = [
+            "congiunzione", "conjunction", "collisione", "collision",
+            "rischio", "risk", "minaccia", "threat", "analisi", "analysis",
+            "manovra", "maneuver", "avoidance", "evitare"
+        ]
+        
+        message_lower = message.lower()
+        
+        for keyword in conjunction_keywords:
+            if keyword in message_lower:
+                return "conjunction_analysis"
+        
+        return "generic_chat"
+    
+    async def _extract_conjunction_context(self, message: str, tenant_id: str) -> tuple[Optional[str], Optional[str]]:
+        """Extract satellite ID and conjunction event ID from message."""
+        satellite_id = None
+        conjunction_event_id = None
+        
+        # Try to find satellite by name or ID
+        satellites, _ = await self.ontology.list_satellites(tenant_id=tenant_id, page_size=100)
+        
+        for sat in satellites:
+            if sat.name.lower() in message.lower() or sat.id.lower() in message.lower():
+                satellite_id = sat.id
+                break
+        
+        # If we found a satellite, try to find active conjunctions
+        if satellite_id:
+            events, _ = await self.ontology.list_conjunction_events(
+                tenant_id=tenant_id,
+                page_size=10,
+            )
+            
+            for event in events:
+                if event.primary_object_id == satellite_id:
+                    conjunction_event_id = event.id
+                    break
+        
+        return satellite_id, conjunction_event_id
+    
+    def _generate_pipeline_summary(self, state: DetourGraphState) -> str:
+        """Generate a human-readable summary of the Detour pipeline results."""
+        parts = ["✅ **Analisi Completa**\n\n"]
+        
+        if state.get("screening_results"):
+            threats = state["screening_results"].get("threats_identified", 0)
+            parts.append(f"🔍 **Scout**: Identificate {threats} potenziali minacce\n")
+        
+        if state.get("risk_assessment"):
+            risk = state["risk_assessment"].get("risk_level", "unknown")
+            parts.append(f"📊 **Analyst**: Livello di rischio: **{risk.upper()}**\n")
+        
+        if state.get("maneuver_options"):
+            options = state["maneuver_options"].get("maneuver_options", [])
+            rec = state["maneuver_options"].get("recommended_option", "N/A")
+            parts.append(f"📋 **Planner**: Generate {len(options)} opzioni di manovra (consigliata: {rec})\n")
+        
+        if state.get("safety_review"):
+            approved = state["safety_review"].get("approved", False)
+            status = "✅ Approvata" if approved else "⚠️ Richiede revisione"
+            parts.append(f"🛡️ **Safety**: {status}\n")
+        
+        if state.get("ops_brief"):
+            parts.append(f"📢 **Ops Brief**: Piano operativo pronto per l'esecuzione\n")
+        
+        parts.append("\n🎬 **Tutte le azioni sono state visualizzate sulla mappa!**")
+        
+        return "".join(parts)
+    
+    async def stream_chat_with_memory(
+        self,
+        message: str,
+        context_messages: list[dict],
+        tenant_id: str,
+    ) -> AsyncGenerator[str, None]:
+        """Stream chat response using memory context."""
+        if not self.client:
+            yield f"data: {json.dumps({'type': 'error', 'error': 'AI service not configured'})}\n\n"
+            return
+        
+        # Build messages with context
+        messages = [
+            {"role": "system", "content": self.SYSTEM_PROMPT}
+        ] + context_messages + [
+            {"role": "user", "content": message}
+        ]
+        
+        try:
+            response = await self.client.chat.completions.create(
+                model=settings.REGOLO_MODEL,
+                messages=messages,
+                max_tokens=2048,
+                temperature=0.7,
+                stream=True,
+            )
+            
+            full_content = ""
+            async for chunk in response:
+                if chunk.choices[0].delta.content:
+                    content = chunk.choices[0].delta.content
+                    full_content += content
+                    yield f"data: {json.dumps({'type': 'content', 'chunk': content})}\n\n"
+            
+            # Add assistant response to memory
+            memory = PostgreSQLChatMemory(self.db, session_id=f"chat_{tenant_id}", tenant_id=tenant_id)
+            await memory.add_message(full_content, role="assistant")
+            
+            yield "data: [DONE]\n\n"
+            
+        except Exception as e:
+            logger.error(f"Stream chat with memory error: {e}")
+            yield f"data: {json.dumps({'type': 'error', 'error': str(e)})}\n\n"
 

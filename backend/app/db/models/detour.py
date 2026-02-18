@@ -43,6 +43,22 @@ class DetourAgentSessionStatus(str, enum.Enum):
     CANCELLED = "cancelled"
 
 
+class DetourStepStatus(str, enum.Enum):
+    """Status of a step in the step-by-step pipeline."""
+    PENDING = "pending"
+    RUNNING = "running"
+    WAITING_APPROVAL = "waiting_approval"
+    COMPLETED = "completed"
+    REJECTED = "rejected"
+    ERROR = "error"
+
+
+class DetourExecutionMode(str, enum.Enum):
+    """Execution mode for detour pipeline."""
+    AUTO = "auto"
+    STEP_BY_STEP = "step_by_step"
+
+
 class DetourSatelliteState(Base, AuditMixin):
     """State of a satellite for detour planning."""
     __tablename__ = "detour_satellite_state"
@@ -112,6 +128,86 @@ class DetourAgentSession(Base, AuditMixin):
     events = Column(JSON, nullable=True)
 
     started_at = Column(DateTime, nullable=True)
+    completed_at = Column(DateTime, nullable=True)
+
+
+class DetourStepSession(Base, AuditMixin):
+    """Session for step-by-step pipeline execution with human approval."""
+    __tablename__ = "detour_step_sessions"
+
+    id = Column(String(50), primary_key=True, default=generate_uuid)
+    session_id = Column(String(50), unique=True, nullable=False, index=True)
+    
+    conjunction_event_id = Column(String(50), ForeignKey("conjunction_events.id"), nullable=False, index=True)
+    satellite_id = Column(String(50), nullable=False)
+    tenant_id = Column(String(50), nullable=False, index=True)
+    
+    execution_mode = Column(SQLEnum(DetourExecutionMode), default=DetourExecutionMode.STEP_BY_STEP, nullable=False)
+    status = Column(SQLEnum(DetourAgentSessionStatus), default=DetourAgentSessionStatus.ACTIVE, nullable=False)
+    
+    current_agent = Column(String(50), nullable=True)
+    current_step_number = Column(String(10), nullable=True)
+    
+    cesium_actions = Column(JSON, nullable=True)
+    final_ops_brief = Column(JSON, nullable=True)
+    final_risk_level = Column(String(20), nullable=True)
+    
+    started_at = Column(DateTime, nullable=True)
+    completed_at = Column(DateTime, nullable=True)
+    
+    conjunction_event = relationship("ConjunctionEvent", lazy="selectin")
+
+
+class DetourAgentStep(Base, AuditMixin):
+    """Individual agent step within a step-by-step session."""
+    __tablename__ = "detour_agent_steps"
+
+    id = Column(String(50), primary_key=True, default=generate_uuid)
+    session_id = Column(String(50), ForeignKey("detour_step_sessions.session_id"), nullable=False, index=True)
+    
+    agent_name = Column(String(50), nullable=False)
+    step_number = Column(String(10), nullable=False)
+    
+    status = Column(SQLEnum(DetourStepStatus), default=DetourStepStatus.PENDING, nullable=False)
+    
+    input_data = Column(JSON, nullable=True)
+    output_data = Column(JSON, nullable=True)
+    cesium_actions = Column(JSON, nullable=True)
+    
+    started_at = Column(DateTime, nullable=True)
+    completed_at = Column(DateTime, nullable=True)
+    
+    approved_by = Column(String(50), nullable=True)
+    approved_at = Column(DateTime, nullable=True)
+    rejection_reason = Column(String(500), nullable=True)
+
+    __table_args__ = (
+        {"sqlite_autoincrement": True},
+    )
+
+
+class DetourAnalysisArchive(Base, AuditMixin):
+    """Archived analysis for historical reference."""
+    __tablename__ = "detour_analysis_archive"
+
+    id = Column(String(50), primary_key=True, default=generate_uuid)
+    session_id = Column(String(50), unique=True, nullable=False, index=True)
+    
+    conjunction_event_id = Column(String(50), nullable=False, index=True)
+    satellite_id = Column(String(50), nullable=False)
+    satellite_name = Column(String(100), nullable=True)
+    tenant_id = Column(String(50), nullable=False, index=True)
+    
+    status = Column(String(50), nullable=False)
+    final_risk_level = Column(String(20), nullable=True)
+    
+    recommended_maneuver = Column(JSON, nullable=True)
+    was_executed = Column(Boolean, default=False)
+    executed_at = Column(DateTime, nullable=True)
+    
+    steps_summary = Column(JSON, nullable=True)
+    
+    created_at = Column(DateTime, nullable=True)
     completed_at = Column(DateTime, nullable=True)
 
 # Relationships for detour models

@@ -1,8 +1,9 @@
 """Ontology Pydantic schemas."""
+import math
 from datetime import datetime
 from typing import Any, Optional
 
-from pydantic import Field
+from pydantic import Field, field_validator, field_serializer
 
 from app.schemas.common import AuditSchema, BaseSchema
 from app.db.models.ontology import (
@@ -32,6 +33,20 @@ class SatelliteBase(BaseSchema):
     classification: str = "unclassified"
     tags: list[str] = Field(default_factory=list)
     description: Optional[str] = None
+
+    @field_validator('tags', mode='before')
+    @classmethod
+    def validate_tags(cls, v: Any) -> list[str]:
+        if isinstance(v, str):
+            import json
+            try:
+                parsed = json.loads(v)
+                return parsed if isinstance(parsed, list) else []
+            except (json.JSONDecodeError, TypeError):
+                return []
+        if v is None:
+            return []
+        return v
 
 
 class SatelliteCreate(SatelliteBase):
@@ -209,6 +224,13 @@ class DebrisObject(BaseSchema):
     lon: float
     alt_km: float = Field(..., alias="altKm", description="Altitude in km")
 
+    @field_serializer('lat', 'lon', 'alt_km')
+    def serialize_float(self, value: float) -> float:
+        """Convert NaN/Inf to 0.0 for JSON compliance."""
+        if value is None or (isinstance(value, float) and (math.isnan(value) or math.isinf(value))):
+            return 0.0
+        return value
+
 class DebrisResponse(BaseSchema):
     """Response model for debris list."""
     time_utc: datetime = Field(..., alias="timeUtc")
@@ -223,12 +245,38 @@ class DebrisOrbitInfo(BaseSchema):
     tle_line1: Optional[str] = None
     tle_line2: Optional[str] = None
 
+    @field_serializer('lat', 'lon', 'alt_km')
+    def serialize_float(self, value: float) -> float:
+        """Convert NaN/Inf to 0.0 for JSON compliance."""
+        if value is None or (isinstance(value, float) and (math.isnan(value) or math.isinf(value))):
+            return 0.0
+        return value
+
+
+class GenerateDebrisRequest(BaseSchema):
+    """Request model for generating synthetic debris."""
+    count: int = Field(..., ge=1, le=10000, description="Number of debris objects to generate")
+
+
+class GenerateDebrisResponse(BaseSchema):
+    """Response model for debris generation."""
+    status: str
+    created: int
+
+
 class OrbitPoint(BaseSchema):
     """Single point in an orbit trajectory."""
     t_utc: datetime = Field(..., alias="tUtc")
     lat: float
     lon: float
     alt_km: float = Field(..., alias="altKm")
+
+    @field_serializer('lat', 'lon', 'alt_km')
+    def serialize_float(self, value: float) -> float:
+        """Convert NaN/Inf to 0.0 for JSON compliance."""
+        if value is None or (isinstance(value, float) and (math.isnan(value) or math.isinf(value))):
+            return 0.0
+        return value
 
 class OrbitPropagationResponse(BaseSchema):
     """Response model for orbit propagation endpoint."""

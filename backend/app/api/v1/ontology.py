@@ -2,7 +2,7 @@
 from datetime import datetime, timedelta
 from typing import Annotated, Optional
 
-from fastapi import APIRouter, Depends, Query, Path
+from fastapi import APIRouter, Depends, Query, Path, HTTPException
 
 from app.api.deps import (
     get_current_user,
@@ -43,6 +43,8 @@ from app.schemas.ontology import (
     DebrisObject,
     DebrisOrbitInfo,
     OrbitPropagationResponse,
+    GenerateDebrisRequest,
+    GenerateDebrisResponse,
 )
 
 router = APIRouter()
@@ -216,6 +218,24 @@ async def get_debris_with_orbits(
             tle_line2=orb.tle_line2,
         ))
     return result
+
+
+@router.post("/debris/generate", response_model=GenerateDebrisResponse)
+async def generate_debris(
+    request: GenerateDebrisRequest,
+    user: Annotated[TokenData, Depends(get_current_user)],
+    service: Annotated[DebrisService, Depends(get_debris_service)],
+):
+    """Generate synthetic debris objects (not from Celestrak)."""
+    try:
+        created = await service.generate_synthetic_debris(
+            tenant_id=user.tenant_id,
+            count=request.count,
+            user_id=user.sub,
+        )
+        return GenerateDebrisResponse(status="ok", created=created)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @router.get("/orbit", response_model=OrbitPropagationResponse)

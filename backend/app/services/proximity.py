@@ -232,15 +232,27 @@ class ProximityDetectionService:
             )
     
     async def _get_latest_orbit(self, satellite_id: str) -> Optional[Orbit]:
-        """Get the latest orbit for a satellite."""
+        """Get the latest orbit for a satellite.
+        
+        Prefers orbits with valid TLEs. If latest orbit has TLE but is marked
+        invalid, will fall back to older valid orbit or use keplerian elements.
+        """
         stmt = (
             select(Orbit)
             .where(Orbit.satellite_id == satellite_id)
             .order_by(Orbit.epoch.desc())
-            .limit(1)
+            .limit(10)
         )
         result = await self.db.execute(stmt)
-        return result.scalar_one_or_none()
+        orbits = result.scalars().all()
+        
+        for orbit in orbits:
+            if orbit.tle_line1 and orbit.tle_line2:
+                if orbit.is_tle_valid is False:
+                    continue
+            return orbit
+        
+        return None
     
     def _propagate_satellite(
         self,
@@ -261,8 +273,8 @@ class ProximityDetectionService:
                 )
                 
                 if sat.error > 0:
-                    logger.warning(
-                        "tle_parse_error",
+                    logger.info(
+                        "tle_parse_error_fallback_keplerian",
                         orbit_id=orbit.id,
                         error=sat.error,
                     )
@@ -275,8 +287,8 @@ class ProximityDetectionService:
                 error, r, v = sat.sgp4(jd, fr)
                 
                 if error > 0:
-                    logger.warning(
-                        "sgp4_propagation_error",
+                    logger.info(
+                        "sgp4_propagation_error_fallback_keplerian",
                         orbit_id=orbit.id,
                         error=error,
                     )

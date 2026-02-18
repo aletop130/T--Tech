@@ -14,6 +14,17 @@ import {
   DetourAnalysisStatus,
   ScreeningResult,
   ManeuverPlan,
+  // Step-by-step imports
+  startStepByStep as apiStartStepByStep,
+  executeAgentStep as apiExecuteAgentStep,
+  approveAgentStep as apiApproveAgentStep,
+  rejectAgentStep as apiRejectAgentStep,
+  getSessionStatus as apiGetSessionStatus,
+  getNextStep as apiGetNextStep,
+  StepSessionResponse,
+  StepExecutionResponse,
+  NextStepResponse,
+  CesiumAction,
 } from '../api/detour';
 
 /**
@@ -33,6 +44,13 @@ export interface DetourState {
   isLoading: boolean;
   /** Last error message, if any */
   error: string | null;
+
+  /** Step-by-step session data */
+  stepSession: StepSessionResponse | null;
+  /** Pending Cesium actions from the current step */
+  pendingCesiumActions: CesiumAction[];
+  /** Whether we're in step-by-step mode */
+  isStepByStepMode: boolean;
 
   /** Trigger a new analysis for a conjunction */
   startAnalysis: (conjunctionId: string) => Promise<void>;
@@ -57,6 +75,19 @@ export interface DetourState {
   selectSatellite: (satelliteId: string | null) => void;
   /** Select a conjunction */
   selectConjunction: (conjunctionId: string | null) => void;
+
+  /** Start a step-by-step analysis session */
+  startStepByStep: (conjunctionEventId: string, satelliteId: string) => Promise<void>;
+  /** Execute the next agent step */
+  executeStep: (agentName: string) => Promise<StepExecutionResponse | null>;
+  /** Approve the current step */
+  approveStep: (agentName: string, notes?: string) => Promise<void>;
+  /** Reject the current step */
+  rejectStep: (agentName: string, reason: string) => Promise<void>;
+  /** Get current session status */
+  refreshSessionStatus: () => Promise<void>;
+  /** Clear step session */
+  clearStepSession: () => void;
 }
 
 export const useDetourStore = create<DetourState>()(
@@ -68,6 +99,10 @@ export const useDetourStore = create<DetourState>()(
       screeningResults: null,
       isLoading: false,
       error: null,
+      // Step-by-step state
+      stepSession: null,
+      pendingCesiumActions: [],
+      isStepByStepMode: false,
 
       startAnalysis: async (conjunctionId: string) => {
         set({ isLoading: true, error: null });
@@ -158,6 +193,113 @@ export const useDetourStore = create<DetourState>()(
 
       selectConjunction: (conjunctionId: string | null) => {
         set({ selectedConjunction: conjunctionId });
+      },
+
+      // Step-by-step implementations
+      startStepByStep: async (conjunctionEventId: string, satelliteId: string) => {
+        set({ isLoading: true, error: null });
+        try {
+          const session = await apiStartStepByStep(conjunctionEventId, satelliteId, 'step_by_step');
+          set({
+            stepSession: session,
+            isStepByStepMode: true,
+            pendingCesiumActions: session.cesium_actions || [],
+          });
+        } catch (e: any) {
+          set({ error: e?.message ?? String(e) });
+        } finally {
+          set({ isLoading: false });
+        }
+      },
+
+      executeStep: async (agentName: string) => {
+        const { stepSession } = get();
+        if (!stepSession) {
+          set({ error: 'No active step session' });
+          return null;
+        }
+
+        set({ isLoading: true, error: null });
+        try {
+          const result = await apiExecuteAgentStep(stepSession.session_id, agentName);
+          
+          // Refresh session status
+          const updatedSession = await apiGetSessionStatus(stepSession.session_id);
+          
+          set({
+            stepSession: updatedSession,
+            pendingCesiumActions: [
+              ...get().pendingCesiumActions,
+              ...(result.cesium_actions || []),
+            ],
+          });
+          
+          return result;
+        } catch (e: any) {
+          set({ error: e?.message ?? String(e) });
+          return null;
+        } finally {
+          set({ isLoading: false });
+        }
+      },
+
+      approveStep: async (agentName: string, notes?: string) => {
+        const { stepSession } = get();
+        if (!stepSession) {
+          set({ error: 'No active step session' });
+          return;
+        }
+
+        set({ isLoading: true, error: null });
+        try {
+          const session = await apiApproveAgentStep(stepSession.session_id, agentName, notes);
+          set({ stepSession: session });
+        } catch (e: any) {
+          set({ error: e?.message ?? String(e) });
+        } finally {
+          set({ isLoading: false });
+        }
+      },
+
+      rejectStep: async (agentName: string, reason: string) => {
+        const { stepSession } = get();
+        if (!stepSession) {
+          set({ error: 'No active step session' });
+          return;
+        }
+
+        set({ isLoading: true, error: null });
+        try {
+          const session = await apiRejectAgentStep(stepSession.session_id, agentName, reason);
+          set({ 
+            stepSession: session,
+            isStepByStepMode: false,
+          });
+        } catch (e: any) {
+          set({ error: e?.message ?? String(e) });
+        } finally {
+          set({ isLoading: false });
+        }
+      },
+
+      refreshSessionStatus: async () => {
+        const { stepSession } = get();
+        if (!stepSession) return;
+
+        try {
+          const session = await apiGetSessionStatus(stepSession.session_id);
+          set({ stepSession: session });
+        } catch (e: any) {
+          set({ error: e?.message ?? String(e) });
+        }
+      },
+
+      clearStepSession: () => {
+        set({
+          stepSession: null,
+          pendingCesiumActions: [],
+          isStepByStepMode: false,
+        });
       },
     }),
     {

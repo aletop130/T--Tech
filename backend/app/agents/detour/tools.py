@@ -178,11 +178,47 @@ async def screen_conjunctions_tool(
         if sec_sat_id:
             priority_queue.append(sec_sat_id)
 
+    # Generate Cesium actions for visualization
+    cesium_actions = []
+    if screening_results:
+        # Zoom to primary satellite
+        cesium_actions.append({
+            "type": "zoom_to_satellite",
+            "satellite_id": satellite_id,
+            "height": 500000,
+            "duration": 2000
+        })
+        # Highlight primary
+        cesium_actions.append({
+            "type": "highlight_satellite",
+            "satellite_id": satellite_id,
+            "color": "#FF5722",
+            "pixel_size": 25
+        })
+        # Show threat radius
+        cesium_actions.append({
+            "type": "show_threat_radius",
+            "satellite_id": satellite_id,
+            "radius_km": threshold_km,
+            "color": "#FF5722"
+        })
+        # Show conjunction candidates
+        for idx, result in enumerate(screening_results[:3]):  # Top 3 threats
+            if result["secondary_satellite_id"]:
+                cesium_actions.append({
+                    "type": "show_conjunction_line",
+                    "satellite_a_id": satellite_id,
+                    "satellite_b_id": result["secondary_satellite_id"],
+                    "color": "#FF1744",
+                    "label": f"Threat {idx+1}: {result['miss_distance_km']:.2f}km"
+                })
+    
     return {
         "screening_results": screening_results,
         "threats_identified": len(candidates),
         "priority_queue": priority_queue,
-        "notes": f"Screened {len(catalog)} objects over {time_window_hours} h window.",
+        "notes": f"Screened {len(catalog)} objects over {time_window_hours} h window.",
+        "cesium_actions": cesium_actions,
     }
 
 
@@ -215,7 +251,56 @@ async def assess_risk_tool(
         "risk_factors": [],  # Placeholder – could be expanded later
         "recommended_action": "maneuver" if risk_level in ("high", "critical") else "monitor",
     }
-    return risk_assessment
+    
+    # Generate Cesium actions for visualization
+    cesium_actions = []
+    
+    # Zoom to conjunction event location
+    if conj.primary_object_id:
+        cesium_actions.append({
+            "type": "zoom_to_satellite",
+            "satellite_id": conj.primary_object_id,
+            "height": 1000000,
+            "duration": 2000
+        })
+        
+        # Color code based on risk level
+        risk_colors = {
+            "low": "#4CAF50",
+            "medium": "#FF9800", 
+            "high": "#F44336",
+            "critical": "#B71C1C"
+        }
+        color = risk_colors.get(risk_level, "#757575")
+        
+        cesium_actions.append({
+            "type": "highlight_satellite",
+            "satellite_id": conj.primary_object_id,
+            "color": color,
+            "pixel_size": 30
+        })
+        
+        # Show risk heatmap
+        cesium_actions.append({
+            "type": "show_risk_heatmap",
+            "satellite_id": conj.primary_object_id,
+            "risk_level": risk_level,
+            "probability": collision_probability
+        })
+        
+        # Show TCA countdown
+        if conj.tca:
+            cesium_actions.append({
+                "type": "show_tca_countdown",
+                "satellite_id": conj.primary_object_id,
+                "tca": conj.tca.isoformat(),
+                "miss_distance_km": miss_distance_km
+            })
+    
+    return {
+        **risk_assessment,
+        "cesium_actions": cesium_actions
+    }
 
 
 @tool
@@ -295,10 +380,49 @@ async def propose_maneuvers_tool(
         for opt in all_options
     ]
 
+    # Generate Cesium actions for visualization
+    cesium_actions = []
+    
+    if conj.primary_object_id:
+        # Show all maneuver trajectories
+        cesium_actions.append({
+            "type": "show_maneuver_options",
+            "satellite_id": conj.primary_object_id,
+            "maneuvers": options_serialised,
+            "recommended_id": recommended.maneuver_id
+        })
+        
+        # Zoom out to show full picture
+        cesium_actions.append({
+            "type": "zoom_to_satellite",
+            "satellite_id": conj.primary_object_id,
+            "height": 2000000,
+            "duration": 1500
+        })
+        
+        # Highlight recommended maneuver
+        cesium_actions.append({
+            "type": "highlight_recommended_maneuver",
+            "satellite_id": conj.primary_object_id,
+            "maneuver_id": recommended.maneuver_id,
+            "color": "#00E676"
+        })
+        
+        # Show fuel gauge visualization
+        if sat_state:
+            cesium_actions.append({
+                "type": "show_fuel_gauge",
+                "satellite_id": conj.primary_object_id,
+                "fuel_remaining": sat_state.fuel_remaining_kg or 0,
+                "fuel_capacity": 100.0,  # Default or from satellite specs
+                "maneuver_costs": [opt.get("fuel_cost_kg", 0) for opt in options_serialised]
+            })
+    
     return {
         "maneuver_options": options_serialised,
         "recommended_option": recommended.maneuver_id,
         "confidence": 0.9,
+        "cesium_actions": cesium_actions,
     }
 
 
@@ -354,6 +478,44 @@ async def validate_maneuver_tool(
         approved = False
 
     approval_level = "auto" if approved else "manual_review_required"
+    
+    # Generate Cesium actions for visualization
+    cesium_actions = []
+    
+    if analysis and analysis.conjunction_event and analysis.conjunction_event.primary_object_id:
+        sat_id = analysis.conjunction_event.primary_object_id
+        
+        if approved:
+            # Show approval animation
+            cesium_actions.append({
+                "type": "show_approval_badge",
+                "satellite_id": sat_id,
+                "status": "approved",
+                "color": "#00E676"
+            })
+            
+            # Remove threat visualization
+            cesium_actions.append({
+                "type": "clear_threat_visualization",
+                "satellite_id": sat_id
+            })
+        else:
+            # Show warning animation for manual review
+            cesium_actions.append({
+                "type": "show_warning_overlay",
+                "satellite_id": sat_id,
+                "message": "Manual Review Required",
+                "concerns": concerns
+            })
+            
+            # Highlight concerns on map
+            cesium_actions.append({
+                "type": "highlight_satellite",
+                "satellite_id": sat_id,
+                "color": "#FF5722",
+                "pulse": True
+            })
+    
     return {
         "approved": approved,
         "approval_level": approval_level,
@@ -361,6 +523,7 @@ async def validate_maneuver_tool(
         "modifications_required": [],
         "final_recommendation": "Proceed with execution" if approved else "Review required",
         "confidence": 0.95 if approved else 0.5,
+        "cesium_actions": cesium_actions,
     }
 
 
@@ -427,11 +590,50 @@ async def execute_maneuver_tool(
 
     await db.refresh(plan)
 
+    # Generate Cesium actions for visualization
+    cesium_actions = []
+    
+    if analysis and analysis.conjunction_event and analysis.conjunction_event.primary_object_id:
+        sat_id = analysis.conjunction_event.primary_object_id
+        
+        # Execute maneuver animation
+        cesium_actions.append({
+            "type": "animate_maneuver_execution",
+            "satellite_id": sat_id,
+            "maneuver_plan_id": maneuver_plan_id,
+            "duration": 5000  # 5 second animation
+        })
+        
+        # Show success confirmation
+        cesium_actions.append({
+            "type": "show_success_animation",
+            "satellite_id": sat_id,
+            "message": "Maneuver Executed Successfully"
+        })
+        
+        # Update satellite visualization with new orbit
+        cesium_actions.append({
+            "type": "update_orbit_visualization",
+            "satellite_id": sat_id,
+            "color": "#00E676",
+            "trail_length": 120  # Show 2 hours of orbit trail
+        })
+        
+        # Show ops brief overlay
+        cesium_actions.append({
+            "type": "show_mission_summary",
+            "satellite_id": sat_id,
+            "maneuver_id": maneuver_plan_id,
+            "fuel_remaining": sat_state.fuel_remaining_kg if sat_state else None,
+            "execution_time": plan.executed_at.isoformat() if plan.executed_at else None
+        })
+
     return {
         "maneuver_plan_id": maneuver_plan_id,
         "status": plan.status.value,
         "executed_at": plan.executed_at.isoformat() if plan.executed_at else None,
         "message": "Maneuver executed successfully",
+        "cesium_actions": cesium_actions,
     }
 
 

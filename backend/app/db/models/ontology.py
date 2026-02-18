@@ -167,7 +167,8 @@ class Orbit(Base, AuditMixin):
     tle_line1 = Column(String(80), nullable=True)
     tle_line2 = Column(String(80), nullable=True)
     bstar = Column(Float, nullable=True)
-    
+    is_tle_valid = Column(Boolean, default=True, nullable=True)
+
     # Derived
     orbit_type = Column(String(20), nullable=True)
     period_minutes = Column(Float, nullable=True)

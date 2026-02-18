@@ -583,7 +583,15 @@ export class ApiClient {
 
   // Celestrak Debris Import
   async fetchCelestrakDebris(): Promise<{ status: string; imported: number }> {
-    return this._fetch('/api/v1/debris/fetch-celestrak', { method: 'POST' });
+    return this._fetch('/api/v1/ontology/debris/fetch-celestrak', { method: 'POST' });
+  }
+
+  // Generate Synthetic Debris
+  async generateDebris(count: number): Promise<{ status: string; created: number }> {
+    return this._fetch('/api/v1/ontology/debris/generate', {
+      method: 'POST',
+      body: JSON.stringify({ count }),
+    });
   }
 
   async hideAlliedSatellites(): Promise<{

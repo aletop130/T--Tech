@@ -12,7 +12,7 @@ from typing import Any, Dict, List, Optional
 from pydantic import Field
 
 from app.schemas.common import AuditSchema, BaseSchema
-from app.db.models.detour import DetourAnalysisStatus, DetourManeuverStatus
+from app.db.models.detour import DetourAnalysisStatus, DetourManeuverStatus, DetourStepStatus, DetourExecutionMode
 
 
 class SatelliteStateSchema(AuditSchema):
@@ -29,6 +29,76 @@ class SatelliteStateSchema(AuditSchema):
     delta_v_budget_m_s: Optional[float] = Field(
         None, ge=0, description="Δv budget in meters per second"
     )
+
+
+class StepByStepRequest(BaseSchema):
+    """Request to start a step-by-step Detour analysis."""
+    
+    conjunction_event_id: str = Field(..., description="ID of the conjunction event")
+    satellite_id: str = Field(..., description="ID of the satellite to analyze")
+    execution_mode: DetourExecutionMode = Field(
+        DetourExecutionMode.STEP_BY_STEP,
+        description="Execution mode: auto or step_by_step"
+    )
+
+
+class AgentStepInfo(BaseSchema):
+    """Information about a single agent step."""
+    
+    agent_name: str
+    step_number: int
+    status: DetourStepStatus
+    output_summary: Optional[str] = None
+    cesium_actions: Optional[List[Dict[str, Any]]] = None
+    approved_by: Optional[str] = None
+    approved_at: Optional[datetime] = None
+    rejection_reason: Optional[str] = None
+    started_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
+
+
+class StepSessionResponse(BaseSchema):
+    """Response for a step-by-step session."""
+    
+    session_id: str
+    conjunction_event_id: str
+    satellite_id: str
+    execution_mode: DetourExecutionMode
+    status: str
+    current_agent: Optional[str] = None
+    current_step_number: Optional[int] = None
+    steps: List[AgentStepInfo] = Field(default_factory=list)
+    cesium_actions: Optional[List[Dict[str, Any]]] = None
+    final_ops_brief: Optional[Dict[str, Any]] = None
+    final_risk_level: Optional[str] = None
+    started_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
+
+
+class AgentApprovalRequest(BaseSchema):
+    """Request to approve or reject an agent step."""
+    
+    notes: Optional[str] = Field(None, max_length=500, description="Optional notes for approval/rejection")
+
+
+class AgentRejectRequest(BaseSchema):
+    """Request to reject an agent step."""
+    
+    reason: str = Field(..., max_length=500, description="Reason for rejection")
+
+
+class StepExecutionResponse(BaseSchema):
+    """Response after executing an agent step."""
+    
+    session_id: str
+    agent_name: str
+    step_number: int
+    status: DetourStepStatus
+    output_summary: str
+    cesium_actions: Optional[List[Dict[str, Any]]] = None
+    next_step_available: bool = False
+    next_agent: Optional[str] = None
+    message: str
 
 
 class ConjunctionAnalysisRequest(BaseSchema):

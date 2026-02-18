@@ -13,6 +13,7 @@ import {
   Icon,
   Tabs,
   Tab,
+  Dialog,
 } from '@blueprintjs/core';
 import { api, ProximityAlert, Incident } from '@/lib/api';
 import { formatDistanceToNow } from '@/lib/utils';
@@ -45,6 +46,7 @@ export const UnifiedAlertsPanel: React.FC<UnifiedAlertsPanelProps> = ({
   const [maneuverError, setManeuverError] = useState<string | null>(null);
   
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
+  const [isExpanded, setIsExpanded] = useState(false);
 
   const fetchProximityAlerts = async () => {
     try {
@@ -384,8 +386,13 @@ export const UnifiedAlertsPanel: React.FC<UnifiedAlertsPanelProps> = ({
             Updated {formatDistanceToNow(lastUpdated)}
           </span>
           <Button
+            icon="maximize"
+            minimal
+            onClick={() => setIsExpanded(true)}
+            title="Espandi alerts"
+          />
+          <Button
             icon="refresh"
-           
             minimal
             loading={proximityLoading || cyberLoading || maneuverLoading}
             onClick={fetchAllAlerts}
@@ -408,7 +415,7 @@ export const UnifiedAlertsPanel: React.FC<UnifiedAlertsPanelProps> = ({
             </span>
           }
           panel={
-            <div style={{ height: '200px', overflowY: 'auto', padding: '8px' }}>
+            <div style={{ height: '150px', overflowY: 'auto', padding: '8px' }}>
               {renderProximityContent()}
             </div>
           }
@@ -422,7 +429,7 @@ export const UnifiedAlertsPanel: React.FC<UnifiedAlertsPanelProps> = ({
             </span>
           }
           panel={
-            <div style={{ height: '200px', overflowY: 'auto', padding: '8px' }}>
+            <div style={{ height: '150px', overflowY: 'auto', padding: '8px' }}>
               {renderCyberContent()}
             </div>
           }
@@ -436,12 +443,84 @@ export const UnifiedAlertsPanel: React.FC<UnifiedAlertsPanelProps> = ({
             </span>
           }
           panel={
-            <div style={{ height: '200px', overflowY: 'auto', padding: '8px' }}>
+            <div style={{ height: '150px', overflowY: 'auto', padding: '8px' }}>
               {renderManeuverContent()}
             </div>
           }
         />
       </Tabs>
+
+      <Dialog
+        isOpen={isExpanded}
+        onClose={() => setIsExpanded(false)}
+        title="Alert - Space Domain Awareness"
+        style={{ width: '80vw', maxWidth: 900 }}
+        className="bg-sda-bg-secondary"
+      >
+        <div className="p-4">
+          <div className="flex gap-2 mb-4">
+            {criticalCount > 0 && (
+              <Tag intent="danger" large>{criticalCount} Critical</Tag>
+            )}
+            {highCount > 0 && (
+              <Tag intent="warning" large>{highCount} High</Tag>
+            )}
+            <Tag intent="primary" large>
+              {proximityAlerts.length + cyberAlerts.length + maneuverAlerts.length} Total
+            </Tag>
+          </div>
+
+          <Tabs 
+            id="alerts-tabs-expanded" 
+            selectedTabId={activeTab}
+            onChange={(newTab) => setActiveTab(newTab as 'proximity' | 'cyber' | 'maneuver')}
+            large
+          >
+            <Tab 
+              id="proximity" 
+              title={
+                <span className="flex items-center gap-2 text-lg">
+                  <Icon icon="tick-circle" />
+                  Proximity ({proximityAlerts.length})
+                </span>
+              }
+              panel={
+                <div style={{ height: '300px', overflowY: 'auto', padding: '12px' }}>
+                  {renderProximityContent()}
+                </div>
+              }
+            />
+            <Tab 
+              id="cyber" 
+              title={
+                <span className="flex items-center gap-2 text-lg">
+                  <Icon icon="shield" />
+                  Cyber ({cyberAlerts.length})
+                </span>
+              }
+              panel={
+                <div style={{ height: '300px', overflowY: 'auto', padding: '12px' }}>
+                  {renderCyberContent()}
+                </div>
+              }
+            />
+            <Tab 
+              id="maneuver" 
+              title={
+                <span className="flex items-center gap-2 text-lg">
+                  <Icon icon="move" />
+                  Maneuver ({maneuverAlerts.length})
+                </span>
+              }
+              panel={
+                <div style={{ height: '300px', overflowY: 'auto', padding: '12px' }}>
+                  {renderManeuverContent()}
+                </div>
+              }
+            />
+          </Tabs>
+        </div>
+      </Dialog>
     </Card>
   );
 };

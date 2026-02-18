@@ -54,7 +54,10 @@ export class SSEChatClient {
 
   constructor(config: SSEChatClientConfig) {
     this.config = config;
-    this.baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+    // Use relative URL in browser to leverage Next.js rewrites, direct URL on server
+    this.baseUrl = typeof window !== 'undefined'
+      ? ''  // Browser: use relative URLs (goes through Next.js rewrites)
+      : (process.env.NEXT_PUBLIC_API_URL || 'http://backend:8000');  // Server: use direct backend URL
     this.tenantId = 'default';
   }
 
@@ -66,9 +69,12 @@ export class SSEChatClient {
     this.isComplete = false;
     this.actionsCount = 0;
 
-    const url = new URL(`${this.baseUrl}/api/v1/ai/chat/stream`);
-    
-    const response = await fetch(url.toString(), {
+    // Construct URL - use URL constructor for absolute URLs, string concatenation for relative
+    const url = this.baseUrl
+      ? new URL(`${this.baseUrl}/api/v1/ai/chat/stream`).toString()
+      : '/api/v1/ai/chat/stream';
+
+    const response = await fetch(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

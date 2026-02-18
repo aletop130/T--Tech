@@ -24,7 +24,7 @@ from app.services.audit import AuditService
 from app.schemas.ontology import SatelliteCreate, OrbitCreate
 from app.db.models.ontology import ObjectType
 
-DEFAULT_URL = "https://celestrak.com/NORAD/elements/debris.txt"
+DEFAULT_URL = "https://celestrak.org/NORAD/elements/tle-new.txt"
 
 
 async def fetch_debris_tle(url: str | None = None) -> str:

@@ -8,6 +8,7 @@ from app.api.v1 import (
     ingestion,
     analytics,
     ai,
+    ai_detour,
     audit,
     detour,
     search,
@@ -46,6 +47,12 @@ api_router.include_router(
     ai.router,
     prefix="/ai",
     tags=["AI"],
+)
+
+api_router.include_router(
+    ai_detour.router,
+    prefix="/ai",
+    tags=["AI Agents - Detour"],
 )
 
 api_router.include_router(

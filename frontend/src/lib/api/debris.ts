@@ -32,7 +32,7 @@ async function fetchWithBackoff<T>(
     try {
       const headers = {
         'Content-Type': 'application/json',
-        'X‑Tenant‑ID': DEFAULT_TENANT_ID,
+        'X-Tenant-ID': DEFAULT_TENANT_ID,
         ...(init.headers ?? {}),
       } as Record<string, string>;
 

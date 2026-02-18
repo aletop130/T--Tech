@@ -20,13 +20,14 @@ import { GroundVehicleInfoCard } from '@/components/CesiumMap/GroundVehicleInfoC
 import { ConjunctionInfoCard } from '@/components/CesiumMap/ConjunctionInfoCard';
 import { DebrisInstancedLayer } from '@/components/CesiumMap/DebrisInstancedLayer';
 import { DebrisInfoCard } from '@/components/CesiumMap/DebrisInfoCard';
+import { DebrisAddMenu } from '@/components/CesiumMap/DebrisAddMenu';
 import { OrbitalTrackLayer } from '@/components/CesiumMap/OrbitalTrackLayer';
 import { MovingSatelliteMarker } from '@/components/CesiumMap/MovingSatelliteMarker';
 import { SolarSystemLayer } from '@/components/CesiumMap/SolarSystemLayer';
 import { PlanetInfoBox } from '@/components/CesiumMap/PlanetInfoBox';
 import { PLANETS, type CelestialBody } from '@/lib/solarSystem/data';
 import { AgentChat } from '@/components/Chat/AgentChat';
-import { UnifiedAlertsPanel } from '@/components/ProximityAlertPanel/UnifiedAlertsPanel';
+import { CompactAlertsButton } from '@/components/ProximityAlertPanel/CompactAlertsButton';
 import { cesiumController } from '@/lib/cesium/controller';
 import { SimulatedSatelliteLayer } from '@/components/CesiumMap/SimulatedSatelliteLayer';
 import { MilitarySymbolLayer } from '@/components/CesiumMap/MilitarySymbolLayer';
@@ -40,11 +41,8 @@ declare global {
   }
 }
 
-// Dynamically import Cesium to avoid SSR issues
-const DynamicCesiumViewer = dynamic(
-  () => Promise.resolve(CesiumViewer),
-  { ssr: false }
-);
+// Dynamically import Cesium to avoid SSR issues (simplified for testing)
+const DynamicCesiumViewer = CesiumViewer;
 
 // Initialize satellite.js promise - wait for it before using
 let satellitePromise: Promise<typeof import('satellite.js') | null> | null = null;
@@ -498,13 +496,17 @@ const loadDebris = async () => {
           } else {
             setOrbitTrack(null);
           }
-        } else if (selectedDebris) {
-          const response = await getOrbit(selectedDebris.noradId);
-          const Cesium = await getCesium();
-          const points = response.points.map((p) => Cesium.Cartesian3.fromDegrees(p.lon, p.lat, p.altKm * 1000));
-          const timeStartMs = new Date(response.timeStartUtc).getTime();
-          setOrbitTrack({ points, timeStartMs, stepSec: response.stepSec });
-        } else {
+         } else if (selectedDebris) {
+           if (isSimulationMode) {
+             const response = await getOrbit(selectedDebris.noradId);
+             const Cesium = await getCesium();
+             const points = response.points.map((p) => Cesium.Cartesian3.fromDegrees(p.lon, p.lat, p.altKm * 1000));
+             const timeStartMs = new Date(response.timeStartUtc).getTime();
+             setOrbitTrack({ points, timeStartMs, stepSec: response.stepSec });
+           } else {
+             setOrbitTrack(null);
+           }
+         } else {
           setOrbitTrack(null);
         }
       } catch (e) {
@@ -692,6 +694,16 @@ const fetchFamousSatellites = async () => {
 
   return (
     <div className="h-full w-full relative overflow-hidden">
+
+          {showDebris && (
+            <DebrisInstancedLayer
+              viewer={viewer}
+              debris={debris}
+              maxDisplayObjects={2500}
+              refreshIntervalMs={15000}
+              showDebris={showDebris}
+            />
+          )}
       {/* Map - Full Background */}
       <div className="absolute inset-0 z-0">
         {loading ? (
@@ -704,7 +716,7 @@ const fetchFamousSatellites = async () => {
               className="w-full h-full"
               onViewerReady={handleViewerReady}
             />
-            {viewer && (
+            <>
               <>
                 {viewMode === 'earth' ? (
                   <>
@@ -744,7 +756,7 @@ const fetchFamousSatellites = async () => {
                         satellitePositions={satellitePositionsRef.current}
                       />
                     )}
-                    {!isSimulationMode && showDebris && (
+                    {!isSimulationMode && (
                       <DebrisInstancedLayer
                         viewer={viewer}
                         debris={debris}
@@ -788,44 +800,13 @@ const fetchFamousSatellites = async () => {
                       onManeuver={() => setManeuverStartMs(Date.now())}
                     />
 )}
-{orbitTrack && viewer && !isSimulationMode && (
+{orbitTrack && viewer && ((selectedDebris && isSimulationMode) || (selectedSatellite && !isSimulationMode)) && (
   <>
     <OrbitalTrackLayer viewer={viewer} orbitTrack={orbitTrack} maneuverStartMs={maneuverStartMs} />
     <MovingSatelliteMarker viewer={viewer} orbitTrack={orbitTrack} maneuverStartMs={maneuverStartMs} />
   </>
 )}
-                    {isSimulationMode && (
-                      <>
-                        <SimulatedSatelliteLayer
-                          viewer={viewer}
-                          satellites={simSatellites.map(sat => ({
-                            id: sat.id,
-                            name: sat.name,
-                            type: sat.type,
-                            position: sat.currentPosition || sat.initialPosition,
-                            status: sat.status as 'online' | 'degraded' | 'maneuvering' | 'offline',
-                            fuelPercent: sat.fuelPercent,
-                            affiliation: sat.affiliation as 'allied' | 'hostile' | 'neutral' | undefined,
-                          }))}
-                          showManeuvers={true}
-                          showDataLinks={true}
-                          simulationTime={simTime}
-                        />
-                        <MilitarySymbolLayer
-                          viewer={viewer}
-                          units={simGroundUnits.map(unit => ({
-                            id: unit.id,
-                            name: unit.name,
-                            sidc: unit.sidc,
-                            position: unit.position,
-                            affiliation: unit.affiliation,
-                            status: unit.status,
-                            heading: unit.movements?.find(m => m.time <= simTime)?.heading,
-                            speed: unit.movements?.find(m => m.time <= simTime)?.speed,
-                          }))}
-                        />
-                      </>
-                    )}
+
                   </>
                 ) : (
                   <>
@@ -912,19 +893,14 @@ const fetchFamousSatellites = async () => {
             >
               Earth
             </Button>
-            <Button
-              intent={viewMode === 'solar' ? Intent.PRIMARY : Intent.NONE}
-              onClick={() => {
-                setViewMode('solar');
-                setFocusedBody(null);
-                setSelectedSatellite(null);
+            <CompactAlertsButton 
+              onAlertClick={(alert) => {
+                const sat = satellites.find(s => s.name === alert.primary_satellite_name);
+                if (sat) {
+                  flyToSatellite(sat);
+                }
               }}
-              icon="globe-network"
-              minimal
-              small
-            >
-              Solar
-            </Button>
+            />
             <Button
               intent={Intent.PRIMARY}
               loading={fetchingFamous}
@@ -994,38 +970,20 @@ const fetchFamousSatellites = async () => {
                     </button>
                   </div>
                 )}
-                <button
-                  className={`px-2 py-0.5 text-xs rounded ${
-                    showTerrain
-                      ? 'bg-green-600 text-white'
-                      : 'bg-sda-bg-tertiary text-sda-text-secondary'
-                  }`}
-                  onClick={() => {
-                    setShowTerrain(!showTerrain);
-                    if (!terrainAvailable && !showTerrain) {
-                      alert('Terrain requires CESIUM_ION_TOKEN in environment variables');
-                    }
-                  }}
-                >
-                  Terrain: {showTerrain ? 'ON' : 'OFF'}
-                </button>
                 <Checkbox
                   checked={showConjunctions}
                   onChange={(e) => setShowConjunctions(e.currentTarget.checked)}
                   label="Conj"
                   labelElement={<span className="text-xs text-sda-text-secondary">Conj</span>}
                 />
-                {/* Debris toggle and counter */}
+                {/* Debris toggle and counter with dropdown */}
                 <Checkbox
                   checked={showDebris}
                   onChange={(e) => setShowDebris(e.currentTarget.checked)}
                   label="Debris"
                   labelElement={<span className="text-xs text-sda-text-secondary">Debris</span>}
                 />
-                <span className="flex items-center gap-1 ml-2">
-                  <span className="w-2 h-2 rounded-full" style={{ backgroundColor: '#f59e0b' }}></span>
-                  <Tag minimal intent="warning">Debris: {debris.length}</Tag>
-                </span>
+                <DebrisAddMenu debrisCount={debris.length} />
               </div>
             </>
           ) : (
@@ -1400,25 +1358,11 @@ const fetchFamousSatellites = async () => {
         </div>
         )}
 
-        {/* Right Panel - Alerts & AI Chat - Hidden during simulation */}
+        {/* Right Panel - AI Chat - Hidden during simulation */}
         {!isSimulationMode && (
         <div className="absolute right-4 top-16 bottom-4 w-96 pointer-events-auto flex flex-col gap-4">
-          {/* Unified Alerts Panel */}
-          {viewMode === 'earth' && (
-            <div className="h-80 bg-sda-bg-secondary/60 backdrop-blur-sm rounded-lg border border-sda-border-default shadow-lg overflow-hidden">
-              <UnifiedAlertsPanel 
-                onAlertClick={(alert) => {
-                  const sat = satellites.find(s => s.name === alert.primary_satellite_name);
-                  if (sat) {
-                    flyToSatellite(sat);
-                  }
-                }}
-              />
-            </div>
-          )}
-          
           {/* AI Chat Panel */}
-          <div className="flex-1 bg-sda-bg-secondary/60 backdrop-blur-sm rounded-lg border border-sda-border-default px-4 py-2 shadow-lg flex flex-col overflow-hidden min-h-0">
+          <div className="flex-[2] bg-sda-bg-secondary/60 backdrop-blur-sm rounded-lg border border-sda-border-default px-4 py-2 shadow-lg flex flex-col overflow-hidden min-h-0">
             <div className="flex items-center justify-between p-2 border-b border-sda-border-default">
               <span className="text-sm font-semibold text-sda-text-primary flex items-center gap-2">
                 <Icon icon="chat" className="text-sda-accent-cyan" />

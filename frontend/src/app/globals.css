@@ -281,3 +281,16 @@ kbd,
   right: 1rem;
   z-index: 10;
 }
+
+/* Increase button opacity by 20% */
+.bp5-button {
+  opacity: 1 !important;
+}
+
+.bp5-button.bp5-minimal {
+  opacity: 0.95 !important;
+}
+
+.bp5-button.bp5-outline {
+  opacity: 1 !important;
+}

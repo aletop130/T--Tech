@@ -15,7 +15,7 @@ const DEFAULT_TENANT_ID = 'default';
 async function fetchJson<T>(url: string, init: RequestInit = {}): Promise<T> {
   const headers = {
     'Content-Type': 'application/json',
-    'X‑Tenant‑ID': DEFAULT_TENANT_ID,
+    'X-Tenant-ID': DEFAULT_TENANT_ID,
     ...(init.headers ?? {}),
   } as Record<string, string>;
 
@@ -180,4 +180,210 @@ export const detourApi = {
   executeManeuver,
   getSatelliteState,
   runScreening,
+  // Step-by-step functions
+  startStepByStep,
+  executeAgentStep,
+  approveAgentStep,
+  rejectAgentStep,
+  getSessionStatus,
+  getNextStep,
 };
+
+/* ==========================================================================
+   Step-by-step Pipeline API
+   ========================================================================== */
+
+export type ExecutionMode = 'auto' | 'step_by_step';
+export type StepStatus = 'pending' | 'running' | 'waiting_approval' | 'completed' | 'rejected' | 'error';
+
+export interface StepByStepRequest {
+  conjunction_event_id: string;
+  satellite_id: string;
+  execution_mode: ExecutionMode;
+}
+
+export interface AgentStepInfo {
+  agent_name: string;
+  step_number: number;
+  status: StepStatus;
+  output_summary?: string;
+  cesium_actions?: CesiumAction[];
+  approved_by?: string;
+  approved_at?: string;
+  rejection_reason?: string;
+}
+
+export interface StepSessionResponse {
+  session_id: string;
+  conjunction_event_id: string;
+  satellite_id: string;
+  execution_mode: ExecutionMode;
+  status: string;
+  current_agent?: string;
+  current_step_number?: number;
+  steps?: AgentStepInfo[];
+  cesium_actions?: CesiumAction[];
+  final_ops_brief?: Record<string, unknown>;
+  final_risk_level?: string;
+  started_at?: string;
+  completed_at?: string;
+}
+
+export interface StepExecutionResponse {
+  session_id: string;
+  agent_name: string;
+  step_number: number;
+  status: StepStatus;
+  output_summary: string;
+  cesium_actions?: CesiumAction[];
+  next_step_available: boolean;
+  next_agent?: string;
+  message: string;
+}
+
+export interface CesiumAction {
+  type: string;
+  payload: Record<string, unknown>;
+}
+
+export interface NextStepResponse {
+  available: boolean;
+  agent_name?: string;
+  step_number?: number;
+  status?: StepStatus;
+  output_summary?: string;
+  cesium_actions?: CesiumAction[];
+  message?: string;
+}
+
+/** Start a new step-by-step Detour analysis session.
+ *  Immediately executes the Scout agent and returns the session.
+ */
+export async function startStepByStep(
+  conjunctionEventId: string,
+  satelliteId: string,
+  executionMode: ExecutionMode = 'step_by_step'
+): Promise<StepSessionResponse> {
+  const url = `${API_BASE}/api/v1/ai/agents/detour/start`;
+  const payload: StepByStepRequest = {
+    conjunction_event_id: conjunctionEventId,
+    satellite_id: satelliteId,
+    execution_mode: executionMode,
+  };
+  return fetchJson<StepSessionResponse>(url, { method: 'POST', body: JSON.stringify(payload) });
+}
+
+/** Execute a specific agent step. */
+export async function executeAgentStep(
+  sessionId: string,
+  agentName: string
+): Promise<StepExecutionResponse> {
+  const url = `${API_BASE}/api/v1/ai/agents/detour/sessions/${encodeURIComponent(sessionId)}/steps/${encodeURIComponent(agentName)}/execute`;
+  return fetchJson<StepExecutionResponse>(url, { method: 'POST' });
+}
+
+/** Approve the current agent step. */
+export async function approveAgentStep(
+  sessionId: string,
+  agentName: string,
+  notes?: string
+): Promise<StepSessionResponse> {
+  const url = `${API_BASE}/api/v1/ai/agents/detour/sessions/${encodeURIComponent(sessionId)}/steps/${encodeURIComponent(agentName)}/approve`;
+  const body = notes ? { notes } : {};
+  return fetchJson<StepSessionResponse>(url, { method: 'POST', body: JSON.stringify(body) });
+}
+
+/** Reject the current agent step. */
+export async function rejectAgentStep(
+  sessionId: string,
+  agentName: string,
+  reason: string
+): Promise<StepSessionResponse> {
+  const url = `${API_BASE}/api/v1/ai/agents/detour/sessions/${encodeURIComponent(sessionId)}/steps/${encodeURIComponent(agentName)}/reject`;
+  return fetchJson<StepSessionResponse>(url, { method: 'POST', body: JSON.stringify({ reason }) });
+}
+
+/** Get the complete status of a step-by-step session. */
+export async function getSessionStatus(sessionId: string): Promise<StepSessionResponse> {
+  const url = `${API_BASE}/api/v1/ai/agents/detour/sessions/${encodeURIComponent(sessionId)}`;
+  return fetchJson<StepSessionResponse>(url);
+}
+
+/** Get the next available step for execution. */
+export async function getNextStep(sessionId: string): Promise<NextStepResponse> {
+  const url = `${API_BASE}/api/v1/ai/agents/detour/sessions/${encodeURIComponent(sessionId)}/next`;
+  return fetchJson<NextStepResponse>(url);
+}
+
+/* ==========================================================================
+   Archive API
+   ========================================================================== */
+
+export interface ArchivedAnalysis {
+  id: string;
+  session_id: string;
+  conjunction_event_id: string;
+  satellite_id: string;
+  satellite_name?: string;
+  status: string;
+  final_risk_level?: string;
+  was_executed: boolean;
+  executed_at?: string;
+  created_at?: string;
+  completed_at?: string;
+  steps_summary?: Array<{
+    agent: string;
+    status: string;
+    output_summary?: string;
+  }>;
+}
+
+export interface ArchiveListResponse {
+  items: ArchivedAnalysis[];
+  total: number;
+  page: number;
+  limit: number;
+  pages: number;
+}
+
+export interface ArchivedAnalysisDetail extends ArchivedAnalysis {
+  recommended_maneuver?: Record<string, unknown>;
+}
+
+/** List archived analyses with pagination and filters. */
+export async function listArchivedAnalyses(
+  page: number = 1,
+  limit: number = 20,
+  satelliteId?: string,
+  riskLevel?: string
+): Promise<ArchiveListResponse> {
+  const params = new URLSearchParams({
+    page: String(page),
+    limit: String(limit),
+  });
+  if (satelliteId) params.set('satellite_id', satelliteId);
+  if (riskLevel) params.set('risk_level', riskLevel);
+  
+  const url = `${API_BASE}/api/v1/ai/agents/detour/archive?${params}`;
+  return fetchJson<ArchiveListResponse>(url);
+}
+
+/** Get detailed information about a specific archived analysis. */
+export async function getArchivedAnalysis(analysisId: string): Promise<ArchivedAnalysisDetail> {
+  const url = `${API_BASE}/api/v1/ai/agents/detour/archive/${encodeURIComponent(analysisId)}`;
+  return fetchJson<ArchivedAnalysisDetail>(url);
+}
+
+/** Start a new analysis based on an archived one. */
+export async function reanalyzeArchived(analysisId: string): Promise<{
+  message: string;
+  new_session_id: string;
+  archived_session_id: string;
+}> {
+  const url = `${API_BASE}/api/v1/ai/agents/detour/archive/${encodeURIComponent(analysisId)}/reanalyze`;
+  return fetchJson<{
+    message: string;
+    new_session_id: string;
+    archived_session_id: string;
+  }>(url, { method: 'POST' });
+}

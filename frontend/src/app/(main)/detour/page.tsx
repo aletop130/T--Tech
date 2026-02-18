@@ -10,6 +10,7 @@ import { ManeuverPlanner } from '@/components/Detour/ManeuverPlanner';
 import { OrbitVisualizer } from '@/components/Detour/OrbitVisualizer';
 import { OpsBriefPanel } from '@/components/Detour/OpsBriefPanel';
 import { AgentChat } from '@/components/Detour/AgentChat';
+import { DetourArchive } from '@/components/Detour/DetourArchive';
 import { useDetourStore } from '@/lib/store/detour';
 
 // Simple error boundary component
@@ -81,12 +82,7 @@ export default function DetourPage() {
 
   const renderManeuversTab = () => <ManeuverPlanner />;
 
-  const renderHistoryTab = () => (
-    <Card>
-      <h4 className="text-md font-medium mb-2">Analysis History</h4>
-      <p className="text-sm text-sda-text-muted">Historical analysis sessions will be displayed here.</p>
-    </Card>
-  );
+  const renderHistoryTab = () => <DetourArchive />;
 
   return (
     <ErrorBoundary>

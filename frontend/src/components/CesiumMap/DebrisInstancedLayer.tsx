@@ -84,7 +84,7 @@ export function DebrisInstancedLayer({
       );
       const modelMatrix = Cesium.Matrix4.fromTranslation(position);
       const sphereGeometry = new Cesium.SphereGeometry({
-        radius: 500, // 500 m – small enough to appear as a point at typical zoom levels
+        radius: 100,
         stackPartitions: 3,
         slicePartitions: 3,
       });

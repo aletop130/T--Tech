@@ -511,6 +511,473 @@ this.viewer.camera.flyTo({
     }
   }
 
+  // Execute custom action from agent pipeline
+  executeAction(action: { type: string; [key: string]: unknown }): void {
+    if (!this.viewer || !this.Cesium) {
+      console.warn('Cesium viewer not initialized');
+      return;
+    }
+
+    const Cesium = this.Cesium;
+    const viewer = this.viewer;
+
+    switch (action.type) {
+      case 'zoom_to_satellite':
+        this.zoomToSatellite(action as { satellite_id?: string; height?: number; duration?: number });
+        break;
+      case 'highlight_satellite':
+        this.highlightSatellite(action as { satellite_id?: string; color?: string; pixel_size?: number; pulse?: boolean });
+        break;
+      case 'show_threat_radius':
+        this.showThreatRadius(action as { satellite_id?: string; radius_km?: number; color?: string });
+        break;
+      case 'show_conjunction_line':
+        this.showConjunctionLine(action as { satellite_a_id?: string; satellite_b_id?: string; color?: string; label?: string });
+        break;
+      case 'show_risk_heatmap':
+        this.showRiskHeatmap(action as { satellite_id?: string; risk_level?: string; probability?: number });
+        break;
+      case 'show_tca_countdown':
+        this.showTcaCountdown(action as { satellite_id?: string; tca?: string; miss_distance_km?: number });
+        break;
+      case 'show_maneuver_options':
+        this.showManeuverOptions(action as { satellite_id?: string; maneuvers?: Array<{ maneuver_id: string; type: string; delta_v_m_s: number }>; recommended_id?: string });
+        break;
+      case 'highlight_recommended_maneuver':
+        this.highlightRecommendedManeuver(action as { satellite_id?: string; maneuver_id?: string; color?: string });
+        break;
+      case 'show_fuel_gauge':
+        this.showFuelGauge(action as { satellite_id?: string; fuel_remaining?: number; fuel_capacity?: number; maneuver_costs?: number[] });
+        break;
+      case 'show_approval_badge':
+        this.showApprovalBadge(action as { satellite_id?: string; status?: string; color?: string });
+        break;
+      case 'clear_threat_visualization':
+        this.clearThreatVisualization(action as { satellite_id?: string });
+        break;
+      case 'show_warning_overlay':
+        this.showWarningOverlay(action as { satellite_id?: string; message?: string; concerns?: string[] });
+        break;
+      case 'animate_maneuver_execution':
+        this.animateManeuverExecution(action as { satellite_id?: string; maneuver_plan_id?: string; duration?: number });
+        break;
+      case 'show_success_animation':
+        this.showSuccessAnimation(action as { satellite_id?: string; message?: string });
+        break;
+      case 'update_orbit_visualization':
+        this.updateOrbitVisualization(action as { satellite_id?: string; color?: string; trail_length?: number });
+        break;
+      case 'show_mission_summary':
+        this.showMissionSummary(action as { satellite_id?: string; maneuver_id?: string; fuel_remaining?: number; execution_time?: string });
+        break;
+      default:
+        console.warn('Unknown action type:', action.type);
+    }
+  }
+
+  private zoomToSatellite(action: { satellite_id?: string; height?: number; duration?: number }): void {
+    if (!this.viewer || !this.Cesium || !action.satellite_id) return;
+
+    const entity = this.viewer.entities.getById(`satellite-${action.satellite_id}`);
+    if (entity) {
+      this.viewer.flyTo(entity, {
+        duration: action.duration || 2,
+        offset: new this.Cesium.HeadingPitchRange(
+          this.Cesium.Math.toRadians(0),
+          this.Cesium.Math.toRadians(-45),
+          action.height || 1000000
+        ),
+      });
+    }
+  }
+
+  private highlightSatellite(action: { satellite_id?: string; color?: string; pixel_size?: number; pulse?: boolean }): void {
+    if (!this.viewer || !this.Cesium || !action.satellite_id) return;
+
+    const entity = this.viewer.entities.getById(`satellite-${action.satellite_id}`);
+    if (entity && entity.point) {
+      const color = this.Cesium.Color.fromCssColorString(action.color || '#FFFFFF');
+      entity.point.color = new this.Cesium.ConstantProperty(color);
+      entity.point.pixelSize = new this.Cesium.ConstantProperty(action.pixel_size || 20);
+      entity.point.outlineWidth = new this.Cesium.ConstantProperty(3);
+    }
+  }
+
+  private showThreatRadius(action: { satellite_id?: string; radius_km?: number; color?: string }): void {
+    if (!this.viewer || !this.Cesium || !action.satellite_id) return;
+
+    const entity = this.viewer.entities.getById(`satellite-${action.satellite_id}`);
+    if (entity && entity.position) {
+      const radius = (action.radius_km || 5) * 1000; // Convert to meters
+      const color = this.Cesium.Color.fromCssColorString(action.color || '#FF5722');
+
+      this.viewer.entities.add({
+        id: `threat-radius-${action.satellite_id}`,
+        position: entity.position,
+        ellipse: {
+          semiMinorAxis: radius,
+          semiMajorAxis: radius,
+          material: color.withAlpha(0.2),
+          outline: true,
+          outlineColor: color,
+          outlineWidth: 2,
+        },
+      });
+    }
+  }
+
+  private showConjunctionLine(action: { satellite_a_id?: string; satellite_b_id?: string; color?: string; label?: string }): void {
+    if (!this.viewer || !this.Cesium || !action.satellite_a_id || !action.satellite_b_id) return;
+
+    const entityA = this.viewer.entities.getById(`satellite-${action.satellite_a_id}`);
+    const entityB = this.viewer.entities.getById(`satellite-${action.satellite_b_id}`);
+
+    if (entityA && entityB && entityA.position && entityB.position) {
+      const color = this.Cesium.Color.fromCssColorString(action.color || '#FF1744');
+
+      this.viewer.entities.add({
+        id: `conjunction-line-${action.satellite_a_id}-${action.satellite_b_id}`,
+        polyline: {
+          positions: new this.Cesium.CallbackProperty(() => {
+            const posA = entityA.position!.getValue(this.Cesium!.JulianDate.now());
+            const posB = entityB.position!.getValue(this.Cesium!.JulianDate.now());
+            if (!posA || !posB) return [];
+            return [posA, posB];
+          }, false),
+          width: 3,
+          material: new this.Cesium.PolylineGlowMaterialProperty({
+            glowPower: 0.3,
+            color: color,
+          }),
+        },
+        label: {
+          text: action.label || 'Threat',
+          font: '12px monospace',
+          fillColor: color,
+          outlineColor: this.Cesium.Color.BLACK,
+          outlineWidth: 2,
+          style: this.Cesium.LabelStyle.FILL_AND_OUTLINE,
+          verticalOrigin: this.Cesium.VerticalOrigin.BOTTOM,
+          pixelOffset: new this.Cesium.Cartesian2(0, -10),
+        },
+      });
+    }
+  }
+
+  private showRiskHeatmap(action: { satellite_id?: string; risk_level?: string; probability?: number }): void {
+    if (!this.viewer || !this.Cesium || !action.satellite_id) return;
+
+    const entity = this.viewer.entities.getById(`satellite-${action.satellite_id}`);
+    if (entity && entity.position) {
+      const riskColors: Record<string, string> = {
+        low: '#4CAF50',
+        medium: '#FF9800',
+        high: '#F44336',
+        critical: '#B71C1C',
+      };
+      const color = this.Cesium.Color.fromCssColorString(riskColors[action.risk_level || 'low'] || '#757575');
+
+      this.viewer.entities.add({
+        id: `risk-heatmap-${action.satellite_id}`,
+        position: entity.position,
+        ellipse: {
+          semiMinorAxis: 200000,
+          semiMajorAxis: 200000,
+          material: color.withAlpha(0.3),
+          outline: true,
+          outlineColor: color,
+          outlineWidth: 2,
+        },
+      });
+    }
+  }
+
+  private showTcaCountdown(action: { satellite_id?: string; tca?: string; miss_distance_km?: number }): void {
+    if (!this.viewer || !this.Cesium || !action.satellite_id) return;
+
+    const entity = this.viewer.entities.getById(`satellite-${action.satellite_id}`);
+    if (entity && entity.position) {
+      const tca = new Date(action.tca || '');
+      const now = new Date();
+      const hoursUntil = Math.max(0, (tca.getTime() - now.getTime()) / (1000 * 60 * 60));
+
+      this.viewer.entities.add({
+        id: `tca-countdown-${action.satellite_id}`,
+        position: entity.position,
+        label: {
+          text: `TCA: ${hoursUntil.toFixed(1)}h | Miss: ${(action.miss_distance_km || 0).toFixed(2)}km`,
+          font: '14px monospace',
+          fillColor: hoursUntil < 24 ? this.Cesium.Color.RED : this.Cesium.Color.YELLOW,
+          outlineColor: this.Cesium.Color.BLACK,
+          outlineWidth: 2,
+          style: this.Cesium.LabelStyle.FILL_AND_OUTLINE,
+          verticalOrigin: this.Cesium.VerticalOrigin.TOP,
+          pixelOffset: new this.Cesium.Cartesian2(0, 15),
+        },
+      });
+    }
+  }
+
+  private showManeuverOptions(action: { satellite_id?: string; maneuvers?: Array<{ maneuver_id: string; type: string; delta_v_m_s: number }>; recommended_id?: string }): void {
+    if (!this.viewer || !this.Cesium || !action.satellite_id || !action.maneuvers) return;
+
+    const Cesium = this.Cesium;
+    const entity = this.viewer.entities.getById(`satellite-${action.satellite_id}`);
+    if (!entity || !entity.position) return;
+
+    action.maneuvers.forEach((maneuver, index) => {
+      const isRecommended = maneuver.maneuver_id === action.recommended_id;
+      const color = isRecommended ? Cesium.Color.GREEN : Cesium.Color.CYAN;
+
+      this.viewer!.entities.add({
+        id: `maneuver-option-${maneuver.maneuver_id}`,
+        position: entity.position,
+        label: {
+          text: `${index + 1}. ${maneuver.type} (${maneuver.delta_v_m_s.toFixed(1)} m/s)${isRecommended ? ' ★' : ''}`,
+          font: isRecommended ? 'bold 14px monospace' : '12px monospace',
+          fillColor: color,
+          outlineColor: Cesium.Color.BLACK,
+          outlineWidth: 2,
+          style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+          verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+          pixelOffset: new Cesium.Cartesian2(100 + index * 20, -50 - index * 30),
+        },
+      });
+    });
+  }
+
+  private highlightRecommendedManeuver(action: { satellite_id?: string; maneuver_id?: string; color?: string }): void {
+    if (!this.viewer || !this.Cesium || !action.satellite_id || !action.maneuver_id) return;
+
+    const maneuverEntity = this.viewer.entities.getById(`maneuver-option-${action.maneuver_id}`);
+    if (maneuverEntity && maneuverEntity.label) {
+      const color = this.Cesium.Color.fromCssColorString(action.color || '#00E676');
+      maneuverEntity.label.fillColor = new this.Cesium.ConstantProperty(color);
+    }
+  }
+
+  private showFuelGauge(action: { satellite_id?: string; fuel_remaining?: number; fuel_capacity?: number; maneuver_costs?: number[] }): void {
+    if (!this.viewer || !this.Cesium || !action.satellite_id) return;
+
+    const entity = this.viewer.entities.getById(`satellite-${action.satellite_id}`);
+    if (!entity || !entity.position) return;
+
+    const fuelRemaining = action.fuel_remaining || 0;
+    const fuelCapacity = action.fuel_capacity || 100;
+    const percentage = (fuelRemaining / fuelCapacity) * 100;
+
+    this.viewer.entities.add({
+      id: `fuel-gauge-${action.satellite_id}`,
+      position: entity.position,
+      label: {
+        text: `⛽ Fuel: ${percentage.toFixed(1)}%`,
+        font: '12px monospace',
+        fillColor: percentage < 20 ? this.Cesium.Color.RED : this.Cesium.Color.GREEN,
+        outlineColor: this.Cesium.Color.BLACK,
+        outlineWidth: 2,
+        style: this.Cesium.LabelStyle.FILL_AND_OUTLINE,
+        verticalOrigin: this.Cesium.VerticalOrigin.BOTTOM,
+        pixelOffset: new this.Cesium.Cartesian2(0, -70),
+      },
+    });
+  }
+
+  private showApprovalBadge(action: { satellite_id?: string; status?: string; color?: string }): void {
+    if (!this.viewer || !this.Cesium || !action.satellite_id) return;
+
+    const entity = this.viewer.entities.getById(`satellite-${action.satellite_id}`);
+    if (!entity || !entity.position) return;
+
+    const color = this.Cesium.Color.fromCssColorString(action.color || '#00E676');
+
+    this.viewer.entities.add({
+      id: `approval-badge-${action.satellite_id}`,
+      position: entity.position,
+      billboard: {
+        image: this.createBadgeImage('✓', color),
+        scale: 0.5,
+        verticalOrigin: this.Cesium.VerticalOrigin.TOP,
+        pixelOffset: new this.Cesium.Cartesian2(0, 20),
+      },
+    });
+  }
+
+  private createBadgeImage(text: string, color: any): string {
+    const canvas = document.createElement('canvas');
+    canvas.width = 64;
+    canvas.height = 64;
+    const ctx = canvas.getContext('2d');
+    if (ctx) {
+      ctx.fillStyle = color.toCssColorString ? color.toCssColorString() : '#00E676';
+      ctx.beginPath();
+      ctx.arc(32, 32, 30, 0, 2 * Math.PI);
+      ctx.fill();
+      ctx.fillStyle = '#FFFFFF';
+      ctx.font = 'bold 40px Arial';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(text, 32, 32);
+    }
+    return canvas.toDataURL();
+  }
+
+  private clearThreatVisualization(action: { satellite_id?: string }): void {
+    if (!this.viewer || !action.satellite_id) return;
+
+    const idsToRemove = [
+      `threat-radius-${action.satellite_id}`,
+      `risk-heatmap-${action.satellite_id}`,
+      `tca-countdown-${action.satellite_id}`,
+    ];
+
+    idsToRemove.forEach(id => {
+      this.viewer!.entities.removeById(id);
+    });
+  }
+
+  private showWarningOverlay(action: { satellite_id?: string; message?: string; concerns?: string[] }): void {
+    if (!this.viewer || !this.Cesium || !action.satellite_id) return;
+
+    const entity = this.viewer.entities.getById(`satellite-${action.satellite_id}`);
+    if (!entity || !entity.position) return;
+
+    const concernsText = action.concerns ? action.concerns.join('\n') : '';
+
+    this.viewer.entities.add({
+      id: `warning-overlay-${action.satellite_id}`,
+      position: entity.position,
+      label: {
+        text: `⚠️ ${action.message || 'Warning'}${concernsText ? '\n' + concernsText : ''}`,
+        font: 'bold 14px monospace',
+        fillColor: this.Cesium.Color.ORANGE,
+        outlineColor: this.Cesium.Color.BLACK,
+        outlineWidth: 3,
+        style: this.Cesium.LabelStyle.FILL_AND_OUTLINE,
+        verticalOrigin: this.Cesium.VerticalOrigin.CENTER,
+        showBackground: true,
+        backgroundColor: this.Cesium.Color.BLACK.withAlpha(0.7),
+        backgroundPadding: new this.Cesium.Cartesian2(10, 10),
+      },
+    });
+  }
+
+  private animateManeuverExecution(action: { satellite_id?: string; maneuver_plan_id?: string; duration?: number }): void {
+    if (!this.viewer || !this.Cesium || !action.satellite_id) return;
+
+    const Cesium = this.Cesium;
+    const entity = this.viewer.entities.getById(`satellite-${action.satellite_id}`);
+    if (!entity || !entity.position) return;
+
+    const startMillis = Date.now();
+    const durationSec = (action.duration || 5000) / 1000;
+    // Store Cesium reference
+    const CesiumRef = Cesium;
+    this.viewer.entities.add({
+      id: `maneuver-animation-${action.maneuver_plan_id}`,
+      position: entity.position,
+      ellipse: {
+        semiMinorAxis: new CesiumRef.CallbackProperty((time) => {
+          const jd = CesiumRef.JulianDate.toDate(time as any);
+          const elapsed = ((jd?.getTime() ?? Date.now()) - startMillis) / 1000;
+          const progress = Math.min(elapsed / durationSec, 1);
+          return 50000 + progress * 100000;
+        }, false),
+        semiMajorAxis: new CesiumRef.CallbackProperty((time) => {
+          const jd = CesiumRef.JulianDate.toDate(time as any);
+          const elapsed = ((jd?.getTime() ?? Date.now()) - startMillis) / 1000;
+          const progress = Math.min(elapsed / durationSec, 1);
+          return 50000 + progress * 100000;
+        }, false),
+        material: CesiumRef.Color.GREEN.withAlpha(0.3),
+        outline: true,
+        outlineColor: CesiumRef.Color.GREEN,
+      },
+    });
+
+    setTimeout(() => {
+      this.viewer!.entities.removeById(`maneuver-animation-${action.maneuver_plan_id}`);
+    }, action.duration || 5000);
+  }
+
+  private showSuccessAnimation(action: { satellite_id?: string; message?: string }): void {
+    if (!this.viewer || !this.Cesium || !action.satellite_id) return;
+
+    const entity = this.viewer.entities.getById(`satellite-${action.satellite_id}`);
+    if (!entity || !entity.position) return;
+
+    const startMillis = Date.now();
+    this.viewer.entities.add({
+      id: `success-animation-${action.satellite_id}`,
+      position: entity.position,
+      billboard: {
+        image: this.createBadgeImage('✓', this.Cesium.Color.GREEN),
+        scale: new this.Cesium.CallbackProperty((time) => {
+          const jd = this.Cesium!.JulianDate.toDate(time as any);
+          const elapsed = ((jd?.getTime() ?? Date.now()) - startMillis) / 1000;
+          return 0.5 + Math.sin(elapsed * 5) * 0.1;
+        }, false),
+        verticalOrigin: this.Cesium.VerticalOrigin.CENTER,
+      },
+    });
+
+    setTimeout(() => {
+      this.viewer!.entities.removeById(`success-animation-${action.satellite_id}`);
+    }, 3000);
+  }
+
+  private updateOrbitVisualization(action: { satellite_id?: string; color?: string; trail_length?: number }): void {
+    if (!this.viewer || !this.Cesium || !action.satellite_id) return;
+
+    const entity = this.viewer.entities.getById(`satellite-${action.satellite_id}`);
+    if (!entity) return;
+
+    const color = this.Cesium.Color.fromCssColorString(action.color || '#00E676');
+
+        if (entity.path) {
+          entity.path.material = new this.Cesium.PolylineGlowMaterialProperty({
+            glowPower: 0.3,
+            color: color,
+          });
+          entity.path.trailTime = new this.Cesium.ConstantProperty((action.trail_length || 120) * 60); // Convert to seconds
+        }
+  }
+
+  private showMissionSummary(action: { satellite_id?: string; maneuver_id?: string; fuel_remaining?: number; execution_time?: string }): void {
+    if (!this.viewer || !this.Cesium || !action.satellite_id) return;
+
+    const entity = this.viewer.entities.getById(`satellite-${action.satellite_id}`);
+    if (!entity || !entity.position) return;
+
+    const summaryText = [
+      '🎯 Missione Completata',
+      `Manovra: ${action.maneuver_id}`,
+      `Fuel: ${action.fuel_remaining?.toFixed(1) || 'N/A'} kg`,
+      `Esecuzione: ${action.execution_time ? new Date(action.execution_time).toLocaleTimeString() : 'N/A'}`,
+    ].join('\n');
+
+    this.viewer.entities.add({
+      id: `mission-summary-${action.satellite_id}`,
+      position: entity.position,
+      label: {
+        text: summaryText,
+        font: 'bold 14px monospace',
+        fillColor: this.Cesium.Color.GREEN,
+        outlineColor: this.Cesium.Color.BLACK,
+        outlineWidth: 2,
+        style: this.Cesium.LabelStyle.FILL_AND_OUTLINE,
+        verticalOrigin: this.Cesium.VerticalOrigin.BOTTOM,
+        showBackground: true,
+        backgroundColor: this.Cesium.Color.BLACK.withAlpha(0.8),
+        backgroundPadding: new this.Cesium.Cartesian2(15, 10),
+        pixelOffset: new this.Cesium.Cartesian2(0, -100),
+      },
+    });
+
+    setTimeout(() => {
+      this.viewer!.entities.removeById(`mission-summary-${action.satellite_id}`);
+    }, 10000);
+  }
+
   destroy(): void {
     this.actionHandlers.clear();
     this.eventListeners.clear();

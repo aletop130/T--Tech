@@ -1,6 +1,9 @@
 # WRITE_TARGET="/root/T--Tech/backend/app/services/debris.py"
 # WRITE_CONTENT_LENGTH=2000
 """Debris service for managing space debris objects."""
+import random
+import uuid
+from datetime import datetime
 from typing import List, Tuple
 
 from sqlalchemy import select, and_, func
@@ -136,3 +139,110 @@ class DebrisService:
             count=len(debris_with_orbits),
         )
         return debris_with_orbits
+
+    async def generate_synthetic_debris(
+        self,
+        tenant_id: str,
+        count: int,
+        user_id: str = "api_user",
+    ) -> int:
+        """Generate synthetic debris entries with random TLE data.
+        
+        Parameters:
+            tenant_id: Tenant identifier.
+            count: Number of debris objects to generate.
+            user_id: ID of the user triggering the generation.
+            
+        Returns:
+            Number of debris objects created.
+        """
+        if count < 1 or count > 10000:
+            raise ValueError("Count must be between 1 and 10000")
+        
+        now = datetime.utcnow()
+        start_norad = 90000
+        
+        existing_stmt = select(func.max(Satellite.norad_id)).where(
+            Satellite.tenant_id == tenant_id,
+            Satellite.norad_id >= start_norad,
+        )
+        max_norad = await self.db.scalar(existing_stmt) or start_norad
+        
+        created = 0
+        suffixes = [" R/B", " DEB", ""]
+        
+        for i in range(count):
+            norad_id = max_norad + i + 1
+            suffix = random.choice(suffixes)
+            name = f"DEBRIS-{norad_id}{suffix}"
+            sat_id = str(uuid.uuid4())
+            
+            inclination = random.uniform(0, 180)
+            raan = random.uniform(0, 360)
+            eccentricity = random.uniform(0.001, 0.1)
+            mean_anomaly = random.uniform(0, 360)
+            mean_motion = random.uniform(8, 16)
+            
+            line1 = (
+                f"1 {norad_id}U 06999A   {now.strftime('%y%m%d')}{raan/15:05.2f}"
+                f"{inclination:5.2f}00000-0  00000-0 0  {int(norad_id % 100):02d}"
+            )
+            line2 = (
+                f"2 {norad_id} {raan:7.4f} {inclination:8.4f}{100000 + int(eccentricity * 1000000):06d}"
+                f" {mean_anomaly:8.4f} {mean_motion:11.8f}00000{now.strftime('%y%m%d')}00"
+            )
+            
+            await self.db.execute(
+                select(Satellite).where(
+                    Satellite.tenant_id == tenant_id,
+                    Satellite.norad_id == norad_id,
+                )
+            )
+            existing = await self.db.execute(
+                select(Satellite).where(
+                    Satellite.tenant_id == tenant_id,
+                    Satellite.norad_id == norad_id,
+                )
+            )
+            if existing.scalars().first():
+                continue
+            
+            sat = Satellite(
+                id=sat_id,
+                tenant_id=tenant_id,
+                norad_id=norad_id,
+                name=name,
+                object_type=ObjectType.DEBRIS.value,
+                is_active=True,
+                classification="unclassified",
+                tags="[]",
+                created_at=now,
+                updated_at=now,
+                created_by=user_id,
+            )
+            self.db.add(sat)
+            
+            orbit = Orbit(
+                id=str(uuid.uuid4()),
+                tenant_id=tenant_id,
+                satellite_id=sat_id,
+                epoch=now,
+                tle_line1=line1,
+                tle_line2=line2,
+                source="api_generated",
+                created_at=now,
+                updated_at=now,
+                created_by=user_id,
+            )
+            self.db.add(orbit)
+            created += 1
+        
+        await self.db.commit()
+        
+        logger.info(
+            "generate_synthetic_debris",
+            tenant_id=tenant_id,
+            count=created,
+            user_id=user_id,
+        )
+        return created

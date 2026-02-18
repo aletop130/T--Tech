@@ -34,7 +34,7 @@ describe('debris API client', () => {
       expect.objectContaining({
         headers: expect.objectContaining({
           'Content-Type': 'application/json',
-          'X‑Tenant‑ID': 'default',
+          'X-Tenant-ID': 'default',
         }),
       })
     );

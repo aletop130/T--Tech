@@ -22,10 +22,35 @@ export function SatelliteLayer({
 }: SatelliteLayerProps) {
   const cleanupRef = useRef<(() => void) | null>(null);
   const [Cesium, setCesium] = useState<CesiumModule | null>(null);
+  const [viewerReady, setViewerReady] = useState(false);
 
   useEffect(() => {
     getCesium().then(setCesium);
   }, []);
+
+  // Track viewer readiness - when entities becomes available, trigger re-render
+  useEffect(() => {
+    if (!viewer || viewer.isDestroyed()) return;
+    
+    if (viewer.entities) {
+      setViewerReady(true);
+      return;
+    }
+
+    // Wait for entities to become available
+    const interval = setInterval(() => {
+      if (viewer.isDestroyed()) {
+        clearInterval(interval);
+        return;
+      }
+      if (viewer.entities) {
+        setViewerReady(true);
+        clearInterval(interval);
+      }
+    }, 50);
+
+    return () => clearInterval(interval);
+  }, [viewer]);
 
   useEffect(() => {
     if (!viewer || !Cesium || viewer.isDestroyed()) return;
@@ -35,18 +60,8 @@ export function SatelliteLayer({
       cleanupRef.current = null;
     }
 
-    if (!viewer?.entities) {
-      const interval = setInterval(() => {
-        if (viewer?.isDestroyed()) {
-          clearInterval(interval);
-          return;
-        }
-        if (viewer?.entities) {
-          clearInterval(interval);
-        }
-      }, 50);
-
-      cleanupRef.current = () => clearInterval(interval);
+    if (!viewer.entities) {
+      // Viewer not ready yet, wait for viewerReady state to trigger re-run
       return;
     }
 
@@ -152,7 +167,7 @@ export function SatelliteLayer({
       }
       currentEntities.clear();
     };
-  }, [viewer, satellites, orbits, showOrbits, Cesium]);
+  }, [viewer, satellites, orbits, showOrbits, Cesium, viewerReady]);
 
   useEffect(() => {
     return () => {

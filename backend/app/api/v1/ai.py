@@ -153,3 +153,47 @@ async def propose_mitigation(
         user_id=user.sub,
     )
 
+
+@router.post("/chat/orchestrate")
+async def orchestrate_chat(
+    request: Request,
+    user: Annotated[TokenData, Depends(get_current_user)],
+    service: Annotated[AIService, Depends(get_ai_service)],
+):
+    """Orchestrate 5 Detour agents with streaming and Cesium actions.
+    
+    This is the main endpoint for active chat control of the platform.
+    Automatically detects user intent and runs appropriate agents with visualization.
+    
+    Events streamed:
+    - agent_start: When an agent starts processing
+    - cesium_action: Map visualization commands
+    - agent_complete: When agent finishes
+    - content: Text response chunks
+    - memory_usage: Current context window percentage
+    - error: Error messages
+    """
+    body = await request.json()
+    message = body.get("message", "")
+    
+    async def generate() -> AsyncGenerator[str, None]:
+        try:
+            async for data in service.orchestrate_detour_agents(
+                message=message,
+                tenant_id=user.tenant_id,
+                user_id=user.sub,
+            ):
+                yield data
+        except Exception as e:
+            yield f"data: {json.dumps({'type': 'error', 'error': str(e)})}\n\n"
+    
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+

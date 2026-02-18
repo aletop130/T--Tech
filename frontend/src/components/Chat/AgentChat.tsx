@@ -5,6 +5,10 @@ import { Button, InputGroup, Card, Elevation, Tag, Spinner, Icon, Collapse, Divi
 import { cesiumController, CesiumAction } from '@/lib/cesium/controller';
 import { SSEChatClient } from '@/lib/sse-client';
 import { MarkdownMessage } from './MarkdownMessage';
+import { DetourAgentPanel } from './DetourAgentPanel';
+import { useDetourStore } from '@/lib/store/detour';
+import { AgentTimeline } from './AgentTimeline';
+import { MemoryIndicator } from './MemoryIndicator';
 
 interface ChatDisplayMessage {
   id: string;
@@ -22,6 +26,45 @@ interface AgentChatProps {
   useStreaming?: boolean;
 }
 
+interface AgentState {
+  name: string;
+  status: 'pending' | 'running' | 'complete' | 'error';
+  message?: string;
+}
+
+// Pattern per rilevare intent Detour nel messaggio
+const DETOUR_PATTERNS = [
+  /analizza.*congiunzione/i,
+  /\bdetour\b/i,
+  /collision.*avoidance/i,
+  /screening.*satellite/i,
+  /manovra.*evasiv/i,
+  /evasive.*maneuver/i,
+  /\b(CONJ|DET)-\d{4}-\d+\b/i,
+  /analisi.*rischio/i,
+  /step.*by.*step/i,
+  /passo.*passo/i,
+];
+
+function isDetourIntent(message: string): boolean {
+  return DETOUR_PATTERNS.some(pattern => pattern.test(message));
+}
+
+function extractConjunctionId(message: string): string | null {
+  const match = message.match(/\b(CONJ|DET)-\d{4}-\d+\b/i);
+  return match ? match[0].toUpperCase() : null;
+}
+
+function extractSatelliteId(message: string): string | null {
+  const issMatch = message.match(/\b(ISS|ZARYA)\b/i);
+  if (issMatch) return '25544';
+  
+  const noradMatch = message.match(/\bNORAD\s*#?(\d+)\b/i);
+  if (noradMatch) return noradMatch[1];
+  
+  return null;
+}
+
 export function AgentChat({ onSendMessage, initialMessages = [], useStreaming = true }: AgentChatProps) {
   const [messages, setMessages] = useState<ChatDisplayMessage[]>(initialMessages);
   const [input, setInput] = useState('');
@@ -32,6 +75,18 @@ export function AgentChat({ onSendMessage, initialMessages = [], useStreaming = 
   const [currentToolCalls, setCurrentToolCalls] = useState<{ tool_name: string; arguments: Record<string, unknown> }[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const sseClientRef = useRef<SSEChatClient | null>(null);
+  
+  // New state for orchestration
+  const [activeAgents, setActiveAgents] = useState<AgentState[]>([]);
+  const [memoryUsage, setMemoryUsage] = useState(0);
+  const [showAgentTimeline, setShowAgentTimeline] = useState(false);
+  
+  // Detour state
+  const {
+    isStepByStepMode,
+    startStepByStep,
+    stepSession,
+  } = useDetourStore();
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -46,6 +101,181 @@ export function AgentChat({ onSendMessage, initialMessages = [], useStreaming = 
       sseClientRef.current?.close();
     };
   }, []);
+
+  const handleOrchestration = async (message: string) => {
+    // Show agent timeline
+    setShowAgentTimeline(true);
+    setActiveAgents([]);
+    
+    const assistantMessageId = (Date.now() + 1).toString();
+    const assistantMessage: ChatDisplayMessage = {
+      id: assistantMessageId,
+      role: 'assistant',
+      content: '',
+      actions: [],
+      timestamp: new Date().toISOString(),
+      isStreaming: true,
+    };
+    
+    setMessages((prev) => [...prev, assistantMessage]);
+    
+    try {
+      const response = await fetch('/api/v1/ai/chat/orchestrate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ message }),
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+      let fullContent = '';
+      
+      if (!reader) {
+        throw new Error('No response body');
+      }
+      
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        
+        const chunk = decoder.decode(value, { stream: true });
+        const lines = chunk.split('\n\n');
+        
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          
+          if (line.startsWith('data: ')) {
+            const data = line.slice(6);
+            
+            if (data === '[DONE]') {
+              setMessages((msgs) =>
+                msgs.map((msg) =>
+                  msg.id === assistantMessageId
+                    ? { ...msg, content: fullContent, isStreaming: false }
+                    : msg
+                )
+              );
+              setIsLoading(false);
+              setShowAgentTimeline(false);
+              continue;
+            }
+            
+            try {
+              const event = JSON.parse(data);
+              
+              switch (event.type) {
+                case 'agent_start':
+                  setActiveAgents((prev) => [
+                    ...prev,
+                    { name: event.agent, status: 'running', message: event.message },
+                  ]);
+                  fullContent += `\n${event.message}\n`;
+                  setMessages((msgs) =>
+                    msgs.map((msg) =>
+                      msg.id === assistantMessageId
+                        ? { ...msg, content: fullContent }
+                        : msg
+                    )
+                  );
+                  break;
+                  
+                case 'agent_complete':
+                  setActiveAgents((prev) =>
+                    prev.map((agent) =>
+                      agent.name === event.agent
+                        ? { ...agent, status: 'complete' }
+                        : agent
+                    )
+                  );
+                  if (event.agent === 'all') {
+                    fullContent += `\n${event.message}`;
+                    setMessages((msgs) =>
+                      msgs.map((msg) =>
+                        msg.id === assistantMessageId
+                          ? { ...msg, content: fullContent, isStreaming: false }
+                          : msg
+                      )
+                    );
+                  }
+                  break;
+                  
+                case 'cesium_action':
+                  try {
+                    cesiumController.executeAction(event.action);
+                    
+                    const actionMsg = `🎬 Azione: ${event.action.type}`;
+                    fullContent += `\n${actionMsg}`;
+                    setMessages((msgs) =>
+                      msgs.map((msg) =>
+                        msg.id === assistantMessageId
+                          ? { ...msg, content: fullContent }
+                          : msg
+                      )
+                    );
+                  } catch (error) {
+                    console.warn('Cesium action failed:', error);
+                  }
+                  break;
+                  
+                case 'memory_usage':
+                  setMemoryUsage(event.percentage);
+                  break;
+                  
+                case 'content':
+                  fullContent += event.chunk;
+                  setMessages((msgs) =>
+                    msgs.map((msg) =>
+                      msg.id === assistantMessageId
+                        ? { ...msg, content: fullContent }
+                        : msg
+                    )
+                  );
+                  break;
+                  
+                case 'error':
+                  console.error('Orchestration error:', event.error);
+                  fullContent += `\n❌ Errore: ${event.error}`;
+                  setMessages((msgs) =>
+                    msgs.map((msg) =>
+                      msg.id === assistantMessageId
+                        ? { ...msg, content: fullContent, isStreaming: false }
+                        : msg
+                    )
+                  );
+                  setIsLoading(false);
+                  break;
+              }
+            } catch (e) {
+              console.warn('Failed to parse SSE data:', data);
+            }
+          }
+        }
+      }
+      
+      setIsLoading(false);
+    } catch (error) {
+      console.error('Orchestration error:', error);
+      setMessages((msgs) =>
+        msgs.map((msg) =>
+          msg.id === assistantMessageId
+            ? {
+                ...msg,
+                content: `❌ Errore: ${error instanceof Error ? error.message : 'Errore sconosciuto'}`,
+                isStreaming: false,
+              }
+            : msg
+        )
+      );
+      setIsLoading(false);
+      setShowAgentTimeline(false);
+    }
+  };
 
   const handleSend = useCallback(async () => {
     if (!input.trim() || isLoading) return;
@@ -62,6 +292,12 @@ export function AgentChat({ onSendMessage, initialMessages = [], useStreaming = 
     setIsLoading(true);
     setStreamingText('');
     setCurrentToolCalls([]);
+
+    // Check for Detour intent and use orchestration
+    if (isDetourIntent(input.trim())) {
+      await handleOrchestration(userMessage.content);
+      return;
+    }
 
     try {
       const sceneState = cesiumController.getSceneState();
@@ -278,6 +514,8 @@ export function AgentChat({ onSendMessage, initialMessages = [], useStreaming = 
     'Mostra access windows a Fucino',
     'Fly to ISS',
     'Calcola conjunctions',
+    'Analizza congiunzione CONJ-2024-001',
+    'Detour step-by-step',
   ];
 
   const handleQuickPrompt = (prompt: string) => {
@@ -287,19 +525,27 @@ export function AgentChat({ onSendMessage, initialMessages = [], useStreaming = 
    return (
      <div className="flex flex-col h-full glass-panel">
        <div className="p-3 border-b border-sda-border-default/50">
-        <h2 className="text-lg font-semibold text-sda-text-primary flex items-center gap-2">
-          <Icon icon="chat" className="text-sda-accent-cyan" />
-          AI Assistant
-          {useStreaming && (
-            <Tag minimal intent="success" className="ml-2">
-              <Icon icon="satellite" size={10} /> SSE
-            </Tag>
-          )}
-        </h2>
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-sda-text-primary flex items-center gap-2">
+            <Icon icon="chat" className="text-sda-accent-cyan" />
+            AI Assistant
+            {useStreaming && (
+              <Tag minimal intent="success" className="ml-2">
+                <Icon icon="satellite" size={10} /> SSE
+              </Tag>
+            )}
+          </h2>
+          <MemoryIndicator percentage={memoryUsage} />
+        </div>
         <p className="text-xs text-sda-text-muted">Ask for simulations, analysis, or map controls</p>
       </div>
 
       <div className="flex-1 overflow-auto p-3 space-y-3">
+        {/* Agent Timeline */}
+        {showAgentTimeline && (
+          <AgentTimeline agents={activeAgents} />
+        )}
+        
         {messages.length === 0 && (
           <div className="text-center text-sda-text-muted py-8">
             <Icon icon="chat" size={40} className="mb-2 opacity-50" />
@@ -398,6 +644,23 @@ export function AgentChat({ onSendMessage, initialMessages = [], useStreaming = 
               <Spinner size={16} />
               <span className="text-sm text-sda-text-muted">AI is thinking...</span>
             </div>
+          </div>
+        )}
+
+        {/* Detour Agent Pipeline Panel */}
+        {isStepByStepMode && (
+          <div className="mt-4">
+            <DetourAgentPanel
+              onStepComplete={(agent, approved) => {
+                console.log(`Step ${agent} ${approved ? 'approved' : 'rejected'}`);
+              }}
+              onPipelineComplete={(result) => {
+                console.log('Pipeline completed:', result);
+              }}
+              onPipelineCancelled={() => {
+                console.log('Pipeline cancelled');
+              }}
+            />
           </div>
         )}
 

@@ -11,7 +11,7 @@
 
 - [x] **Phase 1 – Add Celestrak fetch script**
   - Create `backend/scripts/fetch_celestrak_debris.py`.
-  - Use `httpx` to download `https://celestrak.com/NORAD/elements/debris.txt`.
+  - Use `httpx` to download `https://celestrak.org/NORAD/elements/tle-new.txt`.
   - Configurable URL via `CELERTRAK_DEBRIS_URL` env var.
 
 - [x] **Phase 2 – Parse & persist TLEs**
@@ -39,7 +39,7 @@
   - Integration test for the endpoint (if implemented).
   - Update `README.md` with commands and usage notes.
 
-- [ ] **Phase 8 – Verification**
+- [x] **Phase 8 – Verification**
   - Run the script (`python backend/scripts/fetch_celestrak_debris.py`).
   - Open `/map` and confirm new debris appear (orange spheres, updated count).
   - Ensure periodic refresh works (15 s interval).
