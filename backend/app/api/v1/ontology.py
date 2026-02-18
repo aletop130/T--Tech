@@ -130,6 +130,21 @@ async def fetch_debris_celestrak(
     return {"status": "ok", "imported": imported}
 
 # Debris endpoints
+
+
+def _is_valid_tle(tle_line1: str, tle_line2: str) -> bool:
+    """Validate TLE using sgp4 before computing positions.
+    
+    Returns False if the TLE has invalid parameters (e.g., decayed orbits).
+    """
+    from sgp4.api import Satrec
+    try:
+        sat = Satrec.twoline2rv(tle_line1.strip(), tle_line2.strip())
+        return sat.error == 0
+    except Exception:
+        return False
+
+
 @router.get("/debris", response_model=DebrisResponse)
 async def get_debris(
     user: Annotated[TokenData, Depends(get_current_user)],
@@ -149,18 +164,30 @@ async def get_debris(
     t = ts.utc(now.year, now.month, now.day, now.hour, now.minute, now.second + now.microsecond / 1_000_000)
     objects = []
     for sat, orb in limited:
-        # Compute position from TLE at current time
-        try:
-            sat_ephem = EarthSatellite(orb.tle_line1, orb.tle_line2, name=str(sat.norad_id), ts=ts)
-            subpoint = sat_ephem.at(t).subpoint()
-            lat = subpoint.latitude.degrees
-            lon = subpoint.longitude.degrees
-            alt_km = subpoint.elevation.km
-        except Exception:
-            # Fallback to zeroes if any error occurs
-            lat = 0.0
-            lon = 0.0
-            alt_km = 0.0
+        lat, lon, alt_km = None, None, None
+        
+        # Synthetic debris: assign plausible random coordinates (no TLE propagation)
+        if orb.source == "api_generated":
+            import random
+            lat = random.uniform(-90, 90)
+            lon = random.uniform(-180, 180)
+            alt_km = random.uniform(400, 2000)
+        else:
+            # Skip debris with invalid TLE (decayed orbits, etc.)
+            if not _is_valid_tle(orb.tle_line1, orb.tle_line2):
+                continue
+            # Compute position from TLE at current time for real debris
+            try:
+                sat_ephem = EarthSatellite(orb.tle_line1, orb.tle_line2, name=str(sat.norad_id), ts=ts)
+                subpoint = sat_ephem.at(t).subpoint()
+                lat = subpoint.latitude.degrees
+                lon = subpoint.longitude.degrees
+                alt_km = subpoint.elevation.km
+            except Exception:
+                # If computation fails for any reason, skip this debris
+                continue
+        if lat is None:
+            continue
         objects.append(DebrisObject(
             norad_id=sat.norad_id,
             lat=lat,
@@ -189,6 +216,9 @@ async def get_debris_with_orbits(
     now = datetime.utcnow()
     t = ts.utc(now.year, now.month, now.day, now.hour, now.minute, now.second + now.microsecond / 1_000_000)
     for sat, orb in limited:
+        # Skip debris with invalid TLE (decayed orbits, etc.)
+        if not _is_valid_tle(orb.tle_line1, orb.tle_line2):
+            continue
         # Compute position from TLE at current time
         try:
             sat_ephem = EarthSatellite(orb.tle_line1, orb.tle_line2, name=str(sat.norad_id), ts=ts)
@@ -197,18 +227,7 @@ async def get_debris_with_orbits(
             lon = subpoint.longitude.degrees
             alt_km = subpoint.elevation.km
         except Exception:
-            # Fallback to 0 if any error
-            lat = 0.0
-            lon = 0.0
-            # Use apogee/perigee if available for altitude fallback
-            if orb.apogee_km is not None and orb.perigee_km is not None:
-                alt_km = (orb.apogee_km + orb.perigee_km) / 2
-            elif orb.apogee_km is not None:
-                alt_km = orb.apogee_km
-            elif orb.perigee_km is not None:
-                alt_km = orb.perigee_km
-            else:
-                alt_km = 0.0
+            continue
         result.append(DebrisOrbitInfo(
             norad_id=sat.norad_id,
             lat=lat,

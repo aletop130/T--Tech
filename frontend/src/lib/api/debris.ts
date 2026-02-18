@@ -73,7 +73,7 @@ export async function getDebris(
   if (orbitClasses) {
     params.set('orbitClasses', orbitClasses);
   }
-  const url = `${API_BASE}/api/v1/debris?${params}`;
+  const url = `${API_BASE}/api/v1/ontology/debris?${params}`;
   return fetchWithBackoff<DebrisResponse>(url);
 }
 
@@ -91,6 +91,6 @@ export async function getOrbit(
   params.set('norad', noradId.toString());
   params.set('minutes', minutes.toString());
   params.set('stepSec', stepSec.toString());
-  const url = `${API_BASE}/api/v1/orbit?${params}`;
+  const url = `${API_BASE}/api/v1/ontology/orbit?${params}`;
   return fetchWithBackoff<OrbitResponse>(url);
 }

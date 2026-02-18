@@ -80,11 +80,11 @@ export function DebrisInstancedLayer({
       const position = Cesium.Cartesian3.fromDegrees(
         obj.lon,
         obj.lat,
-        (obj.altKm ?? 0) * 1000
+        ((obj as any).altKm ?? (obj as any).alt_km ?? 0) * 1000
       );
       const modelMatrix = Cesium.Matrix4.fromTranslation(position);
-      const sphereGeometry = new Cesium.SphereGeometry({
-        radius: 100,
+        const sphereGeometry = new Cesium.SphereGeometry({
+          radius: 15000,
         stackPartitions: 3,
         slicePartitions: 3,
       });

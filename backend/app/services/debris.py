@@ -177,20 +177,16 @@ class DebrisService:
             name = f"DEBRIS-{norad_id}{suffix}"
             sat_id = str(uuid.uuid4())
             
-            inclination = random.uniform(0, 180)
+            inclination = random.uniform(30, 100)
             raan = random.uniform(0, 360)
-            eccentricity = random.uniform(0.001, 0.1)
             mean_anomaly = random.uniform(0, 360)
-            mean_motion = random.uniform(8, 16)
+            mean_motion = random.uniform(14, 16)
+            epoch_day = now.timetuple().tm_yday + (now.hour + now.minute/60 + now.second/3600) / 24
+            epoch_year = now.strftime('%y')
             
-            line1 = (
-                f"1 {norad_id}U 06999A   {now.strftime('%y%m%d')}{raan/15:05.2f}"
-                f"{inclination:5.2f}00000-0  00000-0 0  {int(norad_id % 100):02d}"
-            )
-            line2 = (
-                f"2 {norad_id} {raan:7.4f} {inclination:8.4f}{100000 + int(eccentricity * 1000000):06d}"
-                f" {mean_anomaly:8.4f} {mean_motion:11.8f}00000{now.strftime('%y%m%d')}00"
-            )
+            epoch_str = f"{epoch_year}{epoch_day:12.8f}"
+            line1 = f"1 {norad_id:05d}U 98067A   {epoch_str}  .00000000  00000-0  00000-0 0  9992"
+            line2 = f"2 {norad_id:05d} {raan:8.4f} {inclination:8.4f} 0000000{mean_anomaly:8.4f} {mean_motion:11.8f}00000-0  9992"
             
             await self.db.execute(
                 select(Satellite).where(

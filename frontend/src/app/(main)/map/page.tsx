@@ -382,8 +382,13 @@ updatedOrbits.forEach((orbit) => {
       setConjunctions(conjunctionsData.items);
       setGroundVehicles(vehiclesData.items);
 
+      // Filter to only allied and enemy satellites (skip debris)
+      const realSatellites = satellitesWithOrbits.filter((sat) => 
+        isAlliedSatellite(sat) || isEnemySatellite(sat)
+      );
+      
       // Generate orbit positions from TLE if available
-      const generatedOrbits: OrbitData[] = satellitesWithOrbits.map((sat) => {
+      const generatedOrbits: OrbitData[] = realSatellites.map((sat) => {
         const tle1 = sat.latest_orbit?.tle_line1;
         const tle2 = sat.latest_orbit?.tle_line2;
         
@@ -716,120 +721,114 @@ const fetchFamousSatellites = async () => {
               className="w-full h-full"
               onViewerReady={handleViewerReady}
             />
-            <>
-              <>
-                {viewMode === 'earth' ? (
-                  <>
-                    {!isSimulationMode && (
-                      <SatelliteLayer
-                        viewer={viewer}
-                        satellites={satellites}
-                        orbits={orbits}
-                        showOrbits={showOrbits}
-                      />
-                    )}
-                    {!isSimulationMode && (
-                      <GroundStationLayer
-                        viewer={viewer}
-                        stations={groundStations}
-                        showCoverage={showCoverage}
-                      />
-                    )}
-                    {!isSimulationMode && showGroundVehicles && vehicleDisplayMode === 'points' && (
-                      <GroundVehicleLayer
-                        viewer={viewer}
-                        vehicles={groundVehicles}
-                        show={showGroundVehicles}
-                      />
-                    )}
-                    {!isSimulationMode && showGroundVehicles && vehicleDisplayMode === '3d' && (
-                      <MilitaryVehicleLayer
-                        viewer={viewer}
-                        vehicles={groundVehicles}
-                        show={showGroundVehicles}
-                      />
-                    )}
-                    {!isSimulationMode && showConjunctions && (
-                      <ConjunctionLayer
-                        viewer={viewer}
-                        conjunctions={conjunctions}
-                        satellitePositions={satellitePositionsRef.current}
-                      />
-                    )}
-                    {!isSimulationMode && (
-                      <DebrisInstancedLayer
-                        viewer={viewer}
-                        debris={debris}
-                        maxDisplayObjects={2500}
-                        refreshIntervalMs={15000}
-                        showDebris={showDebris}
-                      />
-                    )}
-                    {selectedSatellite && (
-<SatelliteInfoCard
-                         satellite={selectedSatellite}
-                         orbit={orbits.find((o) => o.satellite_id === selectedSatellite.id)}
-                         onClose={() => setSelectedSatellite(null)}
-                         onManeuver={() => setManeuverStartMs(Date.now())}
-                       />
-                    )}
-                    {selectedStation && (
-                      <GroundStationInfoCard
-                        station={selectedStation}
-                        onClose={() => setSelectedStation(null)}
-                      />
-                    )}
-                    {selectedVehicle && (
-                      <GroundVehicleInfoCard
-                        vehicle={selectedVehicle}
-                        onClose={() => setSelectedVehicle(null)}
-                      />
-                    )}
-                    {selectedConjunction && (
-                      <ConjunctionInfoCard
-                        conjunction={selectedConjunction}
-                        onClose={() => setSelectedConjunction(null)}
-                      />
-                    )}
-                    
-                    {/* SAR Simulation Layers */}
-{selectedDebris && (
-<DebrisInfoCard
-                      debris={selectedDebris}
-                      onClose={() => setSelectedDebris(null)}
-                      onManeuver={() => setManeuverStartMs(Date.now())}
-                    />
-)}
-{orbitTrack && viewer && ((selectedDebris && isSimulationMode) || (selectedSatellite && !isSimulationMode)) && (
-  <>
-    <OrbitalTrackLayer viewer={viewer} orbitTrack={orbitTrack} maneuverStartMs={maneuverStartMs} />
-    <MovingSatelliteMarker viewer={viewer} orbitTrack={orbitTrack} maneuverStartMs={maneuverStartMs} />
-  </>
-)}
 
-                  </>
-                ) : (
+            {viewMode === 'earth' ? (
+              <>
+                {!isSimulationMode && (
+                  <SatelliteLayer
+                    viewer={viewer}
+                    satellites={satellites}
+                    orbits={orbits}
+                    showOrbits={showOrbits}
+                  />
+                )}
+                {!isSimulationMode && (
+                  <GroundStationLayer
+                    viewer={viewer}
+                    stations={groundStations}
+                    showCoverage={showCoverage}
+                  />
+                )}
+                {!isSimulationMode && showGroundVehicles && vehicleDisplayMode === 'points' && (
+                  <GroundVehicleLayer
+                    viewer={viewer}
+                    vehicles={groundVehicles}
+                    show={showGroundVehicles}
+                  />
+                )}
+                {!isSimulationMode && showGroundVehicles && vehicleDisplayMode === '3d' && (
+                  <MilitaryVehicleLayer
+                    viewer={viewer}
+                    vehicles={groundVehicles}
+                    show={showGroundVehicles}
+                  />
+                )}
+                {!isSimulationMode && showConjunctions && (
+                  <ConjunctionLayer
+                    viewer={viewer}
+                    conjunctions={conjunctions}
+                    satellitePositions={satellitePositionsRef.current}
+                  />
+                )}
+                {!isSimulationMode && (
+                  <DebrisInstancedLayer
+                    viewer={viewer}
+                    debris={debris}
+                    maxDisplayObjects={2500}
+                    refreshIntervalMs={15000}
+                    showDebris={showDebris}
+                  />
+                )}
+                {selectedSatellite && (
+                  <SatelliteInfoCard
+                    satellite={selectedSatellite}
+                    orbit={orbits.find((o) => o.satellite_id === selectedSatellite.id)}
+                    onClose={() => setSelectedSatellite(null)}
+                    onManeuver={() => setManeuverStartMs(Date.now())}
+                  />
+                )}
+                {selectedStation && (
+                  <GroundStationInfoCard
+                    station={selectedStation}
+                    onClose={() => setSelectedStation(null)}
+                  />
+                )}
+                {selectedVehicle && (
+                  <GroundVehicleInfoCard
+                    vehicle={selectedVehicle}
+                    onClose={() => setSelectedVehicle(null)}
+                  />
+                )}
+                {selectedConjunction && (
+                  <ConjunctionInfoCard
+                    conjunction={selectedConjunction}
+                    onClose={() => setSelectedConjunction(null)}
+                  />
+                )}
+                {selectedDebris && (
+                  <DebrisInfoCard
+                    debris={selectedDebris}
+                    onClose={() => setSelectedDebris(null)}
+                    onManeuver={() => setManeuverStartMs(Date.now())}
+                  />
+                )}
+                {orbitTrack && viewer && ((selectedDebris && isSimulationMode) || (selectedSatellite && !isSimulationMode)) && (
                   <>
-                    <SolarSystemLayer
-                      viewer={viewer}
-                      showOrbits={showOrbits}
-                      showLabels={showSolarLabels}
-                      focusedBody={focusedBody}
-                      onBodyClick={(bodyId) => {
-                        setFocusedBody(bodyId);
-                        setShowPlanetInfo(true);
-                      }}
-                      simulationTime={solarSimulationTime}
-                    />
-                    {showPlanetInfo && focusedBody && (
-                      <PlanetInfoBox
-                        planet={PLANETS.find(p => p.id === focusedBody)!}
-                        onManage={() => handleManagePlanet(focusedBody)}
-                        onClose={handleClosePlanetInfo}
-                        onBackToOverview={handleBackToOverview}
-                      />
-                    )}
+                    <OrbitalTrackLayer viewer={viewer} orbitTrack={orbitTrack} maneuverStartMs={maneuverStartMs} />
+                    <MovingSatelliteMarker viewer={viewer} orbitTrack={orbitTrack} maneuverStartMs={maneuverStartMs} />
                   </>
+                )}
+              </>
+            ) : (
+              <>
+                <SolarSystemLayer
+                  viewer={viewer}
+                  showOrbits={showOrbits}
+                  showLabels={showSolarLabels}
+                  focusedBody={focusedBody}
+                  onBodyClick={(bodyId) => {
+                    setFocusedBody(bodyId);
+                    setShowPlanetInfo(true);
+                  }}
+                  simulationTime={solarSimulationTime}
+                />
+                {showPlanetInfo && focusedBody && (
+                  <PlanetInfoBox
+                    planet={PLANETS.find(p => p.id === focusedBody)!}
+                    onManage={() => handleManagePlanet(focusedBody)}
+                    onClose={handleClosePlanetInfo}
+                    onBackToOverview={handleBackToOverview}
+                  />
                 )}
               </>
             )}
@@ -862,7 +861,7 @@ const fetchFamousSatellites = async () => {
         <div className="flex items-center gap-4 mb-2">
           <h1 className="text-lg font-bold text-sda-text-primary flex items-center gap-2">
             <Icon icon="globe" className="text-sda-accent-cyan" />
-            3D Glove View
+            3D Globe View
           </h1>
           <div className="flex items-center gap-2">
             <Tag minimal intent="primary">Allied: {satellites.filter(isAlliedSatellite).length}</Tag>
@@ -1049,7 +1048,7 @@ const fetchFamousSatellites = async () => {
                 <div className="p-3 border-b border-sda-border-default">
                   <span className="text-sm font-semibold text-sda-text-primary flex items-center gap-2">
                     <Icon icon="satellite" className="text-sda-accent-cyan" />
-                    Elements ({satellites.length})
+                    Elements ({satellites.filter(sat => isAlliedSatellite(sat) || isEnemySatellite(sat)).length})
                   </span>
                   <div className="flex items-center gap-3 mt-2 text-xs text-sda-text-muted">
                     <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-blue-500"></span> Allied</span>
@@ -1119,7 +1118,7 @@ const fetchFamousSatellites = async () => {
                         </div>
                       ))}
                     </div>
-</div>
+ </div>
 
                    {/* Debris Folder */}
                    <div>

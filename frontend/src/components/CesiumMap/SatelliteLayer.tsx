@@ -67,33 +67,34 @@ export function SatelliteLayer({
 
     const currentEntities = new Set<string>();
 
+    // Helper functions to identify satellite types
+    const isAlliedSat = (sat: Satellite) => {
+      const name = sat.name?.toLowerCase() || '';
+      return name.includes('guardian') || name.includes('deepwatch') || name.includes('terrascan') ||
+             name.includes('starfinder') || name.includes('celestial') || name.includes('windwatcher') ||
+             name.includes('commlink') || name.includes('weathereye') || name.includes('navbeacon') ||
+             name.includes('eyeinsky') || sat.faction === 'allied';
+    };
+
+    const isEnemySat = (sat: Satellite) => {
+      const name = sat.name?.toLowerCase() || '';
+      return name.includes('unknown') || name.includes('hostile') || name.includes('suspect') ||
+             name.includes('tracked') || name.includes('unidentified') || name.includes('contact') ||
+             sat.faction === 'enemy';
+    };
+
     satellites.forEach((sat) => {
       const orbit = orbits.find((o) => o.satellite_id === sat.id);
 
       if (orbit && orbit.positions.length > 0) {
+        // Skip satellites that are neither allied nor enemy (treat as debris)
+        const isAllied = isAlliedSat(sat);
+        const isEnemy = isEnemySat(sat);
+        if (!isAllied && !isEnemy) return;
+
         const positions = orbit.positions.map((pos) =>
           Cesium.Cartesian3.fromDegrees(pos.lon, pos.lat, pos.alt * 1000)
         );
-
-        const isAllied = sat.name?.toLowerCase().includes('guardian') || 
-                         sat.name?.toLowerCase().includes('deepwatch') || 
-                         sat.name?.toLowerCase().includes('terrascan') ||
-                         sat.name?.toLowerCase().includes('starfinder') || 
-                         sat.name?.toLowerCase().includes('celestial') ||
-                         sat.name?.toLowerCase().includes('windwatcher') || 
-                         sat.name?.toLowerCase().includes('commlink') ||
-                         sat.name?.toLowerCase().includes('weathereye') || 
-                         sat.name?.toLowerCase().includes('navbeacon') ||
-                         sat.name?.toLowerCase().includes('eyeinsky') ||
-                         sat.faction === 'allied';
-        
-        const isEnemy = sat.name?.toLowerCase().includes('unknown') || 
-                        sat.name?.toLowerCase().includes('hostile') || 
-                        sat.name?.toLowerCase().includes('suspect') ||
-                        sat.name?.toLowerCase().includes('tracked') || 
-                        sat.name?.toLowerCase().includes('unidentified') ||
-                        sat.name?.toLowerCase().includes('contact') ||
-                        sat.faction === 'enemy';
         
         const pointColor = isEnemy ? Cesium.Color.RED : Cesium.Color.DODGERBLUE;
         const orbitColor = isEnemy ? Cesium.Color.RED.withAlpha(0.6) : Cesium.Color.DODGERBLUE.withAlpha(0.6);

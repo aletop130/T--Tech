@@ -16,12 +16,8 @@ from app.db.base import Base, get_db
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
 
 
-@pytest.fixture(scope="session")
-def event_loop() -> Generator:
-    """Create event loop for async tests."""
-    loop = asyncio.get_event_loop_policy().new_event_loop()
-    yield loop
-    loop.close()
+# Default event loop fixture provided by pytest-asyncio is used.
+
 
 
 @pytest_asyncio.fixture
