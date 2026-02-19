@@ -1,4 +1,6 @@
 """SQLAlchemy base and database session management."""
+import asyncio
+from contextlib import suppress
 from datetime import datetime
 from typing import AsyncGenerator
 from uuid import uuid4
@@ -88,10 +90,17 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
     async with async_session_factory() as session:
         try:
             yield session
-            await session.commit()
+            await asyncio.shield(session.commit())
+        except asyncio.CancelledError:
+            # Streaming requests can be cancelled by client disconnects.
+            # Roll back explicitly to release checked-out connections.
+            with suppress(Exception):
+                await asyncio.shield(session.rollback())
+            raise
         except Exception:
-            await session.rollback()
+            await asyncio.shield(session.rollback())
             raise
         finally:
-            await session.close()
+            with suppress(Exception):
+                await asyncio.shield(session.close())
 

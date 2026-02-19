@@ -27,3 +27,46 @@ try:
 except Exception:
     # If psycopg2 is not available (e.g., during type checking) we silently ignore the patch.
     pass
+
+# asyncpg / SQLAlchemy cancellation hardening
+#
+# Under client disconnects, request cancellation can interrupt asyncpg close()
+# inside SQLAlchemy connection adapters, producing noisy "Exception terminating
+# connection" traces and leaving cleanup to GC. These monkey-patches make close
+# and terminate resilient to CancelledError by falling back to terminate().
+try:
+    import asyncio
+    from sqlalchemy import util
+    from sqlalchemy.dialects.postgresql.asyncpg import AsyncAdapt_asyncpg_connection
+
+    def _safe_asyncpg_terminate(self):
+        if util.concurrency.in_greenlet():
+            try:
+                self.await_(self._connection.close(timeout=2))
+            except (asyncio.TimeoutError, asyncio.CancelledError):
+                try:
+                    self._connection.terminate()
+                except Exception:
+                    pass
+        else:
+            try:
+                self._connection.terminate()
+            except Exception:
+                pass
+        self._started = False
+
+    def _safe_asyncpg_close(self):
+        self.rollback()
+        try:
+            self.await_(self._connection.close())
+        except asyncio.CancelledError:
+            try:
+                self._connection.terminate()
+            except Exception:
+                pass
+
+    AsyncAdapt_asyncpg_connection.terminate = _safe_asyncpg_terminate
+    AsyncAdapt_asyncpg_connection.close = _safe_asyncpg_close
+except Exception:
+    # If SQLAlchemy asyncpg internals change or aren't available, ignore patch.
+    pass

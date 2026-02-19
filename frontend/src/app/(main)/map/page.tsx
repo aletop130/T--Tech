@@ -205,6 +205,7 @@ const DEBRIS_ORBIT_CLASSES = "LEO";
   const satellitePositionsRef = useRef<Map<string, InstanceType<CesiumModule['Cartesian3']>>>(new Map());
   const animationFrameRef = useRef<number | null>(null);
   const lastUpdateRef = useRef<number>(0);
+  const isDebrisLoadingRef = useRef(false);
 
   useEffect(() => {
     // Initialize satellite.js first, then load data
@@ -429,7 +430,9 @@ useEffect(() => {
   let abortController = new AbortController();
 
 const loadDebris = async () => {
+      if (isDebrisLoadingRef.current) return;
       if (isSimulationMode) return; // pause during simulation
+      isDebrisLoadingRef.current = true;
       try {
         const response = await getDebris(DISPLAY_OBJECT_LIMIT, DEBRIS_ORBIT_CLASSES);
         if (!response || !Array.isArray(response.objects)) {
@@ -453,6 +456,8 @@ const loadDebris = async () => {
         setDebrisPositions(positions);
       } catch (err) {
         console.warn('Failed to load debris:', err);
+      } finally {
+        isDebrisLoadingRef.current = false;
       }
     };
 

@@ -11,6 +11,7 @@ from sqlalchemy.orm import aliased
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models.ontology import Satellite, Orbit, ObjectType
+from app.db.base import async_session_factory
 from app.services.audit import AuditService
 from app.core.logging import get_logger
 
@@ -103,6 +104,7 @@ class DebrisService:
     async def get_debris_with_orbits(
         self,
         tenant_id: str,
+        limit: int | None = None,
     ) -> List[Tuple[Satellite, Orbit]]:
         """Return all debris with their latest orbit (including TLE data)."""
         latest_subq = (
@@ -130,8 +132,15 @@ class DebrisService:
             )
             .order_by(Satellite.name)
         )
-        result = await self.db.execute(stmt)
-        rows = result.all()
+        if limit is not None:
+            stmt = stmt.limit(limit)
+
+        # Use a short-lived session for this heavy read path so the request-scoped
+        # session doesn't hold a checked-out connection during long CPU work.
+        async with async_session_factory() as session:
+            result = await session.execute(stmt)
+            rows = result.all()
+
         debris_with_orbits = [(sat, orb) for sat, orb in rows]
         logger.info(
             "get_debris_with_orbits",

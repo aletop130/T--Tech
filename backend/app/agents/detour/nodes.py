@@ -100,6 +100,8 @@ async def scout_node(state: DetourGraphState, config: Dict[str, Any]) -> DetourG
         )
         # Store the raw list of screening result dictionaries.
         state["screening_results"] = screening_output.get("screening_results", [])
+        # Preserve the full output for downstream SSE/Cesium orchestration.
+        state["scout_output"] = screening_output
         # Record number of threats for downstream nodes (not part of the schema).
         threats = screening_output.get("threats_identified", 0)
         logger.info(
@@ -142,6 +144,7 @@ async def analyst_node(state: DetourGraphState, config: Dict[str, Any]) -> Detou
     try:
         risk_output = await assess_risk_tool(conjunction_event_id=state["conjunction_event_id"], db=db)
         state["risk_assessment"] = risk_output
+        state["analyst_output"] = risk_output
         logger.info(
             "Analyst node completed risk assessment",
             session_id=state.get("session_id"),
@@ -202,6 +205,7 @@ async def planner_node(state: DetourGraphState, config: Dict[str, Any]) -> Detou
         )
         # Store the list of maneuver dictionaries.
         state["maneuver_options"] = maneuver_output.get("maneuver_options", [])
+        state["planner_output"] = maneuver_output
         logger.info(
             "Planner node generated maneuver options",
             session_id=state.get("session_id"),
@@ -243,6 +247,7 @@ async def safety_node(state: DetourGraphState, config: Dict[str, Any]) -> Detour
         "confidence": 0.95 if approved else 0.5,
     }
     state["safety_review"] = safety_review
+    state["safety_output"] = safety_review
     logger.info(
         "Safety node completed review",
         session_id=state.get("session_id"),
@@ -286,6 +291,7 @@ async def ops_brief_node(state: DetourGraphState, config: Dict[str, Any]) -> Det
         "confidence": 0.9,
     }
     state["ops_brief"] = brief
+    state["ops_brief_output"] = brief
     state["completed"] = True
     logger.info(
         "Ops brief node completed",

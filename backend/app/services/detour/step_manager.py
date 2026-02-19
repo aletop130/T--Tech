@@ -372,7 +372,7 @@ class DetourStepManager:
         return step_session
 
     async def _build_graph_state(self, step_session: DetourStepSession) -> DetourGraphState:
-        return {
+        state: DetourGraphState = {
             "session_id": step_session.session_id,
             "tenant_id": step_session.tenant_id,
             "satellite_id": step_session.satellite_id,
@@ -389,6 +389,59 @@ class DetourStepManager:
             "errors": [],
             "completed": False,
         }
+        stmt = (
+            select(DetourAgentStep)
+            .where(DetourAgentStep.session_id == step_session.session_id)
+            .order_by(DetourAgentStep.step_number)
+        )
+        result = await self.db.execute(stmt)
+        steps = result.scalars().all()
+
+        for step in steps:
+            output = step.output_data or {}
+            if not output:
+                continue
+
+            if step.agent_name == "scout":
+                results = output.get("screening_results", [])
+                state["screening_results"] = results
+                state["scout_output"] = {
+                    "screening_results": results,
+                    "cesium_actions": step.cesium_actions or [],
+                }
+            elif step.agent_name == "analyst":
+                assessment = output.get("risk_assessment")
+                state["risk_assessment"] = assessment
+                if isinstance(assessment, dict):
+                    state["analyst_output"] = {
+                        **assessment,
+                        "cesium_actions": step.cesium_actions or assessment.get("cesium_actions", []),
+                    }
+            elif step.agent_name == "planner":
+                options = output.get("maneuver_options", [])
+                state["maneuver_options"] = options
+                state["planner_output"] = {
+                    "maneuver_options": options,
+                    "cesium_actions": step.cesium_actions or [],
+                }
+            elif step.agent_name == "safety":
+                review = output.get("safety_review")
+                state["safety_review"] = review
+                if isinstance(review, dict):
+                    state["safety_output"] = {
+                        **review,
+                        "cesium_actions": step.cesium_actions or review.get("cesium_actions", []),
+                    }
+            elif step.agent_name == "ops_brief":
+                brief = output.get("ops_brief")
+                state["ops_brief"] = brief
+                if isinstance(brief, dict):
+                    state["ops_brief_output"] = {
+                        **brief,
+                        "cesium_actions": step.cesium_actions or brief.get("cesium_actions", []),
+                    }
+
+        return state
 
     def _extract_agent_output(self, agent_name: str, state: DetourGraphState) -> Dict[str, Any]:
         """Extract relevant output data from graph state for a specific agent."""
@@ -406,61 +459,52 @@ class DetourStepManager:
 
     def _extract_cesium_actions(self, agent_name: str, state: DetourGraphState) -> List[Dict[str, Any]]:
         """Extract Cesium actions from agent execution."""
-        actions = []
-        
-        if agent_name == "scout":
-            screening = state.get("screening_results", [])
-            if screening:
-                for result in screening[:1]:
-                    actions.append({
-                        "type": "cesium.flyTo",
-                        "payload": {
-                            "target": "conjunction",
-                            "conjunction_data": result,
-                        },
-                    })
-                    actions.append({
-                        "type": "cesium.drawLine",
-                        "payload": {
-                            "from": state.get("satellite_id"),
-                            "to": result.get("object_id"),
-                            "color": "#FF6B6B",
-                        },
-                    })
-        
-        elif agent_name == "analyst":
-            risk = state.get("risk_assessment")
-            if risk:
-                risk_level = risk.get("risk_level", "LOW")
-                color = {"LOW": "#4CAF50", "MEDIUM": "#FFC107", "HIGH": "#FF9800", "CRITICAL": "#F44336"}.get(risk_level, "#9E9E9E")
-                actions.append({
-                    "type": "cesium.showUncertainty",
-                    "payload": {
-                        "risk_level": risk_level,
-                        "color": color,
-                    },
-                })
-        
+        output_key_map = {
+            "scout": "scout_output",
+            "analyst": "analyst_output",
+            "planner": "planner_output",
+            "safety": "safety_output",
+            "ops_brief": "ops_brief_output",
+        }
+        output = state.get(output_key_map.get(agent_name, ""), {}) or {}
+        actions = output.get("cesium_actions") or []
+        if actions:
+            return actions
+
+        # Fallback policy: always emit at least one valid Cesium action per step.
+        satellite_id = state.get("satellite_id")
+        fallback: List[Dict[str, Any]] = []
+        if satellite_id:
+            fallback.append(
+                {
+                    "type": "cesium.flyTo",
+                    "payload": {"entityId": f"satellite-{satellite_id}", "duration": 1.2},
+                }
+            )
+
+        if agent_name == "analyst":
+            fallback.append(
+                {
+                    "type": "cesium.toggle",
+                    "payload": {"showConjunctions": True},
+                }
+            )
         elif agent_name == "planner":
-            maneuvers = state.get("maneuver_options", [])
-            for m in maneuvers[:3]:
-                actions.append({
-                    "type": "cesium.showTrajectory",
-                    "payload": {
-                        "maneuver": m,
-                        "color": "#2196F3",
-                    },
-                })
-        
+            fallback.append(
+                {
+                    "type": "cesium.toggle",
+                    "payload": {"showOrbits": True},
+                }
+            )
         elif agent_name == "ops_brief":
-            actions.append({
-                "type": "cesium.showSummary",
-                "payload": {
-                    "ops_brief": state.get("ops_brief"),
-                },
-            })
-        
-        return actions
+            fallback.append(
+                {
+                    "type": "cesium.setSelected",
+                    "payload": {"entityId": f"satellite-{satellite_id}" if satellite_id else None},
+                }
+            )
+
+        return fallback
 
     def _summarize_output(self, agent_name: str, output_data: Optional[Dict[str, Any]]) -> str:
         """Create a human-readable summary of agent output."""

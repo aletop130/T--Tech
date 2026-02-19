@@ -1,12 +1,15 @@
 """FastAPI main application."""
+import asyncio
 from contextlib import asynccontextmanager
 from datetime import datetime
 
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+import anyio
 import structlog
 from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
+from starlette.types import ASGIApp, Scope, Receive, Send
 
 from app.core.config import settings
 from app.core.logging import configure_logging, get_logger
@@ -16,6 +19,48 @@ from app.schemas.common import HealthResponse
 
 configure_logging()
 logger = get_logger(__name__)
+
+
+class LoggingContextMiddleware:
+    """ASGI middleware to bind tenant/session IDs to structlog contextvars.
+
+    Implemented as pure ASGI middleware to avoid BaseHTTPMiddleware cancellation
+    edge-cases with long-lived/streaming requests.
+    """
+
+    def __init__(self, app: ASGIApp):
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope.get("type") != "http":
+            await self.app(scope, receive, send)
+            return
+
+        headers = {
+            key.decode("latin1").lower(): value.decode("latin1")
+            for key, value in scope.get("headers", [])
+        }
+        tenant_id = headers.get("x-tenant-id", "default")
+        structlog.contextvars.bind_contextvars(tenant_id=tenant_id)
+
+        path = scope.get("path", "")
+        path_parts = path.split("/")
+        if "sessions" in path_parts:
+            idx = path_parts.index("sessions")
+            if idx + 1 < len(path_parts):
+                structlog.contextvars.bind_contextvars(session_id=path_parts[idx + 1])
+
+        try:
+            # Shield request handling from disconnect cancellation long enough
+            # to let dependency cleanup return DB connections to the pool.
+            with anyio.CancelScope(shield=True):
+                await self.app(scope, receive, send)
+        except asyncio.CancelledError:
+            # Client disconnected; avoid noisy cancellation tracebacks.
+            logger.info("request_cancelled", path=path, tenant_id=tenant_id)
+            return
+        finally:
+            structlog.contextvars.clear_contextvars()
 
 
 @asynccontextmanager
@@ -37,23 +82,7 @@ app = FastAPI(
 )
 
 # CORS middleware
-
-@app.middleware("http")
-async def add_logging_context(request: Request, call_next):
-    # Bind tenant_id from header
-    tenant_id = request.headers.get("X-Tenant-ID", "default")
-    structlog.contextvars.bind_contextvars(tenant_id=tenant_id)
-    # Bind session_id from URL path if present
-    path_parts = request.url.path.split("/")
-    if "sessions" in path_parts:
-        idx = path_parts.index("sessions")
-        if idx + 1 < len(path_parts):
-            session_id = path_parts[idx + 1]
-            structlog.contextvars.bind_contextvars(session_id=session_id)
-    response = await call_next(request)
-    # Clear context variables
-    structlog.contextvars.unbind_contextvars("tenant_id", "session_id")
-    return response
+app.add_middleware(LoggingContextMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],  # Configure properly in production
@@ -111,5 +140,3 @@ async def root():
 @app.get("/metrics")
 def metrics():
     return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
-
-

@@ -32,6 +32,9 @@ interface AgentState {
   message?: string;
 }
 
+const CHAT_CONNECT_TIMEOUT_MS = 20000;
+const CHAT_STREAM_IDLE_TIMEOUT_MS = 30000;
+
 // Pattern per rilevare intent Detour nel messaggio
 const DETOUR_PATTERNS = [
   /analizza.*congiunzione/i,
@@ -65,6 +68,32 @@ function extractSatelliteId(message: string): string | null {
   return null;
 }
 
+function isStepByStepRequest(message: string): boolean {
+  return /step.*by.*step|passo.*passo/i.test(message);
+}
+
+function describeMapUpdate(actionType: string | undefined): string {
+  if (!actionType) {
+    return 'aggiornamento visuale';
+  }
+
+  const normalized = actionType.startsWith('cesium.')
+    ? actionType.replace('cesium.', '')
+    : actionType;
+
+  const labels: Record<string, string> = {
+    flyTo: 'focus camera',
+    addEntity: 'nuovo oggetto',
+    toggle: 'layer aggiornati',
+    setSelected: 'selezione oggetto',
+    setClock: 'tempo simulazione',
+    loadCzml: 'traiettorie caricate',
+    removeLayer: 'layer rimosso',
+  };
+
+  return labels[normalized] || 'aggiornamento visuale';
+}
+
 export function AgentChat({ onSendMessage, initialMessages = [], useStreaming = true }: AgentChatProps) {
   const [messages, setMessages] = useState<ChatDisplayMessage[]>(initialMessages);
   const [input, setInput] = useState('');
@@ -75,6 +104,8 @@ export function AgentChat({ onSendMessage, initialMessages = [], useStreaming = 
   const [currentToolCalls, setCurrentToolCalls] = useState<{ tool_name: string; arguments: Record<string, unknown> }[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const sseClientRef = useRef<SSEChatClient | null>(null);
+  const sessionRef = useRef<string>(typeof crypto !== 'undefined' ? crypto.randomUUID() : `chat-${Date.now()}`);
+  const mapSessionRef = useRef<string>(typeof crypto !== 'undefined' ? crypto.randomUUID() : `map-${Date.now()}`);
   
   // New state for orchestration
   const [activeAgents, setActiveAgents] = useState<AgentState[]>([]);
@@ -86,6 +117,8 @@ export function AgentChat({ onSendMessage, initialMessages = [], useStreaming = 
     isStepByStepMode,
     startStepByStep,
     stepSession,
+    selectedSatellite,
+    selectedConjunction,
   } = useDetourStore();
 
   const scrollToBottom = () => {
@@ -119,14 +152,25 @@ export function AgentChat({ onSendMessage, initialMessages = [], useStreaming = 
     
     setMessages((prev) => [...prev, assistantMessage]);
     
+    let connectTimeout: ReturnType<typeof setTimeout> | null = null;
     try {
+      const controller = new AbortController();
+      connectTimeout = setTimeout(() => controller.abort(), CHAT_CONNECT_TIMEOUT_MS);
       const response = await fetch('/api/v1/ai/chat/orchestrate', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ message }),
+        signal: controller.signal,
+        body: JSON.stringify({
+          message,
+          session_id: sessionRef.current,
+          map_session_id: mapSessionRef.current,
+          mode: 'analyze',
+        }),
       });
+      clearTimeout(connectTimeout);
+      connectTimeout = null;
       
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
@@ -141,7 +185,16 @@ export function AgentChat({ onSendMessage, initialMessages = [], useStreaming = 
       }
       
       while (true) {
-        const { done, value } = await reader.read();
+        const readResult = await Promise.race([
+          reader.read(),
+          new Promise<never>((_, reject) =>
+            setTimeout(
+              () => reject(new Error('Timeout: nessuna risposta dal backend.')),
+              CHAT_STREAM_IDLE_TIMEOUT_MS
+            )
+          ),
+        ]);
+        const { done, value } = readResult;
         if (done) break;
         
         const chunk = decoder.decode(value, { stream: true });
@@ -207,9 +260,13 @@ export function AgentChat({ onSendMessage, initialMessages = [], useStreaming = 
                   
                 case 'cesium_action':
                   try {
-                    cesiumController.executeAction(event.action);
+                    if (typeof event.action?.type === 'string' && event.action.type.startsWith('cesium.')) {
+                      cesiumController.dispatch(event.action as CesiumAction);
+                    } else {
+                      cesiumController.executeAction(event.action);
+                    }
                     
-                    const actionMsg = `🎬 Azione: ${event.action.type}`;
+                    const actionMsg = `🎬 Mappa aggiornata: ${describeMapUpdate(event.action?.type)}`;
                     fullContent += `\n${actionMsg}`;
                     setMessages((msgs) =>
                       msgs.map((msg) =>
@@ -221,6 +278,17 @@ export function AgentChat({ onSendMessage, initialMessages = [], useStreaming = 
                   } catch (error) {
                     console.warn('Cesium action failed:', error);
                   }
+                  break;
+
+                case 'confirmation_required':
+                  fullContent += `\n⚠️ Conferma richiesta: ${event.operation?.summary || 'operazione pending'}\n`;
+                  setMessages((msgs) =>
+                    msgs.map((msg) =>
+                      msg.id === assistantMessageId
+                        ? { ...msg, content: fullContent }
+                        : msg
+                    )
+                  );
                   break;
                   
                 case 'memory_usage':
@@ -261,12 +329,18 @@ export function AgentChat({ onSendMessage, initialMessages = [], useStreaming = 
       setIsLoading(false);
     } catch (error) {
       console.error('Orchestration error:', error);
+      const errorMessage =
+        error instanceof DOMException && error.name === 'AbortError'
+          ? 'Timeout: nessuna risposta dal backend entro il limite previsto.'
+          : error instanceof Error
+            ? error.message
+            : 'Errore sconosciuto';
       setMessages((msgs) =>
         msgs.map((msg) =>
           msg.id === assistantMessageId
             ? {
                 ...msg,
-                content: `❌ Errore: ${error instanceof Error ? error.message : 'Errore sconosciuto'}`,
+                content: `❌ Errore: ${errorMessage}`,
                 isStreaming: false,
               }
             : msg
@@ -274,6 +348,10 @@ export function AgentChat({ onSendMessage, initialMessages = [], useStreaming = 
       );
       setIsLoading(false);
       setShowAgentTimeline(false);
+    } finally {
+      if (connectTimeout) {
+        clearTimeout(connectTimeout);
+      }
     }
   };
 
@@ -293,8 +371,37 @@ export function AgentChat({ onSendMessage, initialMessages = [], useStreaming = 
     setStreamingText('');
     setCurrentToolCalls([]);
 
-    // Check for Detour intent and use orchestration
-    if (isDetourIntent(input.trim())) {
+    // Step-by-step mode can be explicitly requested in chat.
+    if (isStepByStepRequest(userMessage.content) && !isStepByStepMode) {
+      const conjunctionId = extractConjunctionId(userMessage.content) || selectedConjunction;
+      const satelliteId = selectedSatellite;
+      if (conjunctionId && satelliteId) {
+        try {
+          await startStepByStep(conjunctionId, satelliteId);
+          const assistantMessage: ChatDisplayMessage = {
+            id: (Date.now() + 1).toString(),
+            role: 'assistant',
+            content: `Pipeline step-by-step avviata su ${conjunctionId}.`,
+            timestamp: new Date().toISOString(),
+          };
+          setMessages((prev) => [...prev, assistantMessage]);
+        } catch (error) {
+          const assistantMessage: ChatDisplayMessage = {
+            id: (Date.now() + 1).toString(),
+            role: 'assistant',
+            content: `Impossibile avviare step-by-step: ${error instanceof Error ? error.message : 'errore sconosciuto'}`,
+            timestamp: new Date().toISOString(),
+          };
+          setMessages((prev) => [...prev, assistantMessage]);
+        } finally {
+          setIsLoading(false);
+        }
+        return;
+      }
+    }
+
+    // Use orchestrator for all streaming requests (Detour + map + operations).
+    if (useStreaming || isDetourIntent(userMessage.content)) {
       await handleOrchestration(userMessage.content);
       return;
     }

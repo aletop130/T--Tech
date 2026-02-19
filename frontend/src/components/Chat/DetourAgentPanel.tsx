@@ -61,7 +61,11 @@ export function DetourAgentPanel({
   useEffect(() => {
     if (pendingCesiumActions.length > 0) {
       pendingCesiumActions.forEach((action) => {
-        cesiumController.dispatch(action as CesiumAction);
+        if (typeof action.type === 'string' && action.type.startsWith('cesium.')) {
+          cesiumController.dispatch(action as CesiumAction);
+        } else {
+          cesiumController.executeAction(action as unknown as { type: string; [key: string]: unknown });
+        }
       });
     }
   }, [pendingCesiumActions]);
@@ -208,7 +212,7 @@ export function DetourAgentPanel({
                   {step.cesium_actions && step.cesium_actions.length > 0 && (
                     <div className="flex items-center gap-1.5 mt-2 text-blue-400">
                       <Icon icon="map" />
-                      <span>{step.cesium_actions.length} azioni Cesium</span>
+                      <span>{step.cesium_actions.length} azioni mappa</span>
                     </div>
                   )}
                 </div>

@@ -50,6 +50,9 @@ async def start_step_by_step(
             tenant_id=user.tenant_id,
             execution_mode=request.execution_mode,
         )
+
+        # Run Scout immediately so the session starts with actionable output.
+        await step_manager.execute_agent_step(session.session_id, "scout")
         
         await step_manager.db.commit()
         

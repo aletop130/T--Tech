@@ -107,7 +107,7 @@ class PostgreSQLChatMemory:
             token_count=token_count,
             cumulative_tokens=new_cumulative,
             window_percentage=window_percentage,
-            metadata=metadata or {}
+            message_metadata=metadata or {},
         )
         
         self.db.add(entry)
@@ -143,8 +143,12 @@ class PostgreSQLChatMemory:
         
         messages = []
         for entry in entries:
+            role = entry.role
+            if role not in {"system", "user", "assistant", "tool"}:
+                # OpenAI-compatible APIs reject unsupported roles like "agent".
+                role = "assistant"
             messages.append({
-                "role": entry.role,
+                "role": role,
                 "content": entry.content
             })
         
@@ -307,3 +311,27 @@ class PostgreSQLChatMemory:
             role="agent",
             metadata=metadata
         )
+
+    async def get_latest_pending_confirmation(self) -> Optional[Dict[str, Any]]:
+        """Return the latest unresolved confirmation request for this session."""
+        entries = await self.get_context(limit=100)
+        for entry in entries:
+            metadata = entry.message_metadata or {}
+            pending = metadata.get("pending_confirmation")
+            if pending and not pending.get("resolved", False):
+                return pending
+        return None
+
+    async def mark_confirmation_resolved(self, operation_id: str) -> None:
+        """Mark a pending confirmation as resolved by operation_id."""
+        entries = await self.get_context(limit=100)
+        for entry in entries:
+            metadata = dict(entry.message_metadata or {})
+            pending = metadata.get("pending_confirmation")
+            if pending and pending.get("operation_id") == operation_id and not pending.get("resolved", False):
+                pending["resolved"] = True
+                pending["resolved_at"] = datetime.utcnow().isoformat()
+                metadata["pending_confirmation"] = pending
+                entry.message_metadata = metadata
+                await self.db.flush()
+                return

@@ -1,4 +1,5 @@
 """AI API endpoints."""
+import asyncio
 import json
 from typing import Annotated, Any, AsyncGenerator
 from fastapi import APIRouter, Depends, Request
@@ -18,8 +19,10 @@ from app.schemas.ai import (
     MitigationProposal,
 )
 from app.schemas.cesium import CesiumAction
+from app.core.logging import get_logger
 
 router = APIRouter()
+logger = get_logger(__name__)
 
 
 @router.post("/chat", response_model=ChatResponse)
@@ -56,7 +59,12 @@ async def stream_chat(
                 tenant_id=user.tenant_id,
                 include_satellites=include_satellites
             ):
+                if await request.is_disconnected():
+                    break
                 yield data
+        except asyncio.CancelledError:
+            # Client disconnected while streaming.
+            return
         except Exception as e:
             yield f"data: {json.dumps({'type': 'error', 'error': str(e)})}\n\n"
     
@@ -175,15 +183,37 @@ async def orchestrate_chat(
     """
     body = await request.json()
     message = body.get("message", "")
+    session_id = body.get("session_id")
+    map_session_id = body.get("map_session_id")
+    mode = body.get("mode", "analyze")
+    logger.info(
+        "chat_orchestrate_request",
+        tenant_id=user.tenant_id,
+        user_id=user.sub,
+        session_id=session_id,
+        map_session_id=map_session_id,
+        mode=mode,
+        message_preview=message[:120],
+    )
     
     async def generate() -> AsyncGenerator[str, None]:
         try:
+            # Emit an immediate event so proxies/clients receive stream headers promptly.
+            yield f"data: {json.dumps({'type': 'status', 'phase': 'accepted'})}\n\n"
             async for data in service.orchestrate_detour_agents(
                 message=message,
                 tenant_id=user.tenant_id,
                 user_id=user.sub,
+                session_id=session_id,
+                map_session_id=map_session_id,
+                mode=mode,
             ):
+                if await request.is_disconnected():
+                    break
                 yield data
+        except asyncio.CancelledError:
+            # Client disconnected while streaming.
+            return
         except Exception as e:
             yield f"data: {json.dumps({'type': 'error', 'error': str(e)})}\n\n"
     
@@ -196,4 +226,3 @@ async def orchestrate_chat(
             "X-Accel-Buffering": "no",
         },
     )
-

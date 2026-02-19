@@ -1,5 +1,3 @@
-// WRITE_TARGET="frontend/src/components/Detour/AgentChat.tsx"
-// WRITE_CONTENT_LENGTH=0
 'use client';
 
 import React from 'react';

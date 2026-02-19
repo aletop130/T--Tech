@@ -154,9 +154,8 @@ async def get_debris(
 ):
     """Retrieve debris objects for visualization."""
     # Fetch debris with orbits (ignoring orbitClasses for now)
-    debris_with_orbits = await service.get_debris_with_orbits(user.tenant_id)
-    # Limit results
-    limited = debris_with_orbits[:limit]
+    debris_with_orbits = await service.get_debris_with_orbits(user.tenant_id, limit=limit)
+    limited = debris_with_orbits
     # Compute current time and skyfield timescale once for efficiency
     from skyfield.api import EarthSatellite, load
     ts = load.timescale()
@@ -207,8 +206,8 @@ async def get_debris_with_orbits(
     orbitClasses: str = Query("LEO"),
 ):
     """Retrieve debris objects with TLE data for detailed visualization."""
-    debris_with_orbits = await service.get_debris_with_orbits(user.tenant_id)
-    limited = debris_with_orbits[:limit]
+    debris_with_orbits = await service.get_debris_with_orbits(user.tenant_id, limit=limit)
+    limited = debris_with_orbits
     result = []
     # Compute current time and skyfield timescale once
     from skyfield.api import EarthSatellite, load
