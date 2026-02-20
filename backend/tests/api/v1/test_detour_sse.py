@@ -4,7 +4,7 @@ from app.db.base import generate_uuid
 
 @pytest.mark.asyncio
 async def test_detour_status_sse(client, db_session):
-    """Ensure SSE endpoint returns proper content type and payload."""
+    """Ensure SSE endpoint returns event-stream payload for unknown sessions."""
     session_id = generate_uuid()
     resp = await client.get(
         f"/api/v1/detour/sessions/{session_id}/status",
@@ -22,5 +22,4 @@ async def test_detour_status_sse(client, db_session):
     json_part = content.split("data: ", 1)[1].split("\n", 1)[0]
     payload = json.loads(json_part)
     assert payload["session_id"] == session_id
-    assert payload["status"] == "active"
-
+    assert payload["type"] == "error"

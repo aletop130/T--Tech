@@ -27,7 +27,7 @@ function isAlliedSatellite(satellite: SimulatedSatellite): boolean {
 interface SimulatedSatellite {
   id: string;
   name: string;
-  type: 'recon' | 'comms';
+  type: 'recon' | 'comms' | 'debris';
   position: InstanceType<CesiumModule['Cartesian3']>;
   status: 'online' | 'degraded' | 'maneuvering' | 'offline';
   fuelPercent: number;

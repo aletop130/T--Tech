@@ -383,6 +383,19 @@ class OntologyService:
             user_id,
         )
     
+    async def delete_ground_station(
+        self,
+        station_id: str,
+        tenant_id: str,
+        user_id: Optional[str] = None,
+    ) -> None:
+        """Delete a ground station."""
+        station = await self.get_ground_station(station_id, tenant_id)
+        if not station:
+            raise NotFoundError("GroundStation", station_id)
+        
+        await self._delete(station, tenant_id, user_id)
+    
     # ============== Sensor Operations ==============
     
     async def create_sensor(
@@ -554,12 +567,12 @@ class OntologyService:
             .offset(offset)
             .limit(page_size)
         )
-        
+
         result = await self.db.execute(stmt)
-        events = list(result.scalars().all())
-        
+        events = list(result.scalars().unique().all())
+
         return events, total
-    
+
     # ============== Relation Operations ==============
     
     async def create_relation(

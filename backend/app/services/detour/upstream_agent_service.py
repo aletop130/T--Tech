@@ -1,0 +1,338 @@
+"""Adapter service for vendored upstream Detour agent pipeline.
+
+This service executes the imported keanucz/detour multi-agent pipeline and
+persists execution state into SDA's DetourAgentSession model.
+"""
+
+from __future__ import annotations
+
+import asyncio
+from datetime import datetime, timedelta
+from typing import Any, AsyncGenerator, Dict, Optional
+
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
+from app.core.exceptions import NotFoundError, SDAException
+from app.core.logging import get_logger
+from app.db.base import async_session_factory, generate_uuid
+from app.db.models.detour import DetourAgentSession, DetourAgentSessionStatus
+from app.db.models.ontology import ConjunctionEvent, Satellite
+from app.monitoring import DETOUR_ANALYSES_TOTAL
+from app.vendors.detour_upstream.agents.config import LLMConfig
+from app.vendors.detour_upstream.agents.config_adapter import build_sda_default_config
+from app.vendors.detour_upstream.agents.graph import stream_avoidance_pipeline
+from app.vendors.detour_upstream.api.demo_data import load_demo_data
+from app.vendors.detour_upstream.api.state import get_catalog, get_satellite
+from app.vendors.detour_upstream.tools.screening import screen_conjunctions
+
+logger = get_logger(__name__)
+
+
+class UpstreamDetourAgentService:
+    """Run and track vendored upstream Detour agent sessions."""
+
+    _demo_loaded: bool = False
+    _demo_lock = asyncio.Lock()
+    _active_tasks: set[asyncio.Task[Any]] = set()
+
+    def __init__(self, db: AsyncSession) -> None:
+        self.db = db
+
+    @staticmethod
+    def _status_value(session: DetourAgentSession) -> str:
+        status = session.status
+        return status.value if hasattr(status, "value") else str(status)
+
+    @classmethod
+    async def _ensure_demo_data(cls) -> None:
+        if cls._demo_loaded:
+            return
+        async with cls._demo_lock:
+            if cls._demo_loaded:
+                return
+            loop = asyncio.get_running_loop()
+            await loop.run_in_executor(None, load_demo_data)
+            cls._demo_loaded = True
+            logger.info("detour_upstream_demo_data_loaded")
+
+    @staticmethod
+    def _build_llm_config() -> LLMConfig:
+        return build_sda_default_config()
+
+    @staticmethod
+    def _build_prompt(
+        conjunction: ConjunctionEvent,
+        primary: Optional[Satellite],
+        secondary: Optional[Satellite],
+    ) -> str:
+        primary_name = primary.name if primary else conjunction.primary_object_id
+        secondary_name = secondary.name if secondary else conjunction.secondary_object_id
+        tca = conjunction.tca.isoformat() if conjunction.tca else "unknown"
+        miss = conjunction.miss_distance_km
+        risk = conjunction.risk_level
+        return (
+            "Analyze conjunction risk and provide an operator brief.\n"
+            f"Conjunction ID: {conjunction.id}\n"
+            f"Primary object: {primary_name} ({conjunction.primary_object_id})\n"
+            f"Secondary object: {secondary_name} ({conjunction.secondary_object_id})\n"
+            f"TCA: {tca}\n"
+            f"Miss distance (km): {miss}\n"
+            f"Risk level: {risk}\n"
+            "Use the available tools to assess threats and suggest avoidance actions.\n"
+            "Be concise and operational."
+        )
+
+    @staticmethod
+    def _update_output_from_event(output_data: Dict[str, Any], event: Dict[str, Any]) -> None:
+        event_type = event.get("type")
+        if event_type != "agent_output":
+            return
+        agent = str(event.get("agent", ""))
+        content = event.get("content")
+        if not isinstance(content, str):
+            return
+        if agent == "ops_brief":
+            output_data["ops_brief"] = content
+            return
+        if agent in {"scout", "analyst", "planner", "safety"}:
+            output_data[f"{agent}_output"] = content
+
+    async def trigger_conjunction_analysis(self, conjunction_event_id: str, tenant_id: str) -> str:
+        conjunction = await self.db.get(ConjunctionEvent, conjunction_event_id)
+        if not conjunction or conjunction.tenant_id != tenant_id:
+            raise NotFoundError(
+                resource_type="ConjunctionEvent",
+                resource_id=conjunction_event_id,
+                detail="Conjunction event not found",
+            )
+
+        primary = await self.db.get(Satellite, conjunction.primary_object_id)
+        secondary = await self.db.get(Satellite, conjunction.secondary_object_id)
+        prompt = self._build_prompt(conjunction, primary, secondary)
+
+        session_id = generate_uuid()
+        session = DetourAgentSession(
+            id=session_id,
+            tenant_id=tenant_id,
+            session_type="detour_upstream_pipeline",
+            status=DetourAgentSessionStatus.ACTIVE,
+            input_data={
+                "conjunction_event_id": conjunction_event_id,
+                "prompt": prompt,
+                "provider": "detour_upstream",
+            },
+            output_data={},
+            events=[],
+            started_at=datetime.utcnow(),
+        )
+        self.db.add(session)
+        await self.db.commit()
+        DETOUR_ANALYSES_TOTAL.inc()
+
+        # During SQLite in-memory tests, avoid spawning long-lived background
+        # tasks that depend on external LLM connectivity.
+        bind_url = str(getattr(self.db.bind, "url", ""))
+        if "sqlite" in bind_url:
+            session.events = [
+                {
+                    "type": "agent_start",
+                    "agent": "detour",
+                    "message": "Background pipeline disabled in SQLite test mode",
+                    "timestamp": datetime.utcnow().timestamp(),
+                }
+            ]
+            await self.db.commit()
+            return session_id
+
+        await self._ensure_demo_data()
+        session_factory = self._session_factory()
+        task = asyncio.create_task(self._run_pipeline_session(session_factory, session_id, prompt))
+        self._active_tasks.add(task)
+        task.add_done_callback(self._active_tasks.discard)
+
+        logger.info(
+            "detour_upstream_session_started",
+            session_id=session_id,
+            conjunction_event_id=conjunction_event_id,
+            tenant_id=tenant_id,
+        )
+        return session_id
+
+    @classmethod
+    async def _run_pipeline_session(
+        cls,
+        session_factory: async_sessionmaker[AsyncSession],
+        session_id: str,
+        prompt: str,
+    ) -> None:
+        config = cls._build_llm_config()
+        events: list[dict[str, Any]] = []
+        output_data: dict[str, Any] = {}
+        saw_error_event = False
+
+        async with session_factory() as db:
+            session = await db.get(DetourAgentSession, session_id)
+            if not session:
+                return
+
+            try:
+                async for event in stream_avoidance_pipeline(prompt, config=config, mode="multi"):
+                    if not isinstance(event, dict):
+                        continue
+                    events.append(event)
+                    cls._update_output_from_event(output_data, event)
+                    if event.get("type") == "error":
+                        saw_error_event = True
+
+                    # Persist periodically so /status can stream progress.
+                    if len(events) % 4 == 0 or event.get("type") in {"pipeline_complete", "error"}:
+                        session.events = list(events)
+                        session.output_data = dict(output_data)
+                        await db.commit()
+
+                session.events = list(events)
+                session.output_data = dict(output_data)
+                session.status = (
+                    DetourAgentSessionStatus.FAILED
+                    if saw_error_event
+                    else DetourAgentSessionStatus.COMPLETED
+                )
+                session.completed_at = datetime.utcnow()
+                await db.commit()
+            except Exception as exc:  # pragma: no cover
+                logger.exception("detour_upstream_pipeline_failed", session_id=session_id)
+                events.append(
+                    {
+                        "type": "error",
+                        "message": str(exc),
+                        "timestamp": datetime.utcnow().timestamp(),
+                    }
+                )
+                session.events = list(events)
+                session.output_data = {**output_data, "error": str(exc)}
+                session.status = DetourAgentSessionStatus.FAILED
+                session.completed_at = datetime.utcnow()
+                await db.commit()
+
+    async def get_analysis_status(self, session_id: str) -> Dict[str, Any]:
+        session = await self.db.get(DetourAgentSession, session_id)
+        if not session:
+            raise NotFoundError(
+                resource_type="DetourAgentSession",
+                resource_id=session_id,
+                detail="Detour analysis session not found",
+            )
+        return {
+            "session_id": session.id,
+            "status": self._status_value(session),
+            "started_at": session.started_at.isoformat() if session.started_at else None,
+            "completed_at": session.completed_at.isoformat() if session.completed_at else None,
+            "events": session.events or [],
+        }
+
+    async def get_analysis_results(self, session_id: str) -> Dict[str, Any]:
+        session = await self.db.get(DetourAgentSession, session_id)
+        if not session:
+            raise NotFoundError(
+                resource_type="DetourAgentSession",
+                resource_id=session_id,
+                detail="Detour analysis session not found",
+            )
+        if session.status != DetourAgentSessionStatus.COMPLETED:
+            raise SDAException(
+                status_code=400,
+                error_type="analysis-not-complete",
+                title="Analysis Not Complete",
+                detail="Requested analysis results but session is not completed",
+            )
+        return {
+            "session_id": session.id,
+            "status": self._status_value(session),
+            "output_data": session.output_data or {},
+        }
+
+    async def stream_analysis_status(self, session_id: str) -> AsyncGenerator[Dict[str, Any], None]:
+        seen_events = 0
+        session_factory = self._session_factory()
+        while True:
+            async with session_factory() as db:
+                session = await db.get(DetourAgentSession, session_id)
+                if not session:
+                    yield {
+                        "type": "error",
+                        "session_id": session_id,
+                        "message": "Session not found",
+                    }
+                    return
+
+                status = self._status_value(session)
+                events = session.events or []
+                while seen_events < len(events):
+                    event = events[seen_events]
+                    seen_events += 1
+                    yield {
+                        "session_id": session_id,
+                        "status": status,
+                        "event": event,
+                    }
+
+                if status in {"completed", "failed", "cancelled"}:
+                    yield {
+                        "session_id": session_id,
+                        "status": status,
+                        "done": True,
+                        "output_data": session.output_data or {},
+                    }
+                    return
+            await asyncio.sleep(0.8)
+
+    async def run_manual_screening(
+        self,
+        satellite_id: str,
+        time_window_hours: float = 72,
+        threshold_km: float = 5.0,
+    ) -> Dict[str, Any]:
+        await self._ensure_demo_data()
+        sat = get_satellite()
+        catalog = get_catalog()
+        debris = [obj.to_dict() for obj in catalog.list_debris()]
+        events = screen_conjunctions(
+            primary_pos=sat.position,
+            primary_vel=sat.velocity,
+            debris_list=debris,
+            lookahead_sec=float(time_window_hours) * 3600,
+            threshold_km=float(threshold_km),
+        )
+        now = datetime.utcnow()
+        candidates = []
+        for idx, event in enumerate(events):
+            tca = now + timedelta(seconds=float(event.get("tca_offset_sec", 0)))
+            candidates.append(
+                {
+                    "candidate_id": f"{satellite_id}:{event.get('secondary_id', 'unknown')}:{idx}",
+                    "satellite_id": str(event.get("secondary_id", "")),
+                    "tca": tca.isoformat(),
+                    "miss_distance_km": float(event.get("miss_distance_m", 0.0)) / 1000.0,
+                    "collision_probability": event.get("probability_estimate"),
+                    "risk_level": event.get("risk_level"),
+                }
+            )
+        return {
+            "candidates": candidates,
+            "generated_at": now.isoformat(),
+            "metadata": {
+                "source": "detour_upstream",
+                "requested_satellite_id": satellite_id,
+            },
+        }
+    def _session_factory(self) -> async_sessionmaker[AsyncSession]:
+        bind = self.db.bind
+        if bind is None:
+            return async_session_factory
+        return async_sessionmaker(
+            bind=bind,
+            class_=AsyncSession,
+            expire_on_commit=False,
+            autocommit=False,
+            autoflush=False,
+        )

@@ -41,6 +41,9 @@ class Settings(BaseSettings):
     REGOLO_MODEL: str = "gpt-oss-120b"
     REGOLO_MAX_TOKENS: int = 4096
     REGOLO_TEMPERATURE: float = 0.7
+    DETOUR_REGOLO_TEMPERATURE: float = 0.2
+    DETOUR_REGOLO_MAX_MODEL_LEN: int = 8192
+    DETOUR_REGOLO_MAX_TOKENS: Optional[int] = None
     
     # Rate Limiting
     AI_RATE_LIMIT_REQUESTS: int = 100

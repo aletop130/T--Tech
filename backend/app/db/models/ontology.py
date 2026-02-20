@@ -34,6 +34,14 @@ class ObjectType(str, enum.Enum):
     UNKNOWN = "unknown"
 
 
+class Faction(str, enum.Enum):
+    """Faction affiliation for entities."""
+    ALLIED = "allied"
+    HOSTILE = "hostile"
+    NEUTRAL = "neutral"
+    UNKNOWN = "unknown"
+
+
 class OrbitType(str, enum.Enum):
     """Types of orbits."""
     LEO = "leo"
@@ -107,6 +115,7 @@ class Satellite(Base, AuditMixin):
     # Classification and tags
     classification = Column(String(50), default="unclassified")
     tags = Column(JSON, default=list)
+    faction = Column(String(20), nullable=True)  # allied, hostile, neutral, unknown
     
     # Description for vector search
     description = Column(Text, nullable=True)
@@ -241,6 +250,7 @@ class GroundStation(Base, AuditMixin):
     # Organization
     organization = Column(String(100), nullable=True)
     country = Column(String(50), nullable=True)
+    faction = Column(String(20), nullable=True)  # allied, hostile, neutral, unknown
     
     description = Column(Text, nullable=True)
     description_embedding = Column(JSON, nullable=True)

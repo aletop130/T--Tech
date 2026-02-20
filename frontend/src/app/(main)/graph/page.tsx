@@ -50,6 +50,7 @@ export default function GraphPage() {
   const [selectedLink, setSelectedLink] = useState<GraphLink | null>(null);
   const [stats, setStats] = useState({
     satellites: 0,
+    totalSatellites: 0,
     groundStations: 0,
     links: 0,
     conjunctions: 0,
@@ -72,7 +73,7 @@ export default function GraphPage() {
           allIncidentsData,
         ] = await Promise.all([
           api.getSatellitesWithOrbits(),
-          api.getGroundStations({ page_size: 100 }),
+          api.getGroundStations({ page_size: 20 }),
           api.getConjunctions({ page_size: 50, is_actionable: true }),
           api.getActiveProximityAlerts(),
           api.getCyberIncidents({ page_size: 50 }),
@@ -88,12 +89,16 @@ export default function GraphPage() {
         const maneuverAlerts: Incident[] = maneuverAlertsData.items;
         const allIncidents: Incident[] = allIncidentsData.items;
 
+        // Limit satellites to prevent browser crash - show only meaningful ones
+        const MAX_SATELLITES = 50;
+        const limitedSatellites = satellites.slice(0, MAX_SATELLITES);
+
         const incidentMap = new Map(allIncidents.map(inc => [inc.id, inc]));
 
         const graphNodes: GraphNode[] = [];
         const graphLinks: GraphLink[] = [];
 
-        satellites.forEach((sat: SatelliteDetail) => {
+        limitedSatellites.forEach((sat: SatelliteDetail) => {
           const node: GraphNode = {
             id: sat.id,
             label: sat.name,
@@ -121,7 +126,7 @@ export default function GraphPage() {
         const seenLinks = new Set<string>();
 
         // Add links from satellite relations
-        satellites.forEach((sat: SatelliteDetail) => {
+        limitedSatellites.forEach((sat: SatelliteDetail) => {
           sat.relations.forEach((rel) => {
             const linkKey = `rel-${rel.source_id}-${rel.target_id}-${rel.relation_type}`;
             if (!seenLinks.has(linkKey)) {
@@ -136,38 +141,8 @@ export default function GraphPage() {
           });
         });
 
-        // If no relations exist, create links between satellites with similar orbital parameters
-        if (graphLinks.length === 0 && satellites.length > 1) {
-          satellites.forEach((sat1: SatelliteDetail, i: number) => {
-            satellites.forEach((sat2: SatelliteDetail, j: number) => {
-              if (i >= j) return;
-              
-              // Check if satellites have similar inclination (could be in same orbital plane)
-              const orbit1 = sat1.latest_orbit;
-              const orbit2 = sat2.latest_orbit;
-              
-              let similarOrbit = false;
-              if (orbit1 && orbit2) {
-                const incDiff = Math.abs((orbit1.inclination_deg || 0) - (orbit2.inclination_deg || 0));
-                similarOrbit = incDiff < 5; // Similar inclination = possibly related
-              }
-              
-              // Create a "relation" link for satellites that might be related
-              if (similarOrbit || Math.random() < 0.1) {
-                const linkKey = `rel-${sat1.id}-${sat2.id}`;
-                if (!seenLinks.has(linkKey)) {
-                  seenLinks.add(linkKey);
-                  graphLinks.push({
-                    id: linkKey,
-                    source: sat1.id,
-                    target: sat2.id,
-                    type: 'relation',
-                  });
-                }
-              }
-            });
-          });
-        }
+        // Only show actual relations from data - no artificial links
+        // Links will only come from conjunctions, proximity alerts, cyber, and maneuver incidents
 
         conjunctions.forEach((conj: ConjunctionEvent) => {
           const linkKey = `conj-${conj.primary_object_id}-${conj.secondary_object_id}`;
@@ -248,7 +223,8 @@ export default function GraphPage() {
         setNodes(graphNodes);
         setLinks(graphLinks);
         setStats({
-          satellites: satellites.length,
+          satellites: limitedSatellites.length,
+          totalSatellites: satellites.length,
           groundStations: groundStations.length,
           links: graphLinks.length,
           conjunctions: conjunctions.length,
@@ -336,11 +312,11 @@ export default function GraphPage() {
       .forceSimulation(displayedNodes as any)
       .force(
         'link',
-        d3.forceLink(validLinks).id((d: any) => d.id).distance(150)
+        d3.forceLink(validLinks).id((d: any) => d.id).distance(100)
       )
-      .force('charge', d3.forceManyBody().strength(-400))
+      .force('charge', d3.forceManyBody().strength(-300))
       .force('center', d3.forceCenter(width / 2, height / 2))
-      .force('collision', d3.forceCollide().radius(50));
+      .force('collision', d3.forceCollide().radius(40));
 
     const container = svg.append('g');
 
@@ -408,7 +384,7 @@ export default function GraphPage() {
 
     node
       .append('circle')
-      .attr('r', (d: GraphNode) => d.type === 'ground_station' ? 20 : 25)
+      .attr('r', (d: GraphNode) => d.type === 'ground_station' ? 15 : 20)
       .attr('fill', (d: GraphNode) => {
         if (d.faction) return colorScale[d.faction];
         return colorScale[d.type] || '#8b949e';
@@ -421,7 +397,7 @@ export default function GraphPage() {
       .append('text')
       .text((d: GraphNode) => d.label)
       .attr('text-anchor', 'middle')
-      .attr('dy', (d: GraphNode) => d.type === 'ground_station' ? 35 : 40)
+      .attr('dy', (d: GraphNode) => d.type === 'ground_station' ? 28 : 32)
       .attr('fill', '#e6edf3')
       .attr('font-size', 10)
       .style('pointer-events', 'none');
@@ -540,7 +516,9 @@ export default function GraphPage() {
 
       <div className="flex gap-4 mb-4 flex-wrap">
         <div className="flex items-center gap-2">
-          <Tag intent="primary" minimal>{stats.satellites} Satellites</Tag>
+          <Tag intent="primary" minimal>
+            {stats.satellites}{stats.totalSatellites > stats.satellites ? ` / ${stats.totalSatellites}` : ''} Satellites
+          </Tag>
         </div>
         <div className="flex items-center gap-2">
           <Tag minimal>{stats.groundStations} Stations</Tag>

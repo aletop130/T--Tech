@@ -1,7 +1,7 @@
 """AI service for Regolo.ai integration."""
 import asyncio
 from datetime import datetime, timedelta
-from typing import Any, Optional, AsyncGenerator
+from typing import Any, Awaitable, Callable, Optional, AsyncGenerator
 import json
 import re
 
@@ -61,6 +61,38 @@ You can help with:
 - General questions about space domain awareness
 
 When technical data IS requested and available, provide structured, actionable insights citing specific data."""
+    
+    VISUALIZATION_PATTERNS = {
+        "show_maneuver_options": [
+            r"(?i)(opzioni|options).*(manovra|maneuver)",
+            r"(?i)(come|how).*(evitare|avoid|evito).*(collisione|collision)",
+            r"(?i)(mostra|show).*(opzioni|options).*(manovra|maneuver)?",
+            r"(?i)(cosa.*posso.*fare|what.*can.*do).*(collisione|collision)",
+            r"(?i)(piano.*manovra|maneuver.*plan)",
+        ],
+        "highlight_maneuver": [
+            r"(?i)(evidenzia|highlight).*(raccomandata|recommended|consigliata|migliore)",
+            r"(?i)(quale|which|what).*(manovra|maneuver).*(consigli|recommend|migliore|best)",
+            r"(?i)(scegli|choose|preferisci|suggest).*(manovra|maneuver)",
+            r"(?i)(la.*migliore|the.*best).*(opzione|option|manovra|maneuver)",
+        ],
+        "show_conjunction_line": [
+            r"(?i)(mostra|show|visualizza|display).*(conjunction|congiunzione|collisione).*(line|linea)",
+            r"(?i)(linea|line).*(congiunzione|conjunction|tra|between)",
+            r"(?i)(collegamento|connection|collega).*(satellit|debris|oggetti)",
+            r"(?i)(dove.*incontra|where.*meet)",
+        ],
+        "show_risk_heatmap": [
+            r"(?i)(heatmap|mappa.*rischio|risk.*heatmap|mappa.*rischi)",
+            r"(?i)(mostra|show|visualizza).*(risk|rischio).*(area|mappa|heatmap|zona)",
+            r"(?i)(area.*rischio|risk.*area)",
+        ],
+        "show_threat_radius": [
+            r"(?i)(threat|minaccia|pericolo).*(radius|raggio|area)",
+            r"(?i)(raggio|radius).*(minaccia|threat|pericolo)",
+            r"(?i)(zona.*pericolo|danger.*zone|keep.*out)",
+        ],
+    }
     
     def __init__(self, db: AsyncSession, ontology: OntologyService):
         self.db = db
@@ -268,10 +300,71 @@ When technical data IS requested and available, provide structured, actionable i
                 "altitude": arguments.get("altitude"),
                 "duration": arguments.get("duration"),
             }),
-            "cesium_search_location": ("cesium.searchLocation", {
+"cesium_search_location": ("cesium.searchLocation", {
                 "query": arguments.get("query"),
                 "altitude": arguments.get("altitude"),
                 "duration": arguments.get("duration"),
+            }),
+            "cesium_show_maneuver_options": ("cesium.showManeuverOptions", {
+                "satellite_id": arguments.get("satellite_id"),
+                "maneuvers": arguments.get("maneuvers"),
+                "recommended_id": arguments.get("recommended_id"),
+            }),
+            "cesium_highlight_maneuver": ("cesium.highlightManeuver", {
+                "satellite_id": arguments.get("satellite_id"),
+                "maneuver_id": arguments.get("maneuver_id"),
+                "color": arguments.get("color", "#00FF00"),
+            }),
+            "cesium_show_conjunction_line": ("cesium.showConjunctionLine", {
+                "satellite_a_id": arguments.get("satellite_a_id"),
+                "satellite_b_id": arguments.get("satellite_b_id"),
+                "color": arguments.get("color", "#FF1744"),
+                "label": arguments.get("label"),
+            }),
+            "cesium_show_risk_heatmap": ("cesium.showRiskHeatmap", {
+                "satellite_id": arguments.get("satellite_id"),
+                "risk_level": arguments.get("risk_level", "medium"),
+                "probability": arguments.get("probability"),
+            }),
+            "cesium_show_threat_radius": ("cesium.showThreatRadius", {
+                "satellite_id": arguments.get("satellite_id"),
+                "radius_km": arguments.get("radius_km", 5.0),
+                "color": arguments.get("color", "#FF5722"),
+            }),
+            "simulation_add_satellite": ("simulation.addSatellite", {
+                "name": arguments.get("name"),
+                "altitude_km": arguments.get("altitude_km"),
+                "inclination_deg": arguments.get("inclination_deg", 0),
+                "raan_deg": arguments.get("raan_deg", 0),
+                "faction": arguments.get("faction", "neutral"),
+            }),
+            "simulation_add_ground_station": ("simulation.addGroundStation", {
+                "name": arguments.get("name"),
+                "latitude": arguments.get("latitude"),
+                "longitude": arguments.get("longitude"),
+                "coverage_radius_km": arguments.get("coverage_radius_km", 2000),
+                "faction": arguments.get("faction", "neutral"),
+            }),
+            "simulation_add_vehicle": ("simulation.addVehicle", {
+                "name": arguments.get("name"),
+                "entity_type": arguments.get("entity_type", "ground_vehicle"),
+                "latitude": arguments.get("latitude"),
+                "longitude": arguments.get("longitude"),
+                "heading_deg": arguments.get("heading_deg", 0),
+                "faction": arguments.get("faction", "neutral"),
+            }),
+            "simulation_show_coverage": ("simulation.showCoverage", {
+                "satellite_id": arguments.get("satellite_id"),
+                "show": arguments.get("show", True),
+                "min_elevation_deg": arguments.get("min_elevation_deg", 10.0),
+            }),
+            "simulation_analyze_coverage": ("simulation.analyzeCoverage", {
+                "faction": arguments.get("faction", "allied"),
+                "region_bounds": arguments.get("region_bounds"),
+            }),
+            "simulation_remove_entity": ("simulation.removeEntity", {
+                "entity_type": arguments.get("entity_type"),
+                "entity_id": arguments.get("entity_id"),
             }),
         }
         
@@ -322,6 +415,9 @@ When technical data IS requested and available, provide structured, actionable i
         tenant_id: Optional[str] = None,
         include_satellites: bool = True,
         include_incidents: bool = True,
+        session_id: Optional[str] = None,
+        user_id: Optional[str] = None,
+        use_memory: bool = True,
     ) -> AsyncGenerator[str, None]:
         """Stream chat with function calling support.
 
@@ -332,6 +428,64 @@ When technical data IS requested and available, provide structured, actionable i
         if not self.client:
             yield f"data: {json.dumps({'type': 'error', 'error': 'AI service not configured'})}\n\n"
             return
+
+        client_session_id, chat_session_id, memory, memory_call, pop_memory_error_event = (
+            self._init_memory_runtime(
+                tenant_id=tenant_id,
+                user_id=user_id,
+                session_id=session_id,
+                source="chat_stream",
+                enabled=use_memory,
+            )
+        )
+
+        if use_memory:
+            yield f"data: {json.dumps({'type': 'session', 'session_id': client_session_id})}\n\n"
+
+        def flush_memory_error_event_line() -> Optional[str]:
+            event = pop_memory_error_event()
+            if not event:
+                return None
+            return f"data: {json.dumps(event)}\n\n"
+
+        # LIVELLO 1: Pattern matching deterministico per visualizzazioni
+        last_user_message = ""
+        for msg in reversed(messages):
+            if msg.get("role") == "user":
+                last_user_message = msg.get("content", "")
+                break
+
+        memory_context_messages: list[dict[str, Any]] = []
+        if use_memory:
+            memory_context_messages = await memory_call(
+                "get_context_before_stream",
+                lambda: memory.get_context_as_messages(limit=20),  # type: ignore[union-attr]
+                [],
+            )
+            if error_line := flush_memory_error_event_line():
+                yield error_line
+
+            if last_user_message:
+                await memory_call(
+                    "add_user_message_before_stream",
+                    lambda: memory.add_message(last_user_message, role="user"),  # type: ignore[union-attr]
+                )
+                if error_line := flush_memory_error_event_line():
+                    yield error_line
+
+            usage = await memory_call(
+                "get_window_usage_before_stream",
+                lambda: memory.get_window_usage(),  # type: ignore[union-attr]
+                {"percentage": 0.0},
+            )
+            if error_line := flush_memory_error_event_line():
+                yield error_line
+            yield f"data: {json.dumps({'type': 'memory_usage', 'percentage': usage.get('percentage', 0.0)})}\n\n"
+
+        if last_user_message and tenant_id:
+            direct_action = await self._route_visualization_command(last_user_message, tenant_id)
+            if direct_action:
+                yield f"data: {json.dumps({'type': 'action', 'action_type': direct_action.type, 'payload': direct_action.payload})}\n\n"
 
         # Build system content with available data
         system_content = self.SYSTEM_PROMPT
@@ -344,24 +498,113 @@ When technical data IS requested and available, provide structured, actionable i
             try:
                 satellites_data = await self._get_satellites_context(tenant_id)
                 if satellites_data:
-                    system_content += f"\n\nAvailable satellites in system:\n{json.dumps(satellites_data, indent=2)}\n\nWhen user asks to view a satellite (e.g., 'show me ISS'), use cesium_fly_to with the entityId from the entityId field (format: 'satellite-<id>') matching the satellite name or NORAD ID."
+                    system_content += f"""
+
+AVAILABLE SATELLITES (use cesium_fly_to with entityId):
+{json.dumps(satellites_data, indent=2)}
+
+INSTRUCTIONS FOR SATELLITES:
+- When user asks to view/fly to/show a satellite: use cesium_fly_to with entityId
+- entityId format: 'satellite-<id>' (e.g., 'satellite-a8839b77-86c8-44b4-be09-6e09aaef6b40')
+- Find the satellite in the list above and use its id field to construct the entityId
+- NEVER guess entityId - always use the exact id from the list"""
             except Exception as e:
                 logger.warning(f"Failed to load satellites context: {e}")
+
+        # Add ground stations to context
+        if tenant_id:
+            try:
+                ground_stations_data = await self._get_ground_stations_context(tenant_id)
+                if ground_stations_data:
+                    system_content += f"""
+
+AVAILABLE GROUND STATIONS (use cesium_fly_to with coordinates):
+{json.dumps(ground_stations_data, indent=2)}
+
+INSTRUCTIONS FOR GROUND STATIONS (VERY IMPORTANT):
+- These are ground stations/bases like Ceccano, White Sands, etc.
+- When user asks to view/fly to/show a base/station (e.g., "mostrami Ceccano", "vai a White Sands"):
+  1. Find the station in the list above by matching the name
+  2. Use cesium_fly_to with longitude and latitude from the station
+  3. NEVER use entityId for stations - they don't have one, use coordinates only!
+- Examples: "mostrami Ceccano" → cesium_fly_to(longitude: 13.3, latitude: 41.6)"""
+            except Exception as e:
+                logger.warning(f"Failed to load ground stations context: {e}")
+
+        # Add ground vehicles to context
+        if tenant_id:
+            try:
+                ground_vehicles_data = await self._get_ground_vehicles_context(tenant_id)
+                if ground_vehicles_data:
+                    system_content += f"""
+
+AVAILABLE GROUND VEHICLES (use cesium_fly_to with coordinates):
+{json.dumps(ground_vehicles_data, indent=2)}
+
+INSTRUCTIONS FOR GROUND VEHICLES (VERY IMPORTANT):
+- These are military/ground vehicles with names like ALPHA-1, BRAVO-2, CHARLIE-3
+- When user asks to view/fly to/show a vehicle (e.g., "mostrami ALPHA-1", "vai su ALPHA-1", "veicolo Alpha"):
+  1. Find the vehicle in the list above by matching the name
+  2. Use cesium_fly_to with longitude and latitude from the vehicle
+  3. NEVER use entityId for vehicles - they don't have one, use coordinates only!
+- Examples: "mostrami ALPHA-1" → cesium_fly_to(longitude: 13.315, latitude: 41.595)
+- The vehicles are near Ceccano, Italy (41.6°N, 13.3°E)"""
+            except Exception as e:
+                logger.warning(f"Failed to load ground vehicles context: {e}")
 
         # Add incident data to context if requested and tenant_id provided
         if include_incidents and tenant_id:
             try:
                 incidents_data = await self._get_incidents_context(tenant_id)
                 if incidents_data:
-                    system_content += f"\n\nRecent incidents (last 10):\n{json.dumps(incidents_data, indent=2)}\n\nYou have access to incident information and can help analyze incidents, suggest mitigation strategies, and correlate them with satellite and ground station data."
+                    system_content += f"\n\nINCIDENTS (last 10):\n{json.dumps(incidents_data, indent=2)}"
             except Exception as e:
                 logger.warning(f"Failed to load incidents context: {e}")
+
+        # Add space weather events to context
+        if tenant_id:
+            try:
+                space_weather_data = await self._get_space_weather_context(tenant_id)
+                if space_weather_data:
+                    system_content += f"\n\nSPACE WEATHER EVENTS:\n{json.dumps(space_weather_data, indent=2)}"
+            except Exception as e:
+                logger.warning(f"Failed to load space weather context: {e}")
+
+        # Add conjunction events to context
+        if tenant_id:
+            try:
+                conjunctions_data = await self._get_conjunctions_context(tenant_id)
+                if conjunctions_data:
+                    system_content += f"\n\nACTIVE CONJUNCTION EVENTS (actionable):\n{json.dumps(conjunctions_data, indent=2)}"
+            except Exception as e:
+                logger.warning(f"Failed to load conjunctions context: {e}")
+
+        # Add proximity alerts to context
+        if tenant_id:
+            try:
+                proximity_data = await self._get_proximity_alerts_context(tenant_id)
+                if proximity_data:
+                    system_content += f"\n\nACTIVE PROXIMITY ALERTS:\n{json.dumps(proximity_data, indent=2)}"
+            except Exception as e:
+                logger.warning(f"Failed to load proximity alerts context: {e}")
+
+        # Add clear instructions about all data types
+        system_content += """
+
+RULES FOR FLY-TO COMMANDS:
+1. For SATELLITES: use cesium_fly_to with entityId='satellite-<id>'
+2. For GROUND STATIONS: use cesium_fly_to with longitude/latitude coordinates
+3. For GROUND VEHICLES: use cesium_fly_to with longitude/latitude coordinates (entityId NOT supported!)
+4. For WORLD LOCATIONS (cities, countries): use cesium_search_location
+5. NEVER guess - always use values from the lists above!
+"""
         
-        full_messages: list[dict[str, Any]] = [
-            {"role": "system", "content": system_content}
-        ] + messages
+        full_messages: list[dict[str, Any]] = [{"role": "system", "content": system_content}]
+        full_messages.extend(memory_context_messages)
+        full_messages.extend(messages)
         
         actions: list[CesiumAction] = []
+        assistant_text_chunks: list[str] = []
         
         try:
             # Step 1: First call with tools (non-streaming) to get tool calls
@@ -418,7 +661,9 @@ When technical data IS requested and available, provide structured, actionable i
                 
                 async for chunk in final_response:
                     if chunk.choices[0].delta.content:
-                        yield f"data: {json.dumps({'type': 'content', 'chunk': chunk.choices[0].delta.content})}\n\n"
+                        chunk_text = chunk.choices[0].delta.content
+                        assistant_text_chunks.append(chunk_text)
+                        yield f"data: {json.dumps({'type': 'content', 'chunk': chunk_text})}\n\n"
             else:
                 # No tool calls, stream the first response
                 final_response = await self.client.chat.completions.create(
@@ -431,7 +676,28 @@ When technical data IS requested and available, provide structured, actionable i
                 
                 async for chunk in final_response:
                     if chunk.choices[0].delta.content:
-                        yield f"data: {json.dumps({'type': 'content', 'chunk': chunk.choices[0].delta.content})}\n\n"
+                        chunk_text = chunk.choices[0].delta.content
+                        assistant_text_chunks.append(chunk_text)
+                        yield f"data: {json.dumps({'type': 'content', 'chunk': chunk_text})}\n\n"
+
+            assistant_text = "".join(assistant_text_chunks).strip()
+            if assistant_text and use_memory:
+                await memory_call(
+                    "add_assistant_message_after_stream",
+                    lambda: memory.add_message(assistant_text, role="assistant"),  # type: ignore[union-attr]
+                )
+                if error_line := flush_memory_error_event_line():
+                    yield error_line
+
+            if use_memory:
+                usage = await memory_call(
+                    "get_window_usage_after_stream",
+                    lambda: memory.get_window_usage(),  # type: ignore[union-attr]
+                    {"percentage": 0.0},
+                )
+                if error_line := flush_memory_error_event_line():
+                    yield error_line
+                yield f"data: {json.dumps({'type': 'memory_usage', 'percentage': usage.get('percentage', 0.0)})}\n\n"
             
             yield "data: [DONE]\n\n"
             
@@ -500,6 +766,141 @@ When technical data IS requested and available, provide structured, actionable i
             logger.warning(f"Failed to get incidents for context: {e}")
 
         return incidents
+
+    async def _get_ground_stations_context(self, tenant_id: str) -> list[dict]:
+        """Get ground stations for context."""
+        stations = []
+        try:
+            stations_list, _ = await self.ontology.list_ground_stations(
+                tenant_id=tenant_id,
+                page_size=50,
+            )
+            
+            for station in stations_list:
+                station_data = {
+                    "id": station.id,
+                    "name": station.name,
+                    "code": station.code,
+                    "latitude": station.latitude,
+                    "longitude": station.longitude,
+                    "country": station.country,
+                    "is_operational": station.is_operational,
+                    "organization": station.organization,
+                }
+                stations.append(station_data)
+                
+        except Exception as e:
+            logger.warning(f"Failed to get ground stations for context: {e}")
+        
+        return stations
+
+    async def _get_ground_vehicles_context(self, tenant_id: str) -> list[dict]:
+        """Get ground vehicles for context."""
+        vehicles = []
+        try:
+            from app.services.operations import PositionTrackingService
+            
+            audit_service = AuditService(self.db)
+            position_service = PositionTrackingService(self.db, audit_service)
+            vehicles_list = await position_service.get_all_ground_vehicles(tenant_id)
+            
+            for vehicle in vehicles_list:
+                vehicle_data = {
+                    "entity_id": vehicle.entity_id,
+                    "name": vehicle.entity_id,
+                    "latitude": vehicle.latitude,
+                    "longitude": vehicle.longitude,
+                    "altitude_m": vehicle.altitude_m,
+                    "heading_deg": vehicle.heading_deg,
+                    "velocity_ms": vehicle.velocity_magnitude_ms,
+                    "report_time": vehicle.report_time.isoformat() if vehicle.report_time else None,
+                }
+                vehicles.append(vehicle_data)
+                
+        except Exception as e:
+            logger.warning(f"Failed to get ground vehicles for context: {e}")
+        
+        return vehicles
+
+    async def _get_space_weather_context(self, tenant_id: str) -> list[dict]:
+        """Get space weather events for context."""
+        events = []
+        try:
+            events_list, _ = await self.ontology.list_space_weather_events(
+                tenant_id=tenant_id,
+                page_size=10,
+            )
+            
+            for event in events_list:
+                event_data = {
+                    "id": event.id,
+                    "event_type": event.event_type.value if hasattr(event.event_type, 'value') else str(event.event_type),
+                    "severity": event.severity.value if hasattr(event.severity, 'value') else str(event.severity),
+                    "start_time": event.start_time.isoformat() if event.start_time else None,
+                    "end_time": event.end_time.isoformat() if event.end_time else None,
+                    "description": event.description,
+                }
+                events.append(event_data)
+                
+        except Exception as e:
+            logger.warning(f"Failed to get space weather events for context: {e}")
+        
+        return events
+
+    async def _get_conjunctions_context(self, tenant_id: str) -> list[dict]:
+        """Get actionable conjunction events for context."""
+        conjunctions = []
+        try:
+            events_list, _ = await self.ontology.list_conjunction_events(
+                tenant_id=tenant_id,
+                page_size=10,
+            )
+            
+            for event in events_list:
+                if event.is_actionable:
+                    event_data = {
+                        "id": event.id,
+                        "tca": event.tca.isoformat() if event.tca else None,
+                        "miss_distance_km": event.miss_distance_km,
+                        "risk_level": event.risk_level,
+                        "risk_score": event.risk_score,
+                        "collision_probability": event.collision_probability,
+                        "maneuver_planned": event.maneuver_planned,
+                    }
+                    conjunctions.append(event_data)
+                    
+        except Exception as e:
+            logger.warning(f"Failed to get conjunctions for context: {e}")
+        
+        return conjunctions
+
+    async def _get_proximity_alerts_context(self, tenant_id: str) -> list[dict]:
+        """Get active proximity alerts for context."""
+        alerts = []
+        try:
+            from app.services.proximity import ProximityDetectionService
+            
+            audit_service = AuditService(self.db)
+            proximity_service = ProximityDetectionService(self.db, audit_service)
+            alerts_list = await proximity_service.get_active_alerts(tenant_id)
+            
+            for alert in alerts_list:
+                alert_data = {
+                    "id": alert.id,
+                    "alert_level": alert.alert_level,
+                    "status": alert.status,
+                    "min_distance_km": alert.min_distance_km,
+                    "current_distance_km": alert.current_distance_km,
+                    "tca": alert.tca.isoformat() if alert.tca else None,
+                    "is_hostile": alert.is_hostile,
+                    "threat_score": alert.threat_score,
+                }
+                alerts.append(alert_data)
+                
+        except Exception as e:
+            logger.warning(f"Failed to get proximity alerts for context: {e}")
+        
+        return alerts
 
     async def analyze_conjunction(
         self,
@@ -875,8 +1276,6 @@ Fornisci 2-3 opzioni realistiche in formato JSON:
         mode: str = "analyze",
     ) -> AsyncGenerator[str, None]:
         """Orchestrate Detour + platform control with memory and SSE map actions."""
-        from app.agents.detour.graph import stream_detour_pipeline
-        from app.services.detour.state_manager import DetourStateManager
 
         logger.info(
             "chat_orchestration_started",
@@ -888,46 +1287,36 @@ Fornisci 2-3 opzioni realistiche in formato JSON:
             message_preview=message[:120],
         )
 
-        chat_session_id = self._build_chat_session_id(
-            tenant_id=tenant_id,
-            user_id=user_id,
-            session_id=session_id,
-            map_session_id=map_session_id,
+        client_session_id, chat_session_id, memory, memory_call, pop_memory_error_event = (
+            self._init_memory_runtime(
+                tenant_id=tenant_id,
+                user_id=user_id,
+                session_id=session_id,
+                map_session_id=map_session_id,
+                source="chat_orchestration",
+                enabled=True,
+            )
         )
 
-        memory = PostgreSQLChatMemory(
-            self.db,
-            max_tokens=128000,
-            session_id=chat_session_id,
-            tenant_id=tenant_id,
-        )
+        yield f"data: {json.dumps({'type': 'session', 'session_id': client_session_id})}\n\n"
 
-        memory_available = True
-        memory_timeout_s = 5.0
-
-        async def memory_call(step: str, coroutine, fallback=None):
-            nonlocal memory_available
-            if not memory_available:
-                return fallback
-            try:
-                return await asyncio.wait_for(coroutine, timeout=memory_timeout_s)
-            except Exception as exc:
-                memory_available = False
-                logger.warning(
-                    "chat_orchestration_memory_unavailable",
-                    tenant_id=tenant_id,
-                    session_id=chat_session_id,
-                    step=step,
-                    error=str(exc),
-                )
-                return fallback
+        def flush_memory_error_event_line() -> Optional[str]:
+            event = pop_memory_error_event()
+            if not event:
+                return None
+            return f"data: {json.dumps(event)}\n\n"
 
         logger.info(
             "chat_orchestration_memory_add_start",
             tenant_id=tenant_id,
             session_id=chat_session_id,
         )
-        await memory_call("add_user_message", memory.add_message(message, role="user"))
+        await memory_call(
+            "add_user_message",
+            lambda: memory.add_message(message, role="user"),  # type: ignore[union-attr]
+        )
+        if error_line := flush_memory_error_event_line():
+            yield error_line
         logger.info(
             "chat_orchestration_memory_add_done",
             tenant_id=tenant_id,
@@ -935,21 +1324,23 @@ Fornisci 2-3 opzioni realistiche in formato JSON:
         )
         usage = await memory_call(
             "get_window_usage_initial",
-            memory.get_window_usage(),
+            lambda: memory.get_window_usage(),  # type: ignore[union-attr]
             {"percentage": 0.0},
         )
+        if error_line := flush_memory_error_event_line():
+            yield error_line
         logger.info(
             "chat_orchestration_memory_usage_done",
             tenant_id=tenant_id,
             session_id=chat_session_id,
             usage_percentage=usage.get("percentage"),
         )
-        yield f"data: {json.dumps({'type': 'memory_usage', 'percentage': usage['percentage']})}\n\n"
+        yield f"data: {json.dumps({'type': 'memory_usage', 'percentage': usage.get('percentage', 0.0)})}\n\n"
 
         if self._is_confirmation_message(message):
             pending = await memory_call(
                 "get_latest_pending_confirmation",
-                memory.get_latest_pending_confirmation(),
+                lambda: memory.get_latest_pending_confirmation(),
             )
             if pending:
                 execution = await self._execute_side_effect_operation(
@@ -959,23 +1350,29 @@ Fornisci 2-3 opzioni realistiche in formato JSON:
                 )
                 for action in execution.get("cesium_actions", []):
                     yield f"data: {json.dumps({'type': 'cesium_action', 'action': action})}\n\n"
+                for command in execution.get("simulation_actions", []):
+                    yield f"data: {json.dumps({'type': 'simulation_control', **command})}\n\n"
 
                 await memory_call(
                     "mark_confirmation_resolved",
-                    memory.mark_confirmation_resolved(pending.get("operation_id", "")),
+                    lambda: memory.mark_confirmation_resolved(pending.get("operation_id", "")),
                 )
                 assistant_text = execution.get("message", "Operazione completata.")
                 await memory_call(
                     "add_assistant_confirmation_result",
-                    memory.add_message(assistant_text, role="assistant"),
+                    lambda: memory.add_message(assistant_text, role="assistant"),
                 )
                 yield f"data: {json.dumps({'type': 'content', 'chunk': assistant_text})}\n\n"
                 usage = await memory_call(
                     "get_window_usage_after_confirmation",
-                    memory.get_window_usage(),
+                    lambda: memory.get_window_usage(),  # type: ignore[union-attr]
                     {"percentage": 0.0},
                 )
-                yield f"data: {json.dumps({'type': 'memory_usage', 'percentage': usage['percentage']})}\n\n"
+                if error_line := flush_memory_error_event_line():
+                    yield error_line
+                yield f"data: {json.dumps({'type': 'memory_usage', 'percentage': usage.get('percentage', 0.0)})}\n\n"
+                if error_line := flush_memory_error_event_line():
+                    yield error_line
                 yield "data: [DONE]\n\n"
                 return
 
@@ -989,92 +1386,218 @@ Fornisci 2-3 opzioni realistiche in formato JSON:
         )
 
         if intent == "conjunction_analysis":
-            satellite_id, conjunction_event_id = await self._extract_conjunction_context(message, tenant_id)
-
-            if not satellite_id or not conjunction_event_id:
-                yield f"data: {json.dumps({'type': 'error', 'error': 'Non ho trovato il satellite menzionato. Per favore specifica il nome o ID del satellite.'})}\n\n"
-                yield "data: [DONE]\n\n"
-                return
+            from app.services.detour.upstream_agent_service import UpstreamDetourAgentService
+            from app.vendors.detour_upstream.agents.graph import stream_avoidance_pipeline
 
             active_agents: list[str] = []
-            final_state: dict[str, Any] = {}
-            state_manager = DetourStateManager(self.db)
-            graph_session_id = str(generate_uuid())
+            agent_outputs: dict[str, str] = {}
+            saw_upstream_error = False
 
             try:
-                async for state_update in stream_detour_pipeline(
-                    session_id=graph_session_id,
-                    satellite_id=satellite_id,
-                    conjunction_event_id=conjunction_event_id,
-                    tenant_id=tenant_id,
-                    state_manager=state_manager,
+                await UpstreamDetourAgentService._ensure_demo_data()
+                config = UpstreamDetourAgentService._build_llm_config()
+
+                async for upstream_event in stream_avoidance_pipeline(
+                    message,
+                    config=config,
+                    mode="multi",
                 ):
-                    final_state = state_update
-                    current_agent = state_update.get("current_agent")
+                    if not isinstance(upstream_event, dict):
+                        continue
 
-                    if current_agent and current_agent not in active_agents:
-                        active_agents.append(current_agent)
+                    event_type = str(upstream_event.get("type", ""))
+
+                    if event_type == "agent_start":
+                        current_agent = str(upstream_event.get("agent", "detour"))
+                        if current_agent not in active_agents:
+                            active_agents.append(current_agent)
+                            await memory_call(
+                                "update_active_agents",
+                                lambda: memory.update_active_agents(active_agents),
+                            )
+
+                        start_message = self._build_upstream_agent_start_message(current_agent)
+                        yield f"data: {json.dumps({'type': 'agent_start', 'agent': current_agent, 'message': start_message})}\n\n"
                         await memory_call(
-                            "update_active_agents",
-                            memory.update_active_agents(active_agents),
-                        )
-
-                        agent_messages = {
-                            "scout": "🔍 Agente Scout: Analizzo oggetti vicini e potenziali minacce...",
-                            "analyst": "📊 Agente Analyst: Valuto il rischio di collisione...",
-                            "planner": "📋 Agente Planner: Genero opzioni di manovra...",
-                            "safety": "🛡️ Agente Safety: Valido il piano di manovra...",
-                            "ops_brief": "📢 Agente Ops Brief: Preparo il riepilogo operativo...",
-                        }
-
-                        yield f"data: {json.dumps({
-                            'type': 'agent_start',
-                            'agent': current_agent,
-                            'message': agent_messages.get(current_agent, f'Agente {current_agent} avviato...')
-                        })}\n\n"
-
-                        await memory_call(
-                            "add_agent_start_event",
-                            memory.add_agent_event(
+                            "add_upstream_agent_start_event",
+                            lambda: memory.add_agent_event(
                                 agent_name=current_agent,
                                 event_type="start",
-                                message=agent_messages.get(current_agent, f"Agente {current_agent} avviato"),
+                                message=start_message,
                             ),
                         )
+                        continue
 
-                    for action in self._extract_detour_actions(state_update):
+                    if event_type == "thinking":
+                        thinking_text = str(upstream_event.get("text", "")).strip()
+                        if thinking_text:
+                            yield f"data: {json.dumps({'type': 'content', 'chunk': f'\\n💭 {thinking_text}\\n'})}\n\n"
+                        continue
+
+                    if event_type == "tool_calls":
+                        tools = upstream_event.get("tools")
+                        if isinstance(tools, list) and tools:
+                            tool_names = ", ".join(str(tool) for tool in tools)
+                            yield f"data: {json.dumps({'type': 'content', 'chunk': f'\\n🧰 Tool call: {tool_names}\\n'})}\n\n"
+                        continue
+
+                    if event_type == "tool_result":
+                        tool_name = str(upstream_event.get("tool", "tool"))
+                        summary = str(upstream_event.get("summary", "")).strip()
+                        if summary:
+                            yield f"data: {json.dumps({'type': 'content', 'chunk': f'\\n📎 {tool_name}: {summary}\\n'})}\n\n"
+                        continue
+
+                    if event_type == "maneuver_executed":
+                        action = self._default_map_action()
                         yield f"data: {json.dumps({'type': 'cesium_action', 'action': action})}\n\n"
                         await memory_call(
-                            "add_agent_action_event",
-                            memory.add_agent_event(
-                                agent_name=current_agent or "detour",
+                            "add_upstream_maneuver_map_event",
+                            lambda: memory.add_agent_event(
+                                agent_name=str(upstream_event.get("agent", "detour")),
                                 event_type="action",
-                                message=f"Azione mappa: {action.get('type', 'unknown')}",
+                                message="Maneuver executed: map refresh",
                                 cesium_action=action,
                             ),
                         )
+                        continue
 
-                final_message = self._generate_pipeline_summary(final_state)
+                    if event_type == "agent_output":
+                        current_agent = str(upstream_event.get("agent", "detour"))
+                        output_text = str(upstream_event.get("content", "")).strip()
+                        if not output_text:
+                            continue
+
+                        agent_outputs[current_agent] = output_text
+                        label = self._build_upstream_agent_label(current_agent)
+                        yield f"data: {json.dumps({'type': 'content', 'chunk': f'\\n{label}\\n{output_text}\\n'})}\n\n"
+                        await memory_call(
+                            "add_upstream_agent_output_event",
+                            lambda: memory.add_agent_event(
+                                agent_name=current_agent,
+                                event_type="output",
+                                message=output_text[:400],
+                            ),
+                        )
+                        continue
+
+                    if event_type == "agent_complete":
+                        current_agent = str(upstream_event.get("agent", "detour"))
+                        complete_message = self._build_upstream_agent_complete_message(current_agent)
+                        yield f"data: {json.dumps({'type': 'agent_complete', 'agent': current_agent, 'message': complete_message})}\n\n"
+                        await memory_call(
+                            "add_upstream_agent_complete_event",
+                            lambda: memory.add_agent_event(
+                                agent_name=current_agent,
+                                event_type="complete",
+                                message=complete_message,
+                            ),
+                        )
+                        continue
+
+                    if event_type == "error":
+                        saw_upstream_error = True
+                        error_message = str(
+                            upstream_event.get("message")
+                            or upstream_event.get("error")
+                            or "Errore sconosciuto nella pipeline upstream."
+                        )
+                        yield f"data: {json.dumps({'type': 'error', 'error': error_message})}\n\n"
+                        await memory_call(
+                            "add_upstream_pipeline_error",
+                            lambda: memory.add_message(
+                                f"Errore pipeline upstream: {error_message}",
+                                role="assistant",
+                            ),
+                        )
+                        break
+
+                if saw_upstream_error:
+                    usage = await memory_call(
+                        "get_window_usage_after_upstream_error",
+                        lambda: memory.get_window_usage(),  # type: ignore[union-attr]
+                        {"percentage": 0.0},
+                    )
+                    if error_line := flush_memory_error_event_line():
+                        yield error_line
+                    yield f"data: {json.dumps({'type': 'memory_usage', 'percentage': usage.get('percentage', 0.0)})}\n\n"
+                    if error_line := flush_memory_error_event_line():
+                        yield error_line
+                    yield "data: [DONE]\n\n"
+                    return
+
+                final_message = self._generate_upstream_pipeline_summary(agent_outputs)
                 yield f"data: {json.dumps({'type': 'agent_complete', 'agent': 'all', 'message': final_message})}\n\n"
                 await memory_call(
-                    "add_pipeline_summary",
-                    memory.add_message(final_message, role="assistant"),
+                    "add_upstream_pipeline_summary",
+                    lambda: memory.add_message(final_message, role="assistant"),
                 )
 
                 usage = await memory_call(
-                    "get_window_usage_after_pipeline",
-                    memory.get_window_usage(),
+                    "get_window_usage_after_upstream_pipeline",
+                    lambda: memory.get_window_usage(),  # type: ignore[union-attr]
                     {"percentage": 0.0},
                 )
-                yield f"data: {json.dumps({'type': 'memory_usage', 'percentage': usage['percentage']})}\n\n"
+                if error_line := flush_memory_error_event_line():
+                    yield error_line
+                yield f"data: {json.dumps({'type': 'memory_usage', 'percentage': usage.get('percentage', 0.0)})}\n\n"
+                if error_line := flush_memory_error_event_line():
+                    yield error_line
                 yield "data: [DONE]\n\n"
             except Exception as e:
-                logger.error(f"Detour pipeline error: {e}")
+                logger.exception(
+                    "chat_orchestration_upstream_pipeline_failed",
+                    tenant_id=tenant_id,
+                    session_id=chat_session_id,
+                    error=str(e),
+                )
+                try:
+                    await self.db.rollback()
+                except Exception:
+                    logger.warning("chat_orchestration_upstream_pipeline_rollback_failed")
                 yield f"data: {json.dumps({'type': 'error', 'error': f'Errore durante l\'analisi: {str(e)}'})}\n\n"
+                if error_line := flush_memory_error_event_line():
+                    yield error_line
                 yield "data: [DONE]\n\n"
             return
 
-        if intent in {"create_satellite", "create_ground_station", "create_ground_vehicle", "create_operation"}:
+        if intent == "start_sar_simulation":
+            command = {
+                "action": "start_sar_simulation",
+                "mode": "enter_simulation_mode",
+                "source": "chat_orchestrator",
+            }
+            yield f"data: {json.dumps({'type': 'simulation_control', **command})}\n\n"
+
+            assistant_text = (
+                "Modalità SAR Simulation attivata. "
+                "Premi START MISSION per avviare la missione."
+            )
+            await memory_call(
+                "add_start_sar_simulation_message",
+                lambda: memory.add_message(assistant_text, role="assistant"),
+            )
+            yield f"data: {json.dumps({'type': 'content', 'chunk': assistant_text})}\n\n"
+
+            usage = await memory_call(
+                "get_window_usage_after_start_sar_simulation",
+                lambda: memory.get_window_usage(),  # type: ignore[union-attr]
+                {"percentage": 0.0},
+            )
+            if error_line := flush_memory_error_event_line():
+                yield error_line
+            yield f"data: {json.dumps({'type': 'memory_usage', 'percentage': usage.get('percentage', 0.0)})}\n\n"
+            if error_line := flush_memory_error_event_line():
+                yield error_line
+            yield "data: [DONE]\n\n"
+            return
+
+        if intent in {
+            "create_satellite",
+            "create_ground_station",
+            "create_ground_vehicle",
+            "create_operation",
+        }:
             try:
                 proposal = await self._build_side_effect_proposal(
                     intent=intent,
@@ -1084,6 +1607,8 @@ Fornisci 2-3 opzioni realistiche in formato JSON:
                 )
             except AIServiceError as exc:
                 yield f"data: {json.dumps({'type': 'error', 'error': str(exc)})}\n\n"
+                if error_line := flush_memory_error_event_line():
+                    yield error_line
                 yield "data: [DONE]\n\n"
                 return
 
@@ -1099,10 +1624,12 @@ Fornisci 2-3 opzioni realistiche in formato JSON:
                 )
                 for action in execution.get("cesium_actions", []):
                     yield f"data: {json.dumps({'type': 'cesium_action', 'action': action})}\n\n"
+                for command in execution.get("simulation_actions", []):
+                    yield f"data: {json.dumps({'type': 'simulation_control', **command})}\n\n"
                 assistant_text = execution.get("message", "Operazione completata.")
                 await memory_call(
                     "add_side_effect_execution_message",
-                    memory.add_message(assistant_text, role="assistant"),
+                    lambda: memory.add_message(assistant_text, role="assistant"),
                 )
                 yield f"data: {json.dumps({'type': 'content', 'chunk': assistant_text})}\n\n"
             else:
@@ -1112,7 +1639,7 @@ Fornisci 2-3 opzioni realistiche in formato JSON:
                 )
                 await memory_call(
                     "add_pending_confirmation",
-                    memory.add_message(
+                    lambda: memory.add_message(
                         content=f"Pending confirmation: {proposal.get('summary', 'operazione')}",
                         role="system",
                         metadata={"pending_confirmation": proposal},
@@ -1121,31 +1648,70 @@ Fornisci 2-3 opzioni realistiche in formato JSON:
                 yield f"data: {json.dumps({'type': 'confirmation_required', 'operation': proposal})}\n\n"
                 await memory_call(
                     "add_confirmation_prompt",
-                    memory.add_message(confirmation_text, role="assistant"),
+                    lambda: memory.add_message(confirmation_text, role="assistant"),
                 )
                 yield f"data: {json.dumps({'type': 'content', 'chunk': confirmation_text})}\n\n"
 
             usage = await memory_call(
                 "get_window_usage_after_side_effect",
-                memory.get_window_usage(),
+                lambda: memory.get_window_usage(),  # type: ignore[union-attr]
                 {"percentage": 0.0},
             )
-            yield f"data: {json.dumps({'type': 'memory_usage', 'percentage': usage['percentage']})}\n\n"
+            if error_line := flush_memory_error_event_line():
+                yield error_line
+            yield f"data: {json.dumps({'type': 'memory_usage', 'percentage': usage.get('percentage', 0.0)})}\n\n"
+            if error_line := flush_memory_error_event_line():
+                yield error_line
             yield "data: [DONE]\n\n"
             return
 
         if intent == "map_control":
+            # Carica i dati nel contesto
+            satellites_data = await self._get_satellites_context(tenant_id)
+            ground_stations_data = await self._get_ground_stations_context(tenant_id)
+            ground_vehicles_data = await self._get_ground_vehicles_context(tenant_id)
+            
+            context_parts = []
+            
+            if satellites_data:
+                context_parts.append(f"""AVAILABLE SATELLITES (use cesium_fly_to with entityId):
+{json.dumps(satellites_data, indent=2)}
+
+INSTRUCTIONS: Use cesium_fly_to with entityId='satellite-<id>'""")
+            
+            if ground_stations_data:
+                context_parts.append(f"""AVAILABLE GROUND STATIONS (use cesium_fly_to with coordinates):
+{json.dumps(ground_stations_data, indent=2)}
+
+INSTRUCTIONS: Use cesium_fly_to with longitude/latitude from the list""")
+            
+            if ground_vehicles_data:
+                context_parts.append(f"""AVAILABLE GROUND VEHICLES (use cesium_fly_to with coordinates):
+{json.dumps(ground_vehicles_data, indent=2)}
+
+INSTRUCTIONS: Use cesium_fly_to with longitude/latitude from the list""")
+            
+            satellite_context = "\n\n".join(context_parts)
+            
             context_messages = await memory_call(
                 "get_context_for_map_control",
-                memory.get_context_as_messages(limit=20),
+                lambda: memory.get_context_as_messages(limit=5),  # Ridotto per non confondere l'AI
                 [],
             )
+            
+            # Aggiungi il contesto satelliti come messaggio di sistema
+            messages_with_context = [
+                {"role": "system", "content": satellite_context}
+            ] + context_messages + [{"role": "user", "content": message}]
+            
             assistant_text_chunks: list[str] = []
             action_emitted = False
             async for line in self.stream_chat_with_functions(
-                messages=context_messages + [{"role": "user", "content": message}],
+                messages=messages_with_context,
                 scene_state=None,
                 tenant_id=tenant_id,
+                include_satellites=False,  # Già incluso manualmente sopra
+                use_memory=False,
             ):
                 if not line.startswith("data: "):
                     continue
@@ -1176,21 +1742,25 @@ Fornisci 2-3 opzioni realistiche in formato JSON:
             if assistant_text_chunks:
                 await memory_call(
                     "add_map_control_response",
-                    memory.add_message("".join(assistant_text_chunks), role="assistant"),
+                    lambda: memory.add_message("".join(assistant_text_chunks), role="assistant"),
                 )
             usage = await memory_call(
                 "get_window_usage_after_map_control",
-                memory.get_window_usage(),
+                lambda: memory.get_window_usage(),  # type: ignore[union-attr]
                 {"percentage": 0.0},
             )
-            yield f"data: {json.dumps({'type': 'memory_usage', 'percentage': usage['percentage']})}\n\n"
+            if error_line := flush_memory_error_event_line():
+                yield error_line
+            yield f"data: {json.dumps({'type': 'memory_usage', 'percentage': usage.get('percentage', 0.0)})}\n\n"
+            if error_line := flush_memory_error_event_line():
+                yield error_line
             yield "data: [DONE]\n\n"
             return
 
         # Generic chat fallback with persistent memory context.
         context_messages = await memory_call(
             "get_context_for_generic_chat",
-            memory.get_context_as_messages(limit=20),
+            lambda: memory.get_context_as_messages(limit=20),
             [],
         )
         yield f"data: {json.dumps({'type': 'cesium_action', 'action': self._default_map_action()})}\n\n"
@@ -1204,10 +1774,12 @@ Fornisci 2-3 opzioni realistiche in formato JSON:
 
         usage = await memory_call(
             "get_window_usage_after_generic_chat",
-            memory.get_window_usage(),
+            lambda: memory.get_window_usage(),  # type: ignore[union-attr]
             {"percentage": 0.0},
         )
-        yield f"data: {json.dumps({'type': 'memory_usage', 'percentage': usage['percentage']})}\n\n"
+        if error_line := flush_memory_error_event_line():
+            yield error_line
+        yield f"data: {json.dumps({'type': 'memory_usage', 'percentage': usage.get('percentage', 0.0)})}\n\n"
 
     async def _classify_intent(self, message: str) -> str:
         """Classify user intent to determine which workflow to run."""
@@ -1226,8 +1798,19 @@ Fornisci 2-3 opzioni realistiche in formato JSON:
             return "create_ground_station"
         if re.search(r"\b(crea|create|add|spawn)\b.*\b(vehicle|veicolo|ground vehicle)", message_lower):
             return "create_ground_vehicle"
+        if re.search(
+            r"\b(start|avvia|avviare|inizia|iniziare|lancia|launch)\b.*\b(sar|simulation|simulazione|missione|mission)\b",
+            message_lower,
+        ):
+            return "start_sar_simulation"
         if re.search(r"\b(crea|create|start|avvia)\b.*\b(operation|operazione)", message_lower):
             return "create_operation"
+
+        # Visualization intents (more specific, check before map_control)
+        for intent, patterns in self.VISUALIZATION_PATTERNS.items():
+            for pattern in patterns:
+                if re.search(pattern, message_lower):
+                    return intent
 
         map_keywords = (
             "fly to", "zoom", "focalizza", "map", "mappa", "camera",
@@ -1270,6 +1853,225 @@ Fornisci 2-3 opzioni realistiche in formato JSON:
                     break
 
         return satellite_id, conjunction_event_id
+
+    async def _route_visualization_command(
+        self,
+        message: str,
+        tenant_id: str,
+    ) -> Optional[CesiumAction]:
+        """Deterministic pattern matching for visualization commands."""
+        message_lower = message.lower()
+
+        for intent, patterns in self.VISUALIZATION_PATTERNS.items():
+            for pattern in patterns:
+                if re.search(pattern, message_lower):
+                    return await self._build_visualization_action(intent, message, tenant_id)
+
+        return None
+
+    async def _build_visualization_action(
+        self,
+        intent: str,
+        message: str,
+        tenant_id: str,
+    ) -> Optional[CesiumAction]:
+        """Build CesiumAction for visualization intent."""
+        satellite_id = await self._resolve_satellite_from_message(message, tenant_id)
+        if not satellite_id and intent not in ["show_conjunction_line"]:
+            logger.warning(f"Could not resolve satellite for intent {intent}")
+            return None
+
+        if intent == "show_maneuver_options":
+            maneuvers = await self._get_maneuver_options(satellite_id, tenant_id)
+            recommended_id = maneuvers[0].get("id") if maneuvers else None
+            return CesiumAction(
+                type="cesium.showManeuverOptions",
+                payload={
+                    "satellite_id": satellite_id,
+                    "maneuvers": maneuvers,
+                    "recommended_id": recommended_id,
+                },
+            )
+
+        elif intent == "highlight_maneuver":
+            recommended_id = await self._get_recommended_maneuver_id(satellite_id, tenant_id)
+            return CesiumAction(
+                type="cesium.highlightManeuver",
+                payload={
+                    "satellite_id": satellite_id,
+                    "maneuver_id": recommended_id,
+                    "color": "#00FF00",
+                },
+            )
+
+        elif intent == "show_conjunction_line":
+            target_id = await self._get_conjunction_target(satellite_id, tenant_id)
+            if not satellite_id or not target_id:
+                return None
+            return CesiumAction(
+                type="cesium.showConjunctionLine",
+                payload={
+                    "satellite_a_id": satellite_id,
+                    "satellite_b_id": target_id,
+                    "color": "#FF1744",
+                },
+            )
+
+        elif intent == "show_risk_heatmap":
+            risk_level = await self._get_risk_level(satellite_id, tenant_id)
+            return CesiumAction(
+                type="cesium.showRiskHeatmap",
+                payload={
+                    "satellite_id": satellite_id,
+                    "risk_level": risk_level,
+                },
+            )
+
+        elif intent == "show_threat_radius":
+            return CesiumAction(
+                type="cesium.showThreatRadius",
+                payload={
+                    "satellite_id": satellite_id,
+                    "radius_km": 5.0,
+                    "color": "#FF5722",
+                },
+            )
+
+        return None
+
+    async def _resolve_satellite_from_message(self, message: str, tenant_id: str) -> Optional[str]:
+        """Resolve satellite UUID from message text using name, NORAD ID, or alias."""
+        message_lower = message.lower()
+        satellites, _ = await self.ontology.list_satellites(tenant_id=tenant_id, page_size=100)
+
+        norad_match = re.search(r'\b(\d{5,})\b', message)
+        if norad_match:
+            for sat in satellites:
+                if str(sat.norad_id) == norad_match.group(1):
+                    return sat.id
+
+        for sat in satellites:
+            if sat.name.lower() in message_lower:
+                return sat.id
+            if message_lower in sat.name.lower():
+                return sat.id
+
+        ALIASES = {
+            "iss": "International Space Station",
+            "stazione spaziale": "International Space Station",
+            "stazione": "International Space Station",
+            "hubble": "Hubble Space Telescope",
+            "starlink": "Starlink",
+        }
+        for alias, full_name in ALIASES.items():
+            if alias in message_lower:
+                for sat in satellites:
+                    if full_name.lower() in sat.name.lower():
+                        return sat.id
+
+        return None
+
+    async def _get_maneuver_options(self, satellite_id: str, tenant_id: str) -> list[dict]:
+        """Get maneuver options for satellite from conjunction events."""
+        try:
+            events, _ = await self.ontology.list_conjunction_events(tenant_id=tenant_id, page_size=10)
+            for event in events:
+                if event.primary_object_id == satellite_id:
+                    if hasattr(event, 'maneuver_options') and event.maneuver_options:
+                        return event.maneuver_options
+                    return [
+                        {"id": "m1", "type": "delta_v_posigrade", "delta_v_m_s": 0.5, "description": "Aumenta altitudine"},
+                        {"id": "m2", "type": "delta_v_retrograde", "delta_v_m_s": 0.3, "description": "Riduci altitudine"},
+                        {"id": "m3", "type": "plane_change", "delta_v_m_s": 1.2, "description": "Cambia piano orbitale"},
+                    ]
+        except Exception as e:
+            logger.warning(f"Failed to get maneuver options: {e}")
+        return []
+
+    async def _get_recommended_maneuver_id(self, satellite_id: str, tenant_id: str) -> Optional[str]:
+        """Get recommended maneuver ID (lowest delta-v)."""
+        maneuvers = await self._get_maneuver_options(satellite_id, tenant_id)
+        if not maneuvers:
+            return None
+        return min(maneuvers, key=lambda m: m.get("delta_v_m_s", float("inf"))).get("id")
+
+    async def _get_conjunction_target(self, satellite_id: str, tenant_id: str) -> Optional[str]:
+        """Get conjunction target satellite ID."""
+        try:
+            events, _ = await self.ontology.list_conjunction_events(tenant_id=tenant_id, page_size=10)
+            for event in events:
+                if event.primary_object_id == satellite_id:
+                    return event.secondary_object_id
+        except Exception as e:
+            logger.warning(f"Failed to get conjunction target: {e}")
+        return None
+
+    async def _get_risk_level(self, satellite_id: str, tenant_id: str) -> str:
+        """Get risk level for satellite from conjunction events."""
+        try:
+            events, _ = await self.ontology.list_conjunction_events(tenant_id=tenant_id, page_size=10)
+            for event in events:
+                if event.primary_object_id == satellite_id:
+                    if hasattr(event, 'risk_level') and event.risk_level:
+                        return event.risk_level.value if hasattr(event.risk_level, 'value') else str(event.risk_level)
+        except Exception as e:
+            logger.warning(f"Failed to get risk level: {e}")
+        return "medium"
+
+    def _build_upstream_agent_start_message(self, agent_name: str) -> str:
+        """Human-friendly start message for vendored upstream agents."""
+        messages = {
+            "scout": "🔍 Agente Scout: Analizzo oggetti vicini e potenziali minacce...",
+            "analyst": "📊 Agente Analyst: Valuto il rischio di collisione...",
+            "planner": "📋 Agente Planner: Genero opzioni di manovra...",
+            "safety": "🛡️ Agente Safety: Valido il piano di manovra...",
+            "ops_brief": "📢 Agente Ops Brief: Preparo il riepilogo operativo...",
+            "detour": "🤖 Agente Detour: Analisi in corso...",
+        }
+        return messages.get(agent_name, f"🤖 Agente {agent_name}: elaborazione in corso...")
+
+    def _build_upstream_agent_complete_message(self, agent_name: str) -> str:
+        """Human-friendly completion message for vendored upstream agents."""
+        labels = {
+            "scout": "Scout",
+            "analyst": "Analyst",
+            "planner": "Planner",
+            "safety": "Safety",
+            "ops_brief": "Ops Brief",
+            "detour": "Detour",
+        }
+        label = labels.get(agent_name, agent_name)
+        return f"✅ Agente {label} completato."
+
+    def _build_upstream_agent_label(self, agent_name: str) -> str:
+        """Readable label used when relaying upstream agent outputs in chat."""
+        labels = {
+            "scout": "🔍 Scout",
+            "analyst": "📊 Analyst",
+            "planner": "📋 Planner",
+            "safety": "🛡️ Safety",
+            "ops_brief": "📢 Ops Brief",
+            "detour": "🤖 Detour",
+        }
+        return labels.get(agent_name, f"🤖 {agent_name}")
+
+    def _generate_upstream_pipeline_summary(self, outputs: dict[str, str]) -> str:
+        """Build final summary from vendored upstream 5-agent outputs."""
+        if outputs.get("ops_brief"):
+            return f"✅ Pipeline multi-agent completata.\n\n{outputs['ops_brief']}"
+
+        ordered_agents = ["scout", "analyst", "planner", "safety"]
+        sections: list[str] = []
+        for agent_name in ordered_agents:
+            output_text = outputs.get(agent_name)
+            if not output_text:
+                continue
+            sections.append(f"{self._build_upstream_agent_label(agent_name)}\n{output_text}")
+
+        if not sections:
+            return "✅ Pipeline multi-agent completata. Nessun output testuale disponibile."
+
+        return "✅ Pipeline multi-agent completata.\n\n" + "\n\n".join(sections)
 
     def _generate_pipeline_summary(self, state: DetourGraphState) -> str:
         """Generate a human-readable summary of the Detour pipeline results."""
@@ -1328,6 +2130,113 @@ Fornisci 2-3 opzioni realistiche in formato JSON:
             "type": "cesium.toggle",
             "payload": {"showLabels": True},
         }
+
+    def _resolve_client_session_id(
+        self,
+        session_id: Optional[str] = None,
+        map_session_id: Optional[str] = None,
+    ) -> str:
+        """Resolve a stable client-facing session id, generating one when absent."""
+        base = (session_id or map_session_id or str(generate_uuid())).strip()
+        safe = re.sub(r"[^a-zA-Z0-9:_-]", "_", base)
+        return safe[:80] or str(generate_uuid())
+
+    def _init_memory_runtime(
+        self,
+        tenant_id: Optional[str],
+        user_id: Optional[str],
+        session_id: Optional[str],
+        source: str,
+        map_session_id: Optional[str] = None,
+        enabled: bool = True,
+        memory_timeout_s: float = 5.0,
+    ) -> tuple[
+        str,
+        Optional[str],
+        Optional[PostgreSQLChatMemory],
+        Callable[[str, Callable[[], Awaitable[Any]], Any], Awaitable[Any]],
+        Callable[[], Optional[dict[str, Any]]],
+    ]:
+        """Initialize shared memory runtime helpers for chat streams."""
+        client_session_id = self._resolve_client_session_id(
+            session_id=session_id,
+            map_session_id=map_session_id,
+        )
+
+        memory: Optional[PostgreSQLChatMemory] = None
+        chat_session_id: Optional[str] = None
+        memory_available = enabled and bool(tenant_id)
+        pending_memory_error: Optional[dict[str, Any]] = None
+
+        if memory_available and tenant_id:
+            chat_session_id = self._build_chat_session_id(
+                tenant_id=tenant_id,
+                user_id=user_id,
+                session_id=client_session_id,
+            )
+            memory = PostgreSQLChatMemory(
+                self.db,
+                max_tokens=128000,
+                session_id=chat_session_id,
+                tenant_id=tenant_id,
+            )
+
+        async def memory_call(
+            step: str,
+            call_factory: Callable[[], Awaitable[Any]],
+            fallback: Any = None,
+        ) -> Any:
+            nonlocal memory_available, pending_memory_error
+            if not memory_available or memory is None:
+                return fallback
+
+            try:
+                result = await asyncio.wait_for(call_factory(), timeout=memory_timeout_s)
+                if step.startswith(("add_", "mark_", "update_", "clear_")):
+                    await asyncio.wait_for(self.db.commit(), timeout=memory_timeout_s)
+                return result
+            except Exception as exc:
+                memory_available = False
+                try:
+                    await self.db.rollback()
+                except Exception as rollback_exc:
+                    logger.warning(
+                        f"{source}_memory_rollback_failed",
+                        tenant_id=tenant_id,
+                        session_id=chat_session_id,
+                        step=step,
+                        error=str(rollback_exc),
+                    )
+
+                logger.warning(
+                    f"{source}_memory_unavailable",
+                    tenant_id=tenant_id,
+                    session_id=chat_session_id,
+                    step=step,
+                    error=str(exc),
+                )
+
+                if pending_memory_error is None:
+                    pending_memory_error = {
+                        "type": "memory_error",
+                        "error": (
+                            "Memoria chat temporaneamente non disponibile. "
+                            "Continuo senza contesto persistente."
+                        ),
+                        "step": step,
+                        "details": str(exc),
+                    }
+                return fallback
+
+        def pop_memory_error_event() -> Optional[dict[str, Any]]:
+            nonlocal pending_memory_error
+            if pending_memory_error is None:
+                return None
+            payload = pending_memory_error
+            pending_memory_error = None
+            return payload
+
+        return client_session_id, chat_session_id, memory, memory_call, pop_memory_error_event
 
     def _build_chat_session_id(
         self,
@@ -1571,6 +2480,27 @@ Fornisci 2-3 opzioni realistiche in formato JSON:
                 "resolved": False,
             }
 
+        if intent == "start_sar_simulation":
+            preview_actions = [
+                {
+                    "type": "cesium.toggle",
+                    "payload": {
+                        "showLabels": True,
+                        "showCoverage": False,
+                    },
+                }
+            ]
+            return {
+                "operation_id": operation_id,
+                "operation_type": "start_sar_simulation",
+                "payload": {},
+                "summary": "Avvia simulazione SAR Operation Guardian Angel",
+                "preview_actions": preview_actions,
+                "requires_confirmation": True,
+                "created_at": datetime.utcnow().isoformat(),
+                "resolved": False,
+            }
+
         raise AIServiceError("Intent non supportato per operazioni con side-effect.")
 
     async def _execute_side_effect_operation(
@@ -1711,6 +2641,22 @@ Fornisci 2-3 opzioni realistiche in formato JSON:
                 "cesium_actions": actions,
             }
 
+        if op_type == "start_sar_simulation":
+            return {
+                "message": (
+                    "Simulazione SAR pronta: conferma ricevuta. "
+                    "Avvio di Operation Guardian Angel in corso."
+                ),
+                "cesium_actions": [],
+                "simulation_actions": [
+                    {
+                        "action": "start_sar_simulation",
+                        "mode": "enter_and_start",
+                        "source": "chat_orchestrator",
+                    }
+                ],
+            }
+
         raise AIServiceError("Tipo operazione non supportato.")
     
     async def stream_chat_with_memory(
@@ -1757,13 +2703,24 @@ Fornisci 2-3 opzioni realistiche in formato JSON:
             )
             try:
                 await asyncio.wait_for(memory.add_message(full_content, role="assistant"), timeout=5.0)
+                await asyncio.wait_for(self.db.commit(), timeout=5.0)
             except Exception as exc:
+                try:
+                    await self.db.rollback()
+                except Exception as rollback_exc:
+                    logger.warning(
+                        "stream_chat_memory_rollback_failed",
+                        tenant_id=tenant_id,
+                        session_id=session_id or f"chat_{tenant_id}",
+                        error=str(rollback_exc),
+                    )
                 logger.warning(
                     "stream_chat_memory_unavailable",
                     tenant_id=tenant_id,
                     session_id=session_id or f"chat_{tenant_id}",
                     error=str(exc),
                 )
+                yield f"data: {json.dumps({'type': 'memory_error', 'error': 'Memoria chat temporaneamente non disponibile.', 'details': str(exc)})}\n\n"
             
             yield "data: [DONE]\n\n"
             

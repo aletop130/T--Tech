@@ -8,6 +8,61 @@ import {
   getSatelliteStatus,
 } from './scenarioData';
 
+let satellitePromise: Promise<typeof import('satellite.js') | null> | null = null;
+let satelliteModule: typeof import('satellite.js') | null = null;
+
+const initializeSatellite = () => {
+  if (typeof window === 'undefined') return null;
+  if (satelliteModule) return Promise.resolve(satelliteModule);
+  if (!satellitePromise) {
+    satellitePromise = import('satellite.js').then((mod) => {
+      satelliteModule = mod;
+      return mod;
+    });
+  }
+  return satellitePromise;
+};
+
+interface OrbitalPosition {
+  lat: number;
+  lon: number;
+  alt: number;
+}
+
+function propagateOrbitalPosition(
+  satrec: ReturnType<typeof import('satellite.js')['twoline2satrec']>,
+  time: Date
+): OrbitalPosition | null {
+  if (!satelliteModule || !satrec) return null;
+  
+  const positionAndVelocity = satelliteModule.propagate(satrec, time);
+  if (!positionAndVelocity.position || typeof positionAndVelocity.position !== 'object') {
+    return null;
+  }
+  
+  const gmst = satelliteModule.gstime(time);
+  const latLonAlt = satelliteModule.eciToGeodetic(
+    positionAndVelocity.position as { x: number; y: number; z: number },
+    gmst
+  );
+  
+  return {
+    lat: latLonAlt.latitude * (180 / Math.PI),
+    lon: latLonAlt.longitude * (180 / Math.PI),
+    alt: latLonAlt.height,
+  };
+}
+
+function createSatrecFromTLE(tleLine1: string, tleLine2: string) {
+  if (!satelliteModule) return null;
+  try {
+    return satelliteModule.twoline2satrec(tleLine1, tleLine2);
+  } catch (e) {
+    console.warn('Failed to create satrec from TLE:', e);
+    return null;
+  }
+}
+
 const STEP_DURATION = 1800; // 30 minutes of mission time between narrative steps
 const TIME_ACCELERATION = 120; // 120x speed - 4 hours mission in 2 minutes real time
 
@@ -38,81 +93,131 @@ export function useSARSimulation(viewer: Cesium.Viewer | null, isActive: boolean
   const hasInitializedCameraRef = useRef<boolean>(false);
   const hasStartedRef = useRef<boolean>(false);
   const freeCameraModeRef = useRef<boolean>(true); // Default to free roam
+  const satelliteInitializedRef = useRef<boolean>(false);
 
-  // Get current satellite states - CINEMATIC positioning
-  // Satellites staged for visibility over Mediterranean theater
+  useEffect(() => {
+    if (satelliteInitializedRef.current) return;
+    satelliteInitializedRef.current = true;
+    initializeSatellite();
+  }, []);
+
   const getCurrentSatellites = useCallback(() => {
+    const simStartTime = new Date();
+    const missionTimeMs = state.time * 1000;
+    const currentTime = new Date(simStartTime.getTime() + missionTimeMs);
+
     return state.satellites.map((sat) => {
       const status = getSatelliteStatus(sat, state.time);
-      
-      const initialCart = Cesium.Cartographic.fromCartesian(sat.initialPosition);
-      const initialLon = Cesium.Math.toDegrees(initialCart.longitude);
-      const initialLat = Cesium.Math.toDegrees(initialCart.latitude);
-      const altitude = initialCart.height;
-      
-      let newLon = initialLon;
-      let newLat = initialLat;
-      
-      // Calculate cumulative maneuver offset - applies permanently after maneuver completes
-      let totalManeuverOffsetLon = 0;
-      let totalManeuverOffsetLat = 0;
-      
-      if (sat.maneuvers) {
+
+      if (sat.id === 'debris-alpha' && state.time < 2880) {
+        return {
+          ...sat,
+          status,
+          fuelPercent: 100,
+          currentPosition: Cesium.Cartesian3.fromDegrees(50, 50, 400000),
+        };
+      }
+
+      if (sat.id === 'comsat-2') {
+        const targetLon = 14.5;
+        const targetLat = 31.5;
+        const startLon = 16.0;
+        const startLat = 32.0;
+        
+        let progress = 0;
+        if (state.time >= 2880) {
+          progress = Math.min((state.time - 2880) / 1800, 1);
+        }
+        
+        const lon = startLon + (targetLon - startLon) * progress;
+        const lat = startLat + (targetLat - startLat) * progress;
+        
+        const altitude = 380000 - progress * 50000;
+        
+        return {
+          ...sat,
+          status: progress >= 1 ? 'offline' as const : status,
+          fuelPercent: Math.max(0, 100 - progress * 100),
+          currentPosition: Cesium.Cartesian3.fromDegrees(lon, lat, altitude),
+        };
+      }
+
+      if (!sat.tleLine1 || !sat.tleLine2) {
+        return {
+          ...sat,
+          status,
+          fuelPercent: Math.max(94, 100 - (state.time / 14400) * 6),
+          currentPosition: sat.initialPosition,
+        };
+      }
+
+      const satrec = createSatrecFromTLE(sat.tleLine1, sat.tleLine2);
+      if (!satrec) {
+        return {
+          ...sat,
+          status,
+          fuelPercent: Math.max(94, 100 - (state.time / 14400) * 6),
+          currentPosition: sat.initialPosition,
+        };
+      }
+
+      let adjustedTleLine1 = sat.tleLine1;
+      let adjustedTleLine2 = sat.tleLine2;
+
+      if (sat.id === 'reconsat-1' && sat.maneuvers) {
+        let totalDeltaV = { tangential: 0, normal: 0, radial: 0 };
+        
         sat.maneuvers.forEach(maneuver => {
           if (state.time >= maneuver.time + maneuver.duration) {
-            // Maneuver completed - apply full offset permanently
-            totalManeuverOffsetLon += maneuver.deltaV.tangential * 0.5;
-            totalManeuverOffsetLat += maneuver.deltaV.normal * 0.5;
+            totalDeltaV.tangential += maneuver.deltaV.tangential;
+            totalDeltaV.normal += maneuver.deltaV.normal;
+            totalDeltaV.radial += maneuver.deltaV.radial;
           } else if (state.time >= maneuver.time) {
-            // Maneuver in progress - apply partial offset
             const progress = (state.time - maneuver.time) / maneuver.duration;
-            totalManeuverOffsetLon += maneuver.deltaV.tangential * progress * 0.5;
-            totalManeuverOffsetLat += maneuver.deltaV.normal * progress * 0.5;
+            totalDeltaV.tangential += maneuver.deltaV.tangential * progress;
+            totalDeltaV.normal += maneuver.deltaV.normal * progress;
+            totalDeltaV.radial += maneuver.deltaV.radial * progress;
           }
         });
-      }
-      
-      // CINEMATIC positioning - satellites drift slowly in theater
-      if (sat.id === 'reconsat-1') {
-        // Main recon satellite - slight drift over mission area
-        // One gentle orbit over 4 hours = very slow drift
-        const driftAngle = (state.time / 14400) * 2 * Math.PI; // One orbit over mission
-        newLon = initialLon + Math.sin(driftAngle) * 2 + totalManeuverOffsetLon;
-        newLat = initialLat + Math.cos(driftAngle) * 1 + totalManeuverOffsetLat;
-      } else if (sat.id === 'comsat-2') {
-        // Comms satellite - offset position
-        const driftAngle = (state.time / 14400) * 2 * Math.PI + 1; // Phase offset
-        newLon = initialLon + Math.sin(driftAngle) * 2;
-        newLat = initialLat + Math.cos(driftAngle) * 1;
-      } else if (sat.id === 'hostile-sat') {
-        // Hostile satellite - appears at 0:48 (2880s), approaches then backs off
-        if (state.time < 2880) {
-          // Before appearance, position off-screen
-          newLon = initialLon + 20;
-          newLat = initialLat + 10;
-        } else if (state.time < 3600) {
-          // After 0:48, moves into theater - approaching reconsat
-          const approachTime = (state.time - 2880) / 720; // 12 minute approach
-          const startLon = initialLon + 15;
-          const startLat = initialLat + 8;
-          newLon = startLon - approachTime * 15; // Move toward ReconSat-1
-          newLat = startLat - approachTime * 8;
-        } else {
-          // After reconsat's avoidance at t=3600, hostile backs off
-          // Stay at a safe distance - retreat from reconsat
-          const retreatTime = Math.min((state.time - 3600) / 3600, 1); // 1 hour to fully retreat
-          const peakLon = initialLon; // Where it was at t=3600
-          const peakLat = initialLat;
-          newLon = peakLon + retreatTime * 5; // Move away
-          newLat = peakLat + retreatTime * 3;
+
+        if (totalDeltaV.tangential !== 0 || totalDeltaV.normal !== 0) {
+          const parts2 = sat.tleLine2.split(/\s+/);
+          let inclination = parseFloat(parts2[2]);
+          let raan = parseFloat(parts2[3]);
+          
+          inclination += totalDeltaV.normal * 0.1;
+          raan += totalDeltaV.tangential * 0.1;
+          
+          adjustedTleLine2 = `2 ${parts2[0]} ${inclination.toFixed(4)} ${raan.toFixed(4)} ${parts2[4]} ${parts2[5]} ${parts2[6]} ${parts2[7]}`;
         }
       }
+
+      const adjustedSatrec = createSatrecFromTLE(adjustedTleLine1, adjustedTleLine2);
+      if (!adjustedSatrec) {
+        return {
+          ...sat,
+          status,
+          fuelPercent: Math.max(94, 100 - (state.time / 14400) * 6),
+          currentPosition: sat.initialPosition,
+        };
+      }
+
+      const position = propagateOrbitalPosition(adjustedSatrec, currentTime);
       
+      if (!position) {
+        return {
+          ...sat,
+          status,
+          fuelPercent: Math.max(94, 100 - (state.time / 14400) * 6),
+          currentPosition: sat.initialPosition,
+        };
+      }
+
       return {
         ...sat,
         status,
         fuelPercent: Math.max(94, 100 - (state.time / 14400) * 6),
-        currentPosition: Cesium.Cartesian3.fromDegrees(newLon, newLat, altitude),
+        currentPosition: Cesium.Cartesian3.fromDegrees(position.lon, position.lat, position.alt * 1000),
       };
     });
   }, [state.satellites, state.time]);
@@ -330,13 +435,13 @@ export function useSARSimulation(viewer: Cesium.Viewer | null, isActive: boolean
       case 'threat_wide': {
         // Wide shot showing both satellites during threat
         const reconSat = currentSats.find(s => s.id === 'reconsat-1');
-        const hostileSat = currentSats.find(s => s.id === 'hostile-sat');
+        const debrisAlpha = currentSats.find(s => s.id === 'debris-alpha');
         
-        if (reconSat?.currentPosition && hostileSat?.currentPosition) {
+        if (reconSat?.currentPosition && debrisAlpha?.currentPosition) {
           // Look at midpoint between satellites
           const midpoint = Cesium.Cartesian3.midpoint(
             reconSat.currentPosition,
-            hostileSat.currentPosition,
+            debrisAlpha.currentPosition,
             new Cesium.Cartesian3()
           );
           viewer.camera.lookAt(

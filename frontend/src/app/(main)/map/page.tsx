@@ -201,6 +201,22 @@ const DEBRIS_ORBIT_CLASSES = "LEO";
     freeCameraMode: simFreeCameraMode,
     toggleFreeCameraMode: simToggleFreeCameraMode,
   } = useSARSimulation(viewer, isSimulationMode);
+
+  const handleChatSimulationControl = useCallback(
+    (command: { action: string; mode?: string }) => {
+      if (command.action !== 'start_sar_simulation') {
+        return;
+      }
+
+      // Mirror the "Start SAR Simulation" button behavior:
+      // enter simulation mode only; mission start remains user-driven via START MISSION.
+      const shouldEnterSimulation = !command.mode || command.mode === 'enter_simulation_mode';
+      if (shouldEnterSimulation && !isSimulationMode) {
+        setIsSimulationMode(true);
+      }
+    },
+    [isSimulationMode]
+  );
   
   const satellitePositionsRef = useRef<Map<string, InstanceType<CesiumModule['Cartesian3']>>>(new Map());
   const animationFrameRef = useRef<number | null>(null);
@@ -813,6 +829,40 @@ const fetchFamousSatellites = async () => {
                     <MovingSatelliteMarker viewer={viewer} orbitTrack={orbitTrack} maneuverStartMs={maneuverStartMs} />
                   </>
                 )}
+                
+                {/* SAR Simulation Layers */}
+                {isSimulationMode && (
+                  <>
+                    <SimulatedSatelliteLayer
+                      viewer={viewer}
+                      satellites={simSatellites.map(sat => ({
+                        id: sat.id,
+                        name: sat.name,
+                        type: sat.type,
+                        position: sat.currentPosition || sat.initialPosition,
+                        status: sat.status as 'online' | 'degraded' | 'maneuvering' | 'offline',
+                        fuelPercent: sat.fuelPercent,
+                        affiliation: sat.affiliation as 'allied' | 'hostile' | 'neutral' | undefined,
+                      }))}
+                      showManeuvers={true}
+                      showDataLinks={true}
+                      simulationTime={simTime}
+                    />
+                    <MilitarySymbolLayer
+                      viewer={viewer}
+                      units={simGroundUnits.map(unit => ({
+                        id: unit.id,
+                        name: unit.name,
+                        sidc: unit.sidc,
+                        position: unit.position,
+                        affiliation: unit.affiliation,
+                        status: unit.status,
+                        heading: unit.movements?.find(m => m.time <= simTime)?.heading,
+                        speed: unit.movements?.find(m => m.time <= simTime)?.speed,
+                      }))}
+                    />
+                  </>
+                )}
               </>
             ) : (
               <>
@@ -1362,8 +1412,7 @@ const fetchFamousSatellites = async () => {
         </div>
         )}
 
-        {/* Right Panel - AI Chat - Hidden during simulation */}
-        {!isSimulationMode && (
+        {/* Right Panel - AI Chat */}
         <div className="absolute right-4 top-16 bottom-4 w-96 pointer-events-auto flex flex-col gap-4">
           {/* AI Chat Panel */}
           <div className="flex-[2] bg-sda-bg-secondary/60 backdrop-blur-sm rounded-lg border border-sda-border-default px-4 py-2 shadow-lg flex flex-col overflow-hidden min-h-0">
@@ -1374,10 +1423,47 @@ const fetchFamousSatellites = async () => {
               </span>
             </div>
             <div className="flex-1 overflow-hidden">
-              <AgentChat useStreaming={true} />
+              <AgentChat
+                useStreaming={true}
+                onSimulationControl={handleChatSimulationControl}
+              />
             </div>
           </div>
         </div>
+
+        {/* Left Panel - Mission HUD (Simulation Mode Only) */}
+        {isSimulationMode && (
+          <MissionHUD
+            simulationTime={simTime}
+            totalDuration={simTotalDuration}
+            stepMode={simStepMode}
+            currentStep={simCurrentStep}
+            keyEvents={simKeyEvents}
+            satellites={simSatellites.map(s => ({
+              id: s.id,
+              name: s.name,
+              status: s.status,
+              fuelPercent: s.fuelPercent,
+            }))}
+            groundAssets={[
+              { id: 'phantom-6', name: 'Phantom-6 Team', status: simTime < 210 ? 'WAITING' : simTime < 240 ? 'EXTRACTING' : 'SECURED' },
+              { id: 'hms-defender', name: 'HMS Defender', status: 'OPERATIONAL' },
+              { id: 'seahawk', name: 'MH-60 Seahawk', status: simTime < 120 ? 'STANDBY' : simTime < 270 ? 'ACTIVE' : 'RTB' },
+            ]}
+            isPlaying={simIsPlaying}
+            isComplete={simIsComplete}
+            isPaused={simIsPaused}
+            onPlayPause={simTogglePlayPause}
+            onReset={() => {
+              simReset();
+              setIsSimulationMode(false);
+            }}
+            onToggleStepMode={simToggleStepMode}
+            onNextStep={simNextStep}
+            onPrevStep={simPrevStep}
+            freeCameraMode={simFreeCameraMode}
+            onToggleFreeCameraMode={simToggleFreeCameraMode}
+          />
         )}
       </div>
 
@@ -1421,37 +1507,6 @@ const fetchFamousSatellites = async () => {
               </div>
             </div>
           )}
-          <MissionHUD
-            simulationTime={simTime}
-            totalDuration={simTotalDuration}
-            stepMode={simStepMode}
-            currentStep={simCurrentStep}
-            keyEvents={simKeyEvents}
-            satellites={simSatellites.map(s => ({
-              id: s.id,
-              name: s.name,
-              status: s.status,
-              fuelPercent: s.fuelPercent,
-            }))}
-            groundAssets={[
-              { id: 'phantom-6', name: 'Phantom-6 Team', status: simTime < 210 ? 'WAITING' : simTime < 240 ? 'EXTRACTING' : 'SECURED' },
-              { id: 'hms-defender', name: 'HMS Defender', status: 'OPERATIONAL' },
-              { id: 'seahawk', name: 'MH-60 Seahawk', status: simTime < 120 ? 'STANDBY' : simTime < 270 ? 'ACTIVE' : 'RTB' },
-            ]}
-            isPlaying={simIsPlaying}
-            isComplete={simIsComplete}
-            isPaused={simIsPaused}
-            onPlayPause={simTogglePlayPause}
-            onReset={() => {
-              simReset();
-              setIsSimulationMode(false);
-            }}
-            onToggleStepMode={simToggleStepMode}
-            onNextStep={simNextStep}
-            onPrevStep={simPrevStep}
-            freeCameraMode={simFreeCameraMode}
-            onToggleFreeCameraMode={simToggleFreeCameraMode}
-          />
           <MissionNarrative
             simulationTime={simTime}
             isPlaying={simIsPlaying}

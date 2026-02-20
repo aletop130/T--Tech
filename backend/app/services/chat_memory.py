@@ -8,7 +8,28 @@ import tiktoken
 from sqlalchemy import desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.logging import get_logger
 from app.db.models.chat_memory import ChatMemoryEntry, ChatMemorySummary, ChatSession
+
+logger = get_logger(__name__)
+_TOKEN_ENCODER = None
+_TOKEN_ENCODER_UNAVAILABLE = False
+
+
+def _get_token_encoder():
+    """Get shared token encoder, falling back when offline resources are unavailable."""
+    global _TOKEN_ENCODER, _TOKEN_ENCODER_UNAVAILABLE
+    if _TOKEN_ENCODER_UNAVAILABLE:
+        return None
+    if _TOKEN_ENCODER is not None:
+        return _TOKEN_ENCODER
+    try:
+        _TOKEN_ENCODER = tiktoken.get_encoding("cl100k_base")
+    except Exception as exc:
+        _TOKEN_ENCODER_UNAVAILABLE = True
+        logger.warning("chat_memory_tokenizer_unavailable", error=str(exc))
+        return None
+    return _TOKEN_ENCODER
 
 
 class PostgreSQLChatMemory:
@@ -25,11 +46,19 @@ class PostgreSQLChatMemory:
         self.max_tokens = max_tokens
         self.session_id = session_id
         self.tenant_id = tenant_id
-        self.encoder = tiktoken.get_encoding("cl100k_base")  # GPT-4 encoding
+        self.encoder = _get_token_encoder()
     
     def _count_tokens(self, text: str) -> int:
-        """Count tokens in text using tiktoken."""
-        return len(self.encoder.encode(text))
+        """Count tokens with tiktoken when available, else use a stable local heuristic."""
+        if not text:
+            return 0
+        if self.encoder is not None:
+            try:
+                return len(self.encoder.encode(text))
+            except Exception as exc:
+                logger.warning("chat_memory_token_count_fallback", error=str(exc))
+        # Approximate token count without external dependencies.
+        return max(1, len(text) // 4)
     
     async def _get_or_create_session(self) -> ChatSession:
         """Get existing session or create new one."""

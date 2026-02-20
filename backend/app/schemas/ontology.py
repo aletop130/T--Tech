@@ -310,8 +310,8 @@ class ConjunctionEventCreate(ConjunctionEventBase):
 class ConjunctionEventResponse(ConjunctionEventBase, AuditSchema):
     """Conjunction event response schema."""
     id: str
-    is_actionable: bool = False
-    maneuver_planned: bool = False
+    is_actionable: Optional[bool] = False
+    maneuver_planned: Optional[bool] = False
     ai_analysis: Optional[dict] = None
 
 

@@ -20,10 +20,17 @@ interface ChatDisplayMessage {
   isStreaming?: boolean;
 }
 
+export interface SimulationControlCommand {
+  action: string;
+  mode?: string;
+  source?: string;
+}
+
 interface AgentChatProps {
   onSendMessage?: (message: string, sceneState: Record<string, unknown>) => Promise<{ message: string; actions: CesiumAction[] }>;
   initialMessages?: ChatDisplayMessage[];
   useStreaming?: boolean;
+  onSimulationControl?: (command: SimulationControlCommand) => void;
 }
 
 interface AgentState {
@@ -35,8 +42,8 @@ interface AgentState {
 const CHAT_CONNECT_TIMEOUT_MS = 20000;
 const CHAT_STREAM_IDLE_TIMEOUT_MS = 30000;
 
-// Pattern per rilevare intent Detour nel messaggio
-const DETOUR_PATTERNS = [
+// Pattern that should be routed to the orchestration endpoint.
+const ORCHESTRATION_PATTERNS = [
   /analizza.*congiunzione/i,
   /\bdetour\b/i,
   /collision.*avoidance/i,
@@ -47,10 +54,23 @@ const DETOUR_PATTERNS = [
   /analisi.*rischio/i,
   /step.*by.*step/i,
   /passo.*passo/i,
+  /\b(start|avvia|avviare|inizia|iniziare|lancia|launch)\b.*\b(sar|simulation|simulazione|mission|missione)\b/i,
+  /operation\s+guardian\s+angel/i,
 ];
 
-function isDetourIntent(message: string): boolean {
-  return DETOUR_PATTERNS.some(pattern => pattern.test(message));
+function requiresOrchestration(message: string): boolean {
+  return ORCHESTRATION_PATTERNS.some(pattern => pattern.test(message));
+}
+
+function isLikelyConfirmationMessage(message: string): boolean {
+  const normalized = message.toLowerCase().trim();
+  if (!normalized) {
+    return false;
+  }
+  if (['conferma', 'confirm', 'yes', 'ok', 'procedi', 'esegui'].includes(normalized)) {
+    return true;
+  }
+  return ['conferma', 'confirm', 'procedi', 'esegui'].some((token) => normalized.includes(token));
 }
 
 function extractConjunctionId(message: string): string | null {
@@ -94,7 +114,12 @@ function describeMapUpdate(actionType: string | undefined): string {
   return labels[normalized] || 'aggiornamento visuale';
 }
 
-export function AgentChat({ onSendMessage, initialMessages = [], useStreaming = true }: AgentChatProps) {
+export function AgentChat({
+  onSendMessage,
+  initialMessages = [],
+  useStreaming = true,
+  onSimulationControl,
+}: AgentChatProps) {
   const [messages, setMessages] = useState<ChatDisplayMessage[]>(initialMessages);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -104,19 +129,25 @@ export function AgentChat({ onSendMessage, initialMessages = [], useStreaming = 
   const [currentToolCalls, setCurrentToolCalls] = useState<{ tool_name: string; arguments: Record<string, unknown> }[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const sseClientRef = useRef<SSEChatClient | null>(null);
-  const sessionRef = useRef<string>(typeof crypto !== 'undefined' ? crypto.randomUUID() : `chat-${Date.now()}`);
-  const mapSessionRef = useRef<string>(typeof crypto !== 'undefined' ? crypto.randomUUID() : `map-${Date.now()}`);
+  const generateSessionId = () => {
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+      return crypto.randomUUID();
+    }
+    return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+  };
+  const sessionRef = useRef<string>(generateSessionId());
+  const mapSessionRef = useRef<string>(generateSessionId());
   
   // New state for orchestration
   const [activeAgents, setActiveAgents] = useState<AgentState[]>([]);
   const [memoryUsage, setMemoryUsage] = useState(0);
+  const [memoryWarning, setMemoryWarning] = useState<string | null>(null);
   const [showAgentTimeline, setShowAgentTimeline] = useState(false);
   
   // Detour state
   const {
     isStepByStepMode,
     startStepByStep,
-    stepSession,
     selectedSatellite,
     selectedConjunction,
   } = useDetourStore();
@@ -135,10 +166,11 @@ export function AgentChat({ onSendMessage, initialMessages = [], useStreaming = 
     };
   }, []);
 
-  const handleOrchestration = async (message: string) => {
+  const handleOrchestration = useCallback(async (message: string) => {
     // Show agent timeline
     setShowAgentTimeline(true);
     setActiveAgents([]);
+    setMemoryWarning(null);
     
     const assistantMessageId = (Date.now() + 1).toString();
     const assistantMessage: ChatDisplayMessage = {
@@ -223,6 +255,12 @@ export function AgentChat({ onSendMessage, initialMessages = [], useStreaming = 
               const event = JSON.parse(data);
               
               switch (event.type) {
+                case 'session':
+                  if (typeof event.session_id === 'string' && event.session_id.length > 0) {
+                    sessionRef.current = event.session_id;
+                  }
+                  break;
+
                 case 'agent_start':
                   setActiveAgents((prev) => [
                     ...prev,
@@ -294,6 +332,12 @@ export function AgentChat({ onSendMessage, initialMessages = [], useStreaming = 
                 case 'memory_usage':
                   setMemoryUsage(event.percentage);
                   break;
+
+                case 'memory_error':
+                  if (typeof event.error === 'string') {
+                    setMemoryWarning(event.error);
+                  }
+                  break;
                   
                 case 'content':
                   fullContent += event.chunk;
@@ -318,6 +362,24 @@ export function AgentChat({ onSendMessage, initialMessages = [], useStreaming = 
                   );
                   setIsLoading(false);
                   break;
+
+                case 'simulation_control':
+                  if (typeof event.action === 'string') {
+                    onSimulationControl?.({
+                      action: event.action,
+                      mode: typeof event.mode === 'string' ? event.mode : undefined,
+                      source: typeof event.source === 'string' ? event.source : undefined,
+                    });
+                    fullContent += `\n🎯 Comando simulazione: ${event.action}`;
+                    setMessages((msgs) =>
+                      msgs.map((msg) =>
+                        msg.id === assistantMessageId
+                          ? { ...msg, content: fullContent }
+                          : msg
+                      )
+                    );
+                  }
+                  break;
               }
             } catch (e) {
               console.warn('Failed to parse SSE data:', data);
@@ -325,7 +387,6 @@ export function AgentChat({ onSendMessage, initialMessages = [], useStreaming = 
           }
         }
       }
-      
       setIsLoading(false);
     } catch (error) {
       console.error('Orchestration error:', error);
@@ -353,7 +414,7 @@ export function AgentChat({ onSendMessage, initialMessages = [], useStreaming = 
         clearTimeout(connectTimeout);
       }
     }
-  };
+  }, [onSimulationControl]);
 
   const handleSend = useCallback(async () => {
     if (!input.trim() || isLoading) return;
@@ -370,6 +431,7 @@ export function AgentChat({ onSendMessage, initialMessages = [], useStreaming = 
     setIsLoading(true);
     setStreamingText('');
     setCurrentToolCalls([]);
+    setMemoryWarning(null);
 
     // Step-by-step mode can be explicitly requested in chat.
     if (isStepByStepRequest(userMessage.content) && !isStepByStepMode) {
@@ -400,8 +462,11 @@ export function AgentChat({ onSendMessage, initialMessages = [], useStreaming = 
       }
     }
 
-    // Use orchestrator for all streaming requests (Detour + map + operations).
-    if (useStreaming || isDetourIntent(userMessage.content)) {
+    const baseIntentMatch = requiresOrchestration(userMessage.content);
+    const routeToOrchestrator =
+      baseIntentMatch || isLikelyConfirmationMessage(userMessage.content);
+
+    if (routeToOrchestrator) {
       await handleOrchestration(userMessage.content);
       return;
     }
@@ -471,6 +536,20 @@ export function AgentChat({ onSendMessage, initialMessages = [], useStreaming = 
               )
             );
           },
+
+          onSession: (sessionId: string) => {
+            if (sessionId) {
+              sessionRef.current = sessionId;
+            }
+          },
+
+          onMemoryUsage: (percentage: number) => {
+            setMemoryUsage(percentage);
+          },
+
+          onMemoryError: (error: string) => {
+            setMemoryWarning(error);
+          },
           
           onError: (error: string, details?: string) => {
             console.warn('SSE Error:', error, details);
@@ -502,6 +581,7 @@ export function AgentChat({ onSendMessage, initialMessages = [], useStreaming = 
         await sseClientRef.current.streamChat(
           [{ role: 'user', content: userMessage.content }],
           sceneState as unknown as Record<string, unknown>,
+          sessionRef.current,
         );
         
         } else if (onSendMessage) {
@@ -549,7 +629,17 @@ export function AgentChat({ onSendMessage, initialMessages = [], useStreaming = 
       setMessages((prev) => [...prev, errorMessage]);
       setIsLoading(false);
     }
-  }, [input, isLoading, onSendMessage, useStreaming]);
+  }, [
+    handleOrchestration,
+    input,
+    isLoading,
+    isStepByStepMode,
+    onSendMessage,
+    selectedConjunction,
+    selectedSatellite,
+    startStepByStep,
+    useStreaming,
+  ]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -622,30 +712,69 @@ export function AgentChat({ onSendMessage, initialMessages = [], useStreaming = 
     'Fly to ISS',
     'Calcola conjunctions',
     'Analizza congiunzione CONJ-2024-001',
-    'Detour step-by-step',
   ];
 
   const handleQuickPrompt = (prompt: string) => {
     setInput(prompt);
   };
 
+  const handleNewSession = useCallback(() => {
+    if (isLoading) {
+      return;
+    }
+
+    sseClientRef.current?.close();
+    sessionRef.current = generateSessionId();
+    mapSessionRef.current = generateSessionId();
+    setMessages([]);
+    setInput('');
+    setStreamingText('');
+    setCurrentToolCalls([]);
+    setExpandedActions(new Set());
+    setExpandedTools(new Set());
+    setActiveAgents([]);
+    setMemoryUsage(0);
+    setMemoryWarning(null);
+    setShowAgentTimeline(false);
+  }, [isLoading]);
+
    return (
-     <div className="flex flex-col h-full glass-panel">
-       <div className="p-3 border-b border-sda-border-default/50">
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-sda-text-primary flex items-center gap-2">
-            <Icon icon="chat" className="text-sda-accent-cyan" />
-            AI Assistant
+      <div className="flex flex-col h-full glass-panel">
+        <div className="p-3 border-b border-sda-border-default/50">
+          <div className="flex items-center justify-between mb-2">
+            <h2 className="text-lg font-semibold text-sda-text-primary flex items-center gap-2">
+              <Icon icon="chat" className="text-sda-accent-cyan" />
+              AI Assistant
+            </h2>
+            <Button
+              small
+              minimal
+              icon="reset"
+              onClick={handleNewSession}
+              disabled={isLoading}
+            >
+              New Session
+            </Button>
+          </div>
+          <div className="flex items-center gap-3 mb-2">
             {useStreaming && (
-              <Tag minimal intent="success" className="ml-2">
-                <Icon icon="satellite" size={10} /> SSE
+              <Tag minimal intent="success">
+                <Icon icon="satellite" size={10} className="mr-1" /> SSE
               </Tag>
             )}
-          </h2>
-          <MemoryIndicator percentage={memoryUsage} />
+            <MemoryIndicator percentage={memoryUsage} />
+            {memoryWarning && (
+              <Tag minimal intent="warning">
+                <Icon icon="warning-sign" size={10} className="mr-1" />
+                Memory degraded
+              </Tag>
+            )}
+          </div>
+          {memoryWarning && (
+            <p className="text-xs text-orange-300 mb-2">{memoryWarning}</p>
+          )}
+          <p className="text-xs text-sda-text-muted">Ask for simulations, analysis, or map controls</p>
         </div>
-        <p className="text-xs text-sda-text-muted">Ask for simulations, analysis, or map controls</p>
-      </div>
 
       <div className="flex-1 overflow-auto p-3 space-y-3">
         {/* Agent Timeline */}

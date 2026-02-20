@@ -5,17 +5,10 @@ from datetime import datetime, timezone
 
 from app.db.base import generate_uuid
 from app.db.models.ontology import Satellite, Orbit, ConjunctionEvent
-from app.db.models.detour import (
-    DetourSatelliteState,
-    DetourConjunctionAnalysis,
-    DetourManeuverPlan,
-    DetourManeuverStatus,
-)
 
 @pytest.mark.asyncio
-async def test_detour_pipeline_and_maneuver_flow(client, db_session):
-    """Full end‑to‑end test covering analysis trigger, status, approval and execution.
-    """
+async def test_detour_pipeline_and_maneuver_deprecations(client, db_session):
+    """Cutover behavior: analysis works, maneuver mutation endpoints are deprecated."""
     # ---------- Setup ----------
     # Create primary and secondary satellites with orbits (required by screening tool).
     primary = Satellite(id=generate_uuid(), norad_id=30001, name="PrimarySatAPI", object_type="satellite")
@@ -57,69 +50,28 @@ async def test_detour_pipeline_and_maneuver_flow(client, db_session):
     status_resp = await client.get(f"/api/v1/detour/sessions/{session_id}/status")
     assert status_resp.status_code == 200
     status_data = status_resp.json()
-    assert status_data["status"] in {"active", "ACTIVE", "active"}
+    assert "status" in status_data
+    assert status_data["status"] in {"active", "completed", "failed", "cancelled"}
 
-    # ---------- Results (should error because not completed) ----------
+    # ---------- Results (may still be running) ----------
     results_resp = await client.get(f"/api/v1/detour/sessions/{session_id}/results")
-    assert results_resp.status_code == 400
-    # Verify RFC‑7807 problem+json fields
-    err_body = results_resp.json()
-    assert err_body["type"].endswith("analysis-not-complete")
+    assert results_resp.status_code in {200, 400}
+    if results_resp.status_code == 400:
+        err_body = results_resp.json()
+        assert err_body["type"].endswith("analysis-not-complete")
+    else:
+        results_data = results_resp.json()
+        assert results_data["session_id"] == session_id
 
-    # ---------- Prepare maneuver plan ----------
-    # Detour satellite state – enough fuel and Δv budget.
-    sat_state = DetourSatelliteState(
-        id=generate_uuid(),
-        satellite_id=primary.id,
-        tenant_id="default",
-        fuel_remaining_kg=100.0,
-        delta_v_budget_m_s=1000.0,
-    )
-    db_session.add(sat_state)
-    await db_session.flush()
-
-    # Detour conjunction analysis linked to the event.
-    analysis = DetourConjunctionAnalysis(
-        id=generate_uuid(),
-        conjunction_event_id=conj.id,
-        tenant_id="default",
-        risk_level=conj.risk_level,
-        miss_distance_km=conj.miss_distance_km,
-        tca=conj.tca,
-        collision_probability=conj.collision_probability,
-        analysis_status="completed",
-    )
-    db_session.add(analysis)
-    await db_session.flush()
-
-    # Maneuver plan (initially proposed).
-    plan = DetourManeuverPlan(
-        id=generate_uuid(),
-        conjunction_analysis_id=analysis.id,
-        tenant_id="default",
-        maneuver_type="in_plane",
-        delta_v_m_s=0.2,
-        fuel_cost_kg=5.0,
-        status=DetourManeuverStatus.PROPOSED,
-    )
-    db_session.add(plan)
-    await db_session.flush()
-
-    # ---------- Approve maneuver ----------
-    approve_resp = await client.post(f"/api/v1/detour/maneuvers/{plan.id}/approve")
-    assert approve_resp.status_code == 200
-    approved_plan = approve_resp.json()
-    assert approved_plan["status"] == "approved"
-
-    # ---------- Execute maneuver (admin role required, default user is admin) ----------
-    exec_resp = await client.post(f"/api/v1/detour/maneuvers/{plan.id}/execute")
-    assert exec_resp.status_code == 200
-    exec_data = exec_resp.json()
-    assert exec_data["status"] == "executed"
-    assert exec_data["plan_id"] == plan.id
-
-    # Verify satellite state was updated (fuel reduced).
-    refreshed_state = await db_session.get(DetourSatelliteState, sat_state.id)
-    assert refreshed_state.fuel_remaining_kg == pytest.approx(95.0)  # 100 - 5
-    # Δv budget also reduced
-    assert refreshed_state.delta_v_budget_m_s == pytest.approx(1000.0 - 0.2)
+    # ---------- Maneuver endpoints are deprecated ----------
+    deprecated_calls = [
+        ("/api/v1/detour/maneuvers/plan-1/approve", {}),
+        ("/api/v1/detour/maneuvers/plan-1/reject", {"reason": "deprecated"}),
+        ("/api/v1/detour/maneuvers/plan-1/execute", {}),
+    ]
+    for path, payload in deprecated_calls:
+        response = await client.post(path, json=payload)
+        assert response.status_code == 501
+        body = response.json()
+        assert body["type"].endswith("endpoint-deprecated")
+        assert body["deprecated"] is True

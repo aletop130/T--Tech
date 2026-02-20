@@ -104,7 +104,7 @@ async def get_timeline_events(
         try:
             stmt = text("""
                 SELECT id, primary_object_id, secondary_object_id, tca, risk_level, miss_distance_km
-                FROM conjunctions
+                FROM conjunction_events
                 WHERE tenant_id = :tenant_id
                   AND tca >= :start_dt
                   AND tca <= :end_dt
@@ -116,7 +116,7 @@ async def get_timeline_events(
                 "end_dt": end_dt,
             })
             rows = result.fetchall()
-            
+
             for row in rows:
                 events.append(TimelineEvent(
                     id=f"conjunction-{row.id}",
@@ -219,7 +219,7 @@ async def get_timeline_events_range(
     try:
         stmt = text("""
             SELECT id, primary_object_id, secondary_object_id, tca, risk_level
-            FROM conjunctions
+            FROM conjunction_events
             WHERE tenant_id = :tenant_id
               AND tca >= :start_dt
               AND tca <= :end_dt
@@ -231,7 +231,7 @@ async def get_timeline_events_range(
             "end_dt": end_dt,
         })
         rows = result.fetchall()
-        
+
         for row in rows:
             events.append(TimelineEvent(
                 id=f"conjunction-{row.id}",
@@ -300,7 +300,7 @@ async def get_timeline_summary(
     try:
         stmt = text("""
             SELECT risk_level, COUNT(*) as count
-            FROM conjunctions
+            FROM conjunction_events
             WHERE tenant_id = :tenant_id
               AND tca >= :start_dt
               AND tca <= :end_dt
@@ -312,7 +312,7 @@ async def get_timeline_summary(
             "end_dt": end_dt,
         })
         rows = result.fetchall()
-        
+
         for row in rows:
             summary["conjunctions"]["by_risk"][row.risk_level] = row.count
             summary["conjunctions"]["total"] += row.count

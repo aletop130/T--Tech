@@ -61,6 +61,17 @@ class CesiumAction(BaseModel):
         'cesium.toggle',
         'cesium.removeLayer',
         'cesium.setSelected',
+        'cesium.showManeuverOptions',
+        'cesium.highlightManeuver',
+        'cesium.showConjunctionLine',
+        'cesium.showRiskHeatmap',
+        'cesium.showThreatRadius',
+        'simulation.addSatellite',
+        'simulation.addGroundStation',
+        'simulation.addVehicle',
+        'simulation.showCoverage',
+        'simulation.analyzeCoverage',
+        'simulation.removeEntity',
     ]
     payload: dict[str, Any]
 
@@ -319,6 +330,335 @@ CESIUM_FUNCTION_DEFINITIONS = [
                     }
                 },
                 "required": ["query"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "cesium_show_maneuver_options",
+            "description": "Display maneuver options for a satellite to avoid collision. Shows labels with delta-v requirements for each option. Use when user asks about maneuver options, how to avoid collision, or evasive actions.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "satellite_id": {
+                        "type": "string",
+                        "description": "UUID of the satellite (not NORAD ID)"
+                    },
+                    "maneuvers": {
+                        "type": "array",
+                        "description": "List of maneuver options",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "id": {"type": "string", "description": "Unique maneuver ID"},
+                                "type": {"type": "string", "description": "Maneuver type (e.g., delta_v_posigrade, delta_v_retrograde, plane_change)"},
+                                "delta_v_m_s": {"type": "number", "description": "Delta-v in m/s"},
+                                "description": {"type": "string", "description": "Human-readable description"}
+                            }
+                        }
+                    },
+                    "recommended_id": {
+                        "type": "string",
+                        "description": "ID of the recommended maneuver"
+                    }
+                },
+                "required": ["satellite_id", "maneuvers"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "cesium_highlight_maneuver",
+            "description": "Highlight the recommended or selected maneuver on the map. Use when user asks which maneuver is recommended, best, or suggested.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "satellite_id": {
+                        "type": "string",
+                        "description": "UUID of the satellite"
+                    },
+                    "maneuver_id": {
+                        "type": "string",
+                        "description": "ID of the maneuver to highlight"
+                    },
+                    "color": {
+                        "type": "string",
+                        "description": "Highlight color in hex (default: #00FF00)",
+                        "default": "#00FF00"
+                    }
+                },
+                "required": ["satellite_id", "maneuver_id"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "cesium_show_conjunction_line",
+            "description": "Draw a glowing line between two satellites in conjunction. Use when visualizing collision risk or conjunction events.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "satellite_a_id": {
+                        "type": "string",
+                        "description": "UUID of primary satellite"
+                    },
+                    "satellite_b_id": {
+                        "type": "string",
+                        "description": "UUID of secondary satellite/debris"
+                    },
+                    "color": {
+                        "type": "string",
+                        "description": "Line color in hex (default: #FF1744)",
+                        "default": "#FF1744"
+                    },
+                    "label": {
+                        "type": "string",
+                        "description": "Label to show on the line"
+                    }
+                },
+                "required": ["satellite_a_id", "satellite_b_id"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "cesium_show_risk_heatmap",
+            "description": "Display a colored risk heatmap around a satellite. Use when user asks about risk area, risk heatmap, or danger zone.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "satellite_id": {
+                        "type": "string",
+                        "description": "UUID of the satellite"
+                    },
+                    "risk_level": {
+                        "type": "string",
+                        "enum": ["low", "medium", "high", "critical"],
+                        "description": "Risk level determining the color"
+                    },
+                    "probability": {
+                        "type": "number",
+                        "description": "Collision probability (0-1)"
+                    }
+                },
+                "required": ["satellite_id", "risk_level"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "cesium_show_threat_radius",
+            "description": "Display a threat radius circle around a satellite. Use when visualizing threat area, danger radius, or keep-out zone.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "satellite_id": {
+                        "type": "string",
+                        "description": "UUID of the satellite"
+                    },
+                    "radius_km": {
+                        "type": "number",
+                        "description": "Radius in kilometers (default: 5)",
+                        "default": 5.0
+                    },
+                    "color": {
+                        "type": "string",
+                        "description": "Circle color in hex (default: #FF5722)",
+                        "default": "#FF5722"
+                    }
+                },
+                "required": ["satellite_id"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "simulation_add_satellite",
+            "description": "Add a satellite to the simulation with orbital parameters. Use when user asks to add, create, or place a satellite in the simulation.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "description": "Satellite name (e.g., 'Guardian-1', 'Recon-Sat')"
+                    },
+                    "altitude_km": {
+                        "type": "number",
+                        "description": "Orbital altitude in kilometers (LEO: 160-2000, MEO: 2000-35786, GEO: 35786)"
+                    },
+                    "inclination_deg": {
+                        "type": "number",
+                        "description": "Orbital inclination in degrees (0-180)",
+                        "default": 0
+                    },
+                    "faction": {
+                        "type": "string",
+                        "enum": ["allied", "hostile", "neutral", "unknown"],
+                        "description": "Faction affiliation (allied=blue, hostile=red)",
+                        "default": "neutral"
+                    },
+                    "raan_deg": {
+                        "type": "number",
+                        "description": "Right Ascension of Ascending Node in degrees",
+                        "default": 0
+                    }
+                },
+                "required": ["name", "altitude_km"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "simulation_add_ground_station",
+            "description": "Add a ground station or base to the simulation. Use when user asks to add a base, ground station, or command center.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "description": "Station name (e.g., 'Alpha Base', 'Command Center North')"
+                    },
+                    "latitude": {
+                        "type": "number",
+                        "description": "Latitude in degrees (-90 to 90)"
+                    },
+                    "longitude": {
+                        "type": "number",
+                        "description": "Longitude in degrees (-180 to 180)"
+                    },
+                    "coverage_radius_km": {
+                        "type": "number",
+                        "description": "Coverage radius in kilometers",
+                        "default": 2000
+                    },
+                    "faction": {
+                        "type": "string",
+                        "enum": ["allied", "hostile", "neutral", "unknown"],
+                        "description": "Faction affiliation",
+                        "default": "neutral"
+                    }
+                },
+                "required": ["name", "latitude", "longitude"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "simulation_add_vehicle",
+            "description": "Add a vehicle (ground, air, or sea) to the simulation. Use when user asks to add a tank, aircraft, ship, or vehicle.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "description": "Vehicle name/callsign (e.g., 'Alpha-1', 'Eagle-2')"
+                    },
+                    "entity_type": {
+                        "type": "string",
+                        "enum": ["ground_vehicle", "aircraft", "ship"],
+                        "description": "Type of vehicle"
+                    },
+                    "latitude": {
+                        "type": "number",
+                        "description": "Latitude in degrees"
+                    },
+                    "longitude": {
+                        "type": "number",
+                        "description": "Longitude in degrees"
+                    },
+                    "heading_deg": {
+                        "type": "number",
+                        "description": "Heading/direction in degrees (0-360)",
+                        "default": 0
+                    },
+                    "faction": {
+                        "type": "string",
+                        "enum": ["allied", "hostile", "neutral", "unknown"],
+                        "description": "Faction affiliation",
+                        "default": "neutral"
+                    }
+                },
+                "required": ["name", "entity_type", "latitude", "longitude"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "simulation_show_coverage",
+            "description": "Show or hide satellite coverage area (footprint). Use when user asks to show, display, or visualize satellite coverage.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "satellite_id": {
+                        "type": "string",
+                        "description": "UUID of the satellite"
+                    },
+                    "show": {
+                        "type": "boolean",
+                        "description": "Show (true) or hide (false) the coverage",
+                        "default": True
+                    },
+                    "min_elevation_deg": {
+                        "type": "number",
+                        "description": "Minimum elevation angle in degrees",
+                        "default": 10.0
+                    }
+                },
+                "required": ["satellite_id"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "simulation_analyze_coverage",
+            "description": "Analyze combined coverage for allied satellites. Shows gaps, overlaps, and coverage percentage. Use when user asks to analyze coverage, find gaps, or check allied coverage.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "faction": {
+                        "type": "string",
+                        "enum": ["allied", "hostile", "neutral", "unknown"],
+                        "description": "Filter by faction (default: allied)",
+                        "default": "allied"
+                    },
+                    "region_bounds": {
+                        "type": "array",
+                        "items": {"type": "number"},
+                        "description": "Region bounds as [min_lat, max_lat, min_lon, max_lon]"
+                    }
+                }
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "simulation_remove_entity",
+            "description": "Remove an entity from the simulation. Use when user asks to remove, delete, or clear a satellite, station, or vehicle.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_type": {
+                        "type": "string",
+                        "enum": ["satellite", "ground_station", "ground_vehicle", "aircraft", "ship"],
+                        "description": "Type of entity to remove"
+                    },
+                    "entity_id": {
+                        "type": "string",
+                        "description": "ID of the entity to remove"
+                    }
+                },
+                "required": ["entity_type", "entity_id"]
             }
         }
     }

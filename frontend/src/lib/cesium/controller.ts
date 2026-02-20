@@ -1,7 +1,7 @@
 import { getCesium, type CesiumModule } from './loader';
 
 export interface CesiumAction {
-  type: 'cesium.setClock' | 'cesium.loadCzml' | 'cesium.addEntity' | 'cesium.flyTo' | 'cesium.flyToCountry' | 'cesium.searchLocation' | 'cesium.toggle' | 'cesium.removeLayer' | 'cesium.setSelected';
+  type: string;
   payload: Record<string, unknown>;
 }
 
@@ -52,6 +52,12 @@ class CesiumControllerClass {
     this.registerHandler('cesium.toggle', this.handleToggle.bind(this));
     this.registerHandler('cesium.removeLayer', this.handleRemoveLayer.bind(this));
     this.registerHandler('cesium.setSelected', this.handleSetSelected.bind(this));
+    this.registerHandler('simulation.addSatellite', this.handleSimulationAddSatellite.bind(this));
+    this.registerHandler('simulation.addGroundStation', this.handleSimulationAddGroundStation.bind(this));
+    this.registerHandler('simulation.addVehicle', this.handleSimulationAddVehicle.bind(this));
+    this.registerHandler('simulation.showCoverage', this.handleSimulationShowCoverage.bind(this));
+    this.registerHandler('simulation.analyzeCoverage', this.handleSimulationAnalyzeCoverage.bind(this));
+    this.registerHandler('simulation.removeEntity', this.handleSimulationRemoveEntity.bind(this));
   }
 
   // Country coordinates lookup table
@@ -104,6 +110,9 @@ class CesiumControllerClass {
     const handler = this.actionHandlers.get(action.type);
     if (handler && this.Cesium) {
       handler(action.payload, this.Cesium);
+    } else if (action.type.startsWith('cesium.')) {
+      const actionWithoutPrefix = action.type.replace('cesium.', '');
+      this.executeAction({ type: actionWithoutPrefix, ...action.payload });
     }
 
     this.eventListeners.get(action.type)?.forEach(callback => callback(action));
@@ -326,15 +335,17 @@ class CesiumControllerClass {
         this.viewer.selectedEntity = entity;
       }
     } else if (longitude !== undefined && latitude !== undefined) {
+      // For locations (not satellites), use top-down view (-90 pitch)
+      const isLocation = !entityId;
       this.viewer.camera.flyTo({
         destination: Cesium.Cartesian3.fromDegrees(
           longitude,
           latitude,
-          altitude || 10000
+          altitude || (isLocation ? 50000 : 10000)
         ),
         orientation: {
           heading: Cesium.Math.toRadians(heading || 0),
-          pitch: Cesium.Math.toRadians(pitch || -45),
+          pitch: Cesium.Math.toRadians(pitch || (isLocation ? -90 : -45)),
           roll: Cesium.Math.toRadians(roll || 0),
         },
         duration,
@@ -569,6 +580,21 @@ this.viewer.camera.flyTo({
         break;
       case 'show_mission_summary':
         this.showMissionSummary(action as { satellite_id?: string; maneuver_id?: string; fuel_remaining?: number; execution_time?: string });
+        break;
+      case 'showManeuverOptions':
+        this.showManeuverOptions(action as { satellite_id?: string; maneuvers?: Array<{ maneuver_id: string; type: string; delta_v_m_s: number }>; recommended_id?: string });
+        break;
+      case 'highlightManeuver':
+        this.highlightRecommendedManeuver(action as { satellite_id?: string; maneuver_id?: string; color?: string });
+        break;
+      case 'showConjunctionLine':
+        this.showConjunctionLine(action as { satellite_a_id?: string; satellite_b_id?: string; color?: string; label?: string });
+        break;
+      case 'showRiskHeatmap':
+        this.showRiskHeatmap(action as { satellite_id?: string; risk_level?: string; probability?: number });
+        break;
+      case 'showThreatRadius':
+        this.showThreatRadius(action as { satellite_id?: string; radius_km?: number; color?: string });
         break;
       default:
         console.warn('Unknown action type:', action.type);
@@ -1434,6 +1460,206 @@ this.viewer.camera.flyTo({
         }
       }
     });
+  }
+
+  private getFactionColor(faction: string): any {
+    if (!this.Cesium) return this.Cesium!.Color.WHITE;
+    switch (faction) {
+      case 'allied':
+        return this.Cesium.Color.fromCssColorString('#0066FF');
+      case 'hostile':
+        return this.Cesium.Color.fromCssColorString('#FF3333');
+      case 'neutral':
+        return this.Cesium.Color.GRAY;
+      default:
+        return this.Cesium.Color.ORANGE;
+    }
+  }
+
+  private handleSimulationAddSatellite(payload: Record<string, unknown>): void {
+    if (!this.viewer || !this.Cesium) return;
+    
+    const id = payload.id as string;
+    const name = payload.name as string;
+    const faction = payload.faction as string || 'neutral';
+    const altitudeKm = payload.altitude_km as number || 500;
+    const footprint = payload.footprint as { radius_km?: number; area_km2?: number } | undefined;
+    
+    const color = this.getFactionColor(faction);
+    
+    const entity = this.viewer.entities.add({
+      id: `satellite-${id}`,
+      name: name,
+      position: this.Cesium.Cartesian3.fromDegrees(0, 0, altitudeKm * 1000),
+      point: {
+        pixelSize: 12,
+        color: color,
+        outlineColor: this.Cesium.Color.WHITE,
+        outlineWidth: 2,
+      },
+      label: {
+        text: name,
+        font: '12px IBM Plex Sans',
+        fillColor: color,
+        outlineColor: this.Cesium.Color.BLACK,
+        outlineWidth: 2,
+        style: this.Cesium.LabelStyle.FILL_AND_OUTLINE,
+        verticalOrigin: this.Cesium.VerticalOrigin.BOTTOM,
+        pixelOffset: new this.Cesium.Cartesian2(0, -15),
+      },
+      properties: new this.Cesium.PropertyBag({
+        objectType: 'satellite',
+        faction: faction,
+        altitudeKm: altitudeKm,
+        footprintRadiusKm: footprint?.radius_km,
+        footprintAreaKm2: footprint?.area_km2,
+      }),
+    });
+
+    console.log(`Simulation: Added satellite ${name} (${faction}) at ${altitudeKm}km`);
+  }
+
+  private handleSimulationAddGroundStation(payload: Record<string, unknown>): void {
+    if (!this.viewer || !this.Cesium) return;
+    
+    const id = payload.id as string;
+    const name = payload.name as string;
+    const latitude = payload.latitude as number;
+    const longitude = payload.longitude as number;
+    const altitudeM = (payload.altitude_m as number) || 0;
+    const coverageRadiusKm = (payload.coverage_radius_km as number) || 2000;
+    const faction = payload.faction as string || 'neutral';
+    const isOperational = payload.is_operational !== false;
+    
+    const color = this.getFactionColor(faction);
+    const position = this.Cesium.Cartesian3.fromDegrees(longitude, latitude, altitudeM);
+    
+    this.viewer.entities.add({
+      id: `station-${id}`,
+      name: name,
+      position: position,
+      point: {
+        pixelSize: 14,
+        color: isOperational ? color : this.Cesium.Color.RED,
+        outlineColor: this.Cesium.Color.WHITE,
+        outlineWidth: 2,
+        heightReference: this.Cesium.HeightReference.CLAMP_TO_GROUND,
+      },
+      label: {
+        text: name,
+        font: '11px IBM Plex Sans',
+        fillColor: color,
+        outlineColor: this.Cesium.Color.BLACK,
+        outlineWidth: 2,
+        style: this.Cesium.LabelStyle.FILL_AND_OUTLINE,
+        verticalOrigin: this.Cesium.VerticalOrigin.BOTTOM,
+        pixelOffset: new this.Cesium.Cartesian2(0, -18),
+      },
+      ellipse: {
+        semiMajorAxis: coverageRadiusKm * 1000,
+        semiMinorAxis: coverageRadiusKm * 1000,
+        material: color.withAlpha(0.15),
+        outline: true,
+        outlineColor: color.withAlpha(0.6),
+        outlineWidth: 1,
+        height: 0,
+      },
+      properties: new this.Cesium.PropertyBag({
+        objectType: 'ground_station',
+        faction: faction,
+        coverageRadiusKm: coverageRadiusKm,
+      }),
+    });
+
+    console.log(`Simulation: Added ground station ${name} (${faction}) at (${latitude}, ${longitude})`);
+  }
+
+  private handleSimulationAddVehicle(payload: Record<string, unknown>): void {
+    if (!this.viewer || !this.Cesium) return;
+    
+    const entityId = payload.entity_id as string;
+    const name = payload.name as string;
+    const entityType = payload.entity_type as string;
+    const latitude = payload.latitude as number;
+    const longitude = payload.longitude as number;
+    const altitudeM = (payload.altitude_m as number) || 0;
+    const headingDeg = (payload.heading_deg as number) || 0;
+    const faction = payload.faction as string || 'neutral';
+    
+    const color = this.getFactionColor(faction);
+    const position = this.Cesium.Cartesian3.fromDegrees(longitude, latitude, altitudeM);
+    
+    let pixelSize = 10;
+    if (entityType === 'aircraft') pixelSize = 8;
+    if (entityType === 'ship') pixelSize = 12;
+    
+    this.viewer.entities.add({
+      id: entityId,
+      name: name,
+      position: position,
+      point: {
+        pixelSize: pixelSize,
+        color: color,
+        outlineColor: this.Cesium.Color.WHITE,
+        outlineWidth: 2,
+        heightReference: this.Cesium.HeightReference.CLAMP_TO_GROUND,
+      },
+      label: {
+        text: name,
+        font: '10px IBM Plex Sans',
+        fillColor: color,
+        outlineColor: this.Cesium.Color.BLACK,
+        outlineWidth: 2,
+        style: this.Cesium.LabelStyle.FILL_AND_OUTLINE,
+        verticalOrigin: this.Cesium.VerticalOrigin.BOTTOM,
+        pixelOffset: new this.Cesium.Cartesian2(0, -12),
+      },
+      properties: new this.Cesium.PropertyBag({
+        objectType: entityType,
+        faction: faction,
+        heading: headingDeg,
+      }),
+    });
+
+    console.log(`Simulation: Added ${entityType} ${name} (${faction}) at (${latitude}, ${longitude})`);
+  }
+
+  private handleSimulationShowCoverage(payload: Record<string, unknown>): void {
+    if (!this.viewer || !this.Cesium) return;
+    
+    const satelliteId = payload.satellite_id as string;
+    const show = payload.show !== false;
+    
+    const coverageEntity = this.viewer.entities.getById(`coverage-${satelliteId}`);
+    if (coverageEntity) {
+      coverageEntity.show = show;
+    }
+    
+    console.log(`Simulation: ${show ? 'Showing' : 'Hiding'} coverage for satellite ${satelliteId}`);
+  }
+
+  private handleSimulationAnalyzeCoverage(payload: Record<string, unknown>): void {
+    console.log('Simulation: Coverage analysis requested', payload);
+  }
+
+  private handleSimulationRemoveEntity(payload: Record<string, unknown>): void {
+    if (!this.viewer) return;
+    
+    const entityType = payload.entity_type as string;
+    const entityId = payload.entity_id as string;
+    
+    let cesiumId: string;
+    if (entityType === 'satellite') {
+      cesiumId = `satellite-${entityId}`;
+      this.viewer.entities.removeById(`coverage-${entityId}`);
+    } else if (entityType === 'ground_station') {
+      cesiumId = `station-${entityId}`;
+    } else {
+      cesiumId = entityId;
+    }
+    
+    this.viewer.entities.removeById(cesiumId);
+    console.log(`Simulation: Removed ${entityType} ${entityId}`);
   }
 }
 

@@ -15,6 +15,7 @@ from app.api.v1 import (
     operations,
     proximity,
     timeline,
+    simulation,
 )
 
 api_router = APIRouter()
@@ -95,5 +96,11 @@ api_router.include_router(
     timeline.router,
     prefix="/timeline",
     tags=["Timeline"],
+)
+
+api_router.include_router(
+    simulation.router,
+    prefix="/simulation",
+    tags=["Simulation"],
 )
 

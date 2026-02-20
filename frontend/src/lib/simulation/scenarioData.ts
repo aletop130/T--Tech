@@ -13,7 +13,7 @@ export interface SimulationEntity {
 export interface SimulatedSatelliteData {
   id: string;
   name: string;
-  type: 'recon' | 'comms';
+  type: 'recon' | 'comms' | 'debris';
   initialPosition: Cesium.Cartesian3;
   status: 'online' | 'degraded' | 'maneuvering' | 'offline';
   fuelPercent: number;
@@ -24,6 +24,8 @@ export interface SimulatedSatelliteData {
     duration: number;
   }[];
   affiliation?: 'allied' | 'hostile' | 'neutral';
+  tleLine1?: string;
+  tleLine2?: string;
 }
 
 export interface GroundUnitData {
@@ -76,6 +78,9 @@ export const GUARDIAN_ANGEL_SCENARIO = {
       initialPosition: Cesium.Cartesian3.fromDegrees(14.5, 31.5, 400000),
       status: 'online' as const,
       fuelPercent: 100,
+      affiliation: 'allied' as const,
+      tleLine1: '1 90001U 24001A   26019.50000000  .00000000  00000-0  00000-0 0    05',
+      tleLine2: '2 90001  45.0000  90.0000 0001000   0.0000  0.0000 15.50000000    02',
       maneuvers: [
         {
           time: 2160, // 36 minutes - evasive burn after cyber attack
@@ -95,21 +100,25 @@ export const GUARDIAN_ANGEL_SCENARIO = {
       id: 'comsat-2',
       name: 'ComSat-2',
       type: 'comms' as const,
-      initialPosition: Cesium.Cartesian3.fromDegrees(16.0, 32.0, 420000),
+      initialPosition: Cesium.Cartesian3.fromDegrees(16.0, 32.0, 380000),
       status: 'online' as const,
       fuelPercent: 100,
-      maneuvers: [],
       affiliation: 'hostile' as const,
+      tleLine1: '1 90002U 24002A   26019.50000000  .00000000  00000-0  00000-0 0    05',
+      tleLine2: '2 90002  35.0000 100.0000 0000500   0.0000 180.0000 16.00000000    02',
+      maneuvers: [],
     },
     {
-      id: 'hostile-sat',
-      name: 'HostileSat-Alpha',
-      type: 'recon' as const,
-      initialPosition: Cesium.Cartesian3.fromDegrees(20.0, 35.0, 380000), // Will appear at 0:48
+      id: 'debris-alpha',
+      name: 'Debris-Alpha',
+      type: 'debris' as const,
+      initialPosition: Cesium.Cartesian3.fromDegrees(20.0, 35.0, 380000),
       status: 'online' as const,
       fuelPercent: 100,
+      affiliation: 'hostile' as const,
+      tleLine1: '1 90003U 24003A   26019.50000000  .00000000  00000-0  00000-0 0    05',
+      tleLine2: '2 90003  50.0000 120.0000 0002000   0.0000  90.0000 15.80000000    02',
       maneuvers: [],
-      affiliation: 'hostile' as const, // Will be used to color it red
     },
   ] as SimulatedSatelliteData[],
   
@@ -226,10 +235,10 @@ export const GUARDIAN_ANGEL_SCENARIO = {
       cameraAction: { mode: 'maneuver_track', targetId: 'reconsat-1', duration: 12 },
     },
     {
-      time: 2880, // 48 minutes - HOSTILE SATELLITE APPEARS
-      type: 'hostile_contact',
-      targetId: 'hostile-sat',
-      description: 'Hostile satellite detected on intercept trajectory - Collision threat imminent',
+      time: 2880, // 48 minutes - DEBRIS APPEARS
+      type: 'debris_contact',
+      targetId: 'debris-alpha',
+      description: 'Debris detected on intercept trajectory - Collision threat imminent',
       cameraAction: { mode: 'threat_wide', duration: 15 },
     },
     {

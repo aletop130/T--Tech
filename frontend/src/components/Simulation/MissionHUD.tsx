@@ -87,16 +87,13 @@ export function MissionHUD({
   const isAtKeyEvent = keyEvents.includes(Math.floor(simulationTime / 30) * 30);
 
   return (
-    <div className="fixed top-4 right-4 z-50 w-96 bg-slate-900/95 border border-slate-700 rounded-lg shadow-2xl backdrop-blur-sm">
+    <div className="absolute left-4 top-16 z-50 w-96 bg-black/95 border border-slate-700 rounded-lg shadow-2xl backdrop-blur-sm max-h-[calc(100vh-6rem)] overflow-y-auto pointer-events-auto">
       {/* Header */}
       <div className="p-4 border-b border-slate-700 flex justify-between items-center">
         <div>
           <h3 className="text-lg font-bold text-cyan-400">OPERATION GUARDIAN ANGEL</h3>
           <div className="flex items-center gap-2 mt-1">
             <p className="text-sm text-slate-400">SAR Warfare Simulation</p>
-            <span className="px-2 py-0.5 bg-amber-600/80 text-white text-xs font-semibold rounded">
-              FREE CAM
-            </span>
           </div>
         </div>
         <div className="flex gap-2">
@@ -109,7 +106,7 @@ export function MissionHUD({
             <Icon icon="chevron-left" size={16} className="text-white" />
           </button>
           
-          {isPaused && !isComplete ? (
+          {!isPlaying && !isComplete ? (
             <button
               onClick={onNextStep}
               className="px-4 py-2 bg-green-600 hover:bg-green-500 rounded transition-colors flex items-center gap-2"
@@ -128,27 +125,13 @@ export function MissionHUD({
             </button>
           )}
           
-          <button
-            onClick={onReset}
-            className="p-3 bg-slate-700 hover:bg-slate-600 rounded transition-colors"
-            title="Reset"
-          >
-            <Icon icon="reset" size={16} className="text-slate-300" />
-          </button>
-          
-          {onToggleFreeCameraMode && (
-            <button
-              onClick={onToggleFreeCameraMode}
-              className={`p-3 rounded transition-colors ${
-                freeCameraMode 
-                  ? 'bg-amber-600 hover:bg-amber-500' 
-                  : 'bg-slate-700 hover:bg-slate-600'
-              }`}
-              title={freeCameraMode ? 'Free Camera Active - Click to Lock' : 'Click for Free Camera'}
-            >
-              <Icon icon="mobile-phone" size={16} className="text-white" />
-            </button>
-          )}
+           <button
+             onClick={onReset}
+             className="p-3 bg-slate-700 hover:bg-slate-600 rounded transition-colors"
+             title="Reset"
+           >
+             <Icon icon="cross" size={16} className="text-slate-300" />
+           </button>
         </div>
       </div>
 
@@ -238,8 +221,8 @@ export function MissionHUD({
       {/* Status Footer */}
       <div className="p-2 bg-slate-800/50 rounded-b-lg">
         <div className="flex justify-center">
-          <span className={`text-xs font-mono ${isComplete ? 'text-green-400' : isPaused ? 'text-amber-400' : 'text-green-400'}`}>
-            {isComplete ? '✓ MISSION COMPLETE' : isPaused ? '⏸ PAUSED - Press Continue to advance' : '▶ SIMULATION RUNNING'}
+          <span className={`text-xs font-mono ${isComplete ? 'text-green-400' : !isPlaying ? 'text-amber-400' : 'text-green-400'}`}>
+            {isComplete ? '✓ MISSION COMPLETE' : !isPlaying ? '⏸ PAUSED - Press Continue to advance' : '▶ SIMULATION RUNNING'}
           </span>
         </div>
       </div>

@@ -101,7 +101,24 @@ vi.mock('@/components/CesiumMap/OrbitalTrackLayer', () => ({ OrbitalTrackLayer: 
 vi.mock('@/components/CesiumMap/MovingSatelliteMarker', () => ({ MovingSatelliteMarker: (props: any) => <div data-testid="moving-satellite-marker" {...props} /> }));
 vi.mock('@/components/CesiumMap/SolarSystemLayer', () => ({ SolarSystemLayer: (props: any) => <div data-testid="solar-system-layer" {...props} /> }));
 vi.mock('@/components/CesiumMap/PlanetInfoBox', () => ({ PlanetInfoBox: (props: any) => <div data-testid="planet-info-box" {...props} /> }));
-vi.mock('@/components/Chat/AgentChat', () => ({ AgentChat: (props: any) => <div data-testid="agent-chat" {...props} /> }));
+vi.mock('@/components/Chat/AgentChat', () => ({
+  AgentChat: (props: any) => (
+    <div data-testid="agent-chat">
+      <button
+        data-testid="agent-chat-sim-start"
+        onClick={() =>
+          props.onSimulationControl?.({
+            action: 'start_sar_simulation',
+            mode: 'enter_simulation_mode',
+            source: 'test',
+          })
+        }
+      >
+        Trigger simulation
+      </button>
+    </div>
+  ),
+}));
 vi.mock('@/components/ProximityAlertPanel/UnifiedAlertsPanel', () => ({ UnifiedAlertsPanel: (props: any) => <div data-testid="unified-alerts-panel" {...props} /> }));
 vi.mock('@/components/CesiumMap/SimulatedSatelliteLayer', () => ({ SimulatedSatelliteLayer: (props: any) => <div data-testid="simulated-satellite-layer" {...props} /> }));
 vi.mock('@/components/CesiumMap/MilitarySymbolLayer', () => ({ MilitarySymbolLayer: (props: any) => <div data-testid="military-symbol-layer" {...props} /> }));
@@ -213,5 +230,21 @@ describe('Map page integration – debris features', () => {
     expect(slider).toHaveValue('2');
     expect(window.__DETOUR_SPEED__).toBe(5);
     expect(screen.getByText('5x')).toBeInTheDocument();
+  });
+
+  it('starts SAR simulation when chat emits simulation control command', async () => {
+    const mockData = {
+      timeUtc: '2026-01-01T00:00:00Z',
+      objects: [],
+    };
+    getDebris.mockResolvedValueOnce(mockData);
+
+    await renderPageAndWait();
+    expect(screen.getByText('Start SAR Simulation')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId('agent-chat-sim-start'));
+
+    await waitFor(() => expect(screen.getByText('Exit Simulation')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('START MISSION')).toBeInTheDocument());
   });
 });

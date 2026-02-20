@@ -232,6 +232,28 @@ export class ApiClient {
     }
   }
 
+  async get<T>(endpoint: string): Promise<T> {
+    return this._fetch<T>(endpoint, { method: 'GET' });
+  }
+
+  async post<T>(endpoint: string, data?: unknown): Promise<T> {
+    return this._fetch<T>(endpoint, {
+      method: 'POST',
+      body: data ? JSON.stringify(data) : undefined,
+    });
+  }
+
+  async put<T>(endpoint: string, data?: unknown): Promise<T> {
+    return this._fetch<T>(endpoint, {
+      method: 'PUT',
+      body: data ? JSON.stringify(data) : undefined,
+    });
+  }
+
+  async delete<T>(endpoint: string): Promise<T> {
+    return this._fetch<T>(endpoint, { method: 'DELETE' });
+  }
+
   // Satellites
   async getSatellites(params?: {
     page?: number;
@@ -387,7 +409,11 @@ export class ApiClient {
     });
   }
 
-  async chatStream(messages: Array<{ role: string; content: string }>, sceneState?: Record<string, unknown>) {
+  async chatStream(
+    messages: Array<{ role: string; content: string }>,
+    sceneState?: Record<string, unknown>,
+    sessionId?: string
+  ) {
     const url = `${this.baseUrl || ''}/api/v1/ai/chat/stream`;
     const response = await fetch(url, {
       method: 'POST',
@@ -398,6 +424,7 @@ export class ApiClient {
       body: JSON.stringify({
         messages,
         sceneState: sceneState || {},
+        session_id: sessionId,
       }),
     });
 

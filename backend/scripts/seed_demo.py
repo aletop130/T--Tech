@@ -141,7 +141,7 @@ async def seed_database():
     """Seed the database with demo data."""
     # Connect to database
     conn = await asyncpg.connect(
-        host="localhost",
+        host="postgres",
         port=5432,
         user="sda_user",
         password="sda_secret",
@@ -296,7 +296,7 @@ async def seed_database():
     print(f"  Generated {conjunction_count} conjunction events")
     
     print("Creating demo incidents...")
-    incident_types = ["conjunction", "space_weather", "rf_interference", "anomaly"]
+    incident_types = ["CONJUNCTION", "SPACE_WEATHER", "RF_INTERFERENCE", "ANOMALY"]
     severities = ["info", "low", "medium", "high", "critical"]
     statuses = ["open", "investigating", "mitigating", "resolved"]
     

@@ -101,6 +101,7 @@ export function MissionNarrative({ simulationTime, isPlaying, stepMode = false }
   const [currentMessage, setCurrentMessage] = useState<NarrativeEvent | null>(null);
   const [messageHistory, setMessageHistory] = useState<NarrativeEvent[]>([]);
   const [showHistory, setShowHistory] = useState(false);
+  const [isVisible, setIsVisible] = useState(true);
 
   useEffect(() => {
     // Show messages in both playing and step mode
@@ -162,16 +163,16 @@ export function MissionNarrative({ simulationTime, isPlaying, stepMode = false }
   return (
     <>
       {/* Current Message Display */}
-      {currentMessage && (
+      {isVisible && currentMessage && (
         <div 
-          className={`fixed bottom-8 left-1/2 -translate-x-1/2 z-50 max-w-3xl w-[90%] p-4 rounded-lg border-2 shadow-2xl backdrop-blur-sm animate-fade-in ${getPriorityStyles(currentMessage.priority)}`}
+          className={`fixed bottom-8 left-1/2 -translate-x-1/2 z-50 max-w-sm p-3 rounded-lg border-2 shadow-2xl backdrop-blur-sm animate-fade-in ${getPriorityStyles(currentMessage.priority)}`}
         >
-          <div className="flex items-start gap-3">
-            <div className={`flex-shrink-0 mt-1 ${getIconColor(currentMessage.priority)}`}>
-              <Icon icon={currentMessage.icon || 'info-sign'} size={24} />
+          <div className="flex items-start gap-2">
+            <div className={`flex-shrink-0 mt-0.5 ${getIconColor(currentMessage.priority)}`}>
+              <Icon icon={currentMessage.icon || 'info-sign'} size={18} />
             </div>
-            <div className="flex-1">
-              <div className="flex items-center gap-2 mb-1">
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-0.5">
                 <span className="text-xs font-bold uppercase tracking-wider opacity-70">
                   {currentMessage.speaker}
                 </span>
@@ -187,24 +188,24 @@ export function MissionNarrative({ simulationTime, isPlaying, stepMode = false }
                   })()}
                 </span>
               </div>
-              <p className="text-sm leading-relaxed font-medium">
+              <p className="text-xs leading-relaxed font-medium">
                 {currentMessage.message}
               </p>
             </div>
             <button
-              onClick={() => setShowHistory(!showHistory)}
+              onClick={() => setIsVisible(false)}
               className="flex-shrink-0 p-1 hover:bg-white/10 rounded transition-colors"
-              title="View message history"
+              title="Close"
             >
-              <Icon icon="history" size={16} className="opacity-70" />
+              <Icon icon="cross" size={14} className="opacity-70" />
             </button>
           </div>
         </div>
       )}
 
       {/* Message History Panel */}
-      {showHistory && (
-        <div className="fixed bottom-32 left-1/2 -translate-x-1/2 z-50 max-w-3xl w-[90%] max-h-64 overflow-y-auto bg-slate-900/95 border border-slate-600 rounded-lg shadow-2xl backdrop-blur-sm">
+      {isVisible && showHistory && (
+        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 max-w-sm max-h-48 overflow-y-auto bg-slate-900/95 border border-slate-600 rounded-lg shadow-2xl backdrop-blur-sm">
           <div className="sticky top-0 bg-slate-900 p-3 border-b border-slate-700 flex justify-between items-center">
             <span className="text-sm font-semibold text-slate-300">Mission Log</span>
             <button

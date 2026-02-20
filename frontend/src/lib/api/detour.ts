@@ -22,7 +22,11 @@ async function fetchJson<T>(url: string, init: RequestInit = {}): Promise<T> {
   const response = await fetch(url, { ...init, headers });
   if (!response.ok) {
     const errBody = await response.json().catch(() => ({}));
-    const message = errBody.detail || `API error: ${response.status}`;
+    const isDeprecated = Boolean(errBody?.deprecated) || response.status === 501;
+    const baseMessage = errBody.detail || errBody.title || `API error: ${response.status}`;
+    const message = isDeprecated
+      ? `Feature temporarily disabled: ${baseMessage}`
+      : baseMessage;
     throw new Error(message);
   }
   // Some endpoints return no body (e.g., DELETE). Guard against empty responses.

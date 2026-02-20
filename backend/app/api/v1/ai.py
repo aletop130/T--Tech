@@ -50,6 +50,7 @@ async def stream_chat(
     messages = body.get("messages", [])
     scene_state = body.get("sceneState", {})
     include_satellites = body.get("includeSatellites", True)  # Default: includi satelliti
+    session_id = body.get("session_id") or body.get("sessionId")
     
     async def generate() -> AsyncGenerator[str, None]:
         try:
@@ -57,7 +58,9 @@ async def stream_chat(
                 messages=messages, 
                 scene_state=scene_state,
                 tenant_id=user.tenant_id,
-                include_satellites=include_satellites
+                include_satellites=include_satellites,
+                session_id=session_id,
+                user_id=user.sub,
             ):
                 if await request.is_disconnected():
                     break
@@ -183,8 +186,8 @@ async def orchestrate_chat(
     """
     body = await request.json()
     message = body.get("message", "")
-    session_id = body.get("session_id")
-    map_session_id = body.get("map_session_id")
+    session_id = body.get("session_id") or body.get("sessionId")
+    map_session_id = body.get("map_session_id") or body.get("mapSessionId")
     mode = body.get("mode", "analyze")
     logger.info(
         "chat_orchestrate_request",

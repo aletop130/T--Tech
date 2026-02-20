@@ -24,7 +24,9 @@ class DetourLLMConfig:
     - model: ``gpt-oss-120b`` (or the value of ``REGOLO_MODEL``)
     - base_url: ``https://api.regolo.ai/v1`` (or ``REGOLO_BASE_URL``)
     - temperature: ``0.2`` – deterministic behaviour for agent prompts
-    - max_tokens: ``4096`` (or ``REGOLO_MAX_TOKENS``)
+    - max_model_len: ``8192`` (or ``DETOUR_REGOLO_MAX_MODEL_LEN``)
+    - max_tokens: optional override (``DETOUR_REGOLO_MAX_TOKENS``). By default
+      omitted so the model can use the remaining context window.
     - timeout: ``60`` seconds – generous network timeout for cloud LLM calls
     """
 
@@ -35,8 +37,15 @@ class DetourLLMConfig:
     api_key: str | None = getattr(settings, "REGOLO_API_KEY", None)
     # The implementation plan mandates a deterministic temperature of 0.2.
     temperature: float = getattr(settings, "DETOUR_REGOLO_TEMPERATURE", 0.2)
-    max_tokens: int = getattr(settings, "REGOLO_MAX_TOKENS", 4096)
+    max_model_len: int = getattr(settings, "DETOUR_REGOLO_MAX_MODEL_LEN", 8192)
+    max_tokens: int | None = getattr(settings, "DETOUR_REGOLO_MAX_TOKENS", None)
     timeout: int = 60  # seconds, as required by the spec
+
+    @classmethod
+    def _model_kwargs(cls) -> dict[str, Any]:
+        return {
+            "max_model_len": cls.max_model_len,
+        }
 
     @classmethod
     def _common_kwargs(cls) -> dict[str, Any]:
@@ -45,14 +54,17 @@ class DetourLLMConfig:
         LangChain's ``ChatOpenAI`` forwards unknown keyword arguments to the
         underlying OpenAI client, which is compatible with Regolo.ai's API.
         """
-        return {
+        kwargs: dict[str, Any] = {
             "model": cls.model,
             "temperature": cls.temperature,
-            "max_tokens": cls.max_tokens,
             "api_key": cls.api_key,
             "base_url": cls.base_url,
             "request_timeout": cls.timeout,
         }
+        if cls.max_tokens is not None:
+            kwargs["max_tokens"] = cls.max_tokens
+        kwargs["model_kwargs"] = cls._model_kwargs()
+        return kwargs
 
     @classmethod
     def get_llm(cls) -> Any:
@@ -81,9 +93,10 @@ class DetourLLMConfig:
                 ``"auto"`` to enable automatic tool selection.
         """
         kwargs = cls._common_kwargs()
-        # ``ChatOpenAI`` accepts arbitrary model arguments via ``model_kwargs``.
-        # We embed the tool configuration there – LangChain will forward them.
-        kwargs.update({"model_kwargs": {"tools": tools, "tool_choice": "auto"}})
+        # Merge tool payload with existing model kwargs (context settings).
+        model_kwargs = dict(kwargs.get("model_kwargs", {}))
+        model_kwargs.update({"tools": tools, "tool_choice": "auto"})
+        kwargs["model_kwargs"] = model_kwargs
         try:
             from langchain_openai import ChatOpenAI
         except Exception as e:

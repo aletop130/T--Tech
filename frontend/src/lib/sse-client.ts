@@ -39,6 +39,9 @@ export interface SSEChatClientConfig {
   onToolCall?: (toolName: string, args: Record<string, unknown>) => void;
   onToolResult?: (toolCallId: string, toolName: string, result: unknown, error?: string) => void;
   onAction?: (action: { type: string; payload: Record<string, unknown> }) => void;
+  onSession?: (sessionId: string) => void;
+  onMemoryUsage?: (percentage: number) => void;
+  onMemoryError?: (error: string, details?: string) => void;
   onError?: (error: string, details?: string) => void;
   onDone?: (finalMessage: string, actionsCount: number) => void;
 }
@@ -63,7 +66,8 @@ export class SSEChatClient {
 
   async streamChat(
     messages: Array<{ role: string; content: string }>,
-    sceneState: Record<string, unknown>
+    sceneState: Record<string, unknown>,
+    sessionId?: string
   ): Promise<void> {
     this.messageBuffer = '';
     this.isComplete = false;
@@ -83,6 +87,7 @@ export class SSEChatClient {
       body: JSON.stringify({
         messages,
         sceneState,
+        session_id: sessionId,
       }),
     });
 
@@ -160,6 +165,30 @@ export class SSEChatClient {
         const actionType = event.action_type as string;
         const payload = event.payload as Record<string, unknown>;
         this.config.onAction?.({ type: actionType, payload });
+        break;
+
+      case 'session':
+        {
+          const sessionId = event.session_id as string;
+          if (sessionId) {
+            this.config.onSession?.(sessionId);
+          }
+        }
+        break;
+
+      case 'memory_usage':
+        {
+          const percentage = Number(event.percentage);
+          this.config.onMemoryUsage?.(Number.isFinite(percentage) ? percentage : 0);
+        }
+        break;
+
+      case 'memory_error':
+        {
+          const memoryError = event.error as string;
+          const memoryDetails = event.details as string | undefined;
+          this.config.onMemoryError?.(memoryError, memoryDetails);
+        }
         break;
 
       case 'error':

@@ -52,12 +52,12 @@ async def test_cross_tenant_isolation(client, db_session):
     assert err.get("resource_type") == "DetourSatelliteState"
 
 # ---------------------------------------------------------------------------
-# RBAC Tests for Maneuver Execution
+# Deprecation Tests for Maneuver Execution
 # ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
-async def test_execute_maneuver_rbac_forbidden(client, db_session):
-    """Only users with the admin role may execute a maneuver plan."""
+async def test_execute_maneuver_endpoint_deprecated(client, db_session):
+    """Maneuver execution endpoint is deprecated after upstream cutover."""
     # Minimal setup: primary and secondary satellites, conjunction, analysis, approved plan
     primary = Satellite(
         id=generate_uuid(), norad_id=60001, name="PrimaryRBAC", object_type="satellite"
@@ -105,17 +105,18 @@ async def test_execute_maneuver_rbac_forbidden(client, db_session):
     db_session.add(plan)
     await db_session.flush()
 
-    # Override the user dependency to return a non‑admin user
+    # Override the user dependency to verify endpoint behavior is independent
+    # of prior RBAC branch (now deprecated).
     async def _non_admin_user():
         return TokenData(sub="nonadmin", tenant_id="default", roles=["analyst"])
 
     app.dependency_overrides[get_current_user] = _non_admin_user
     try:
         resp = await client.post(f"/api/v1/detour/maneuvers/{plan.id}/execute")
-        assert resp.status_code == 403
+        assert resp.status_code == 501
         err = resp.json()
-        # FastAPI HTTPException returns a simple JSON with "detail"
-        assert err.get("detail") == "Admin role required to execute maneuver"
+        assert err["type"].endswith("endpoint-deprecated")
+        assert err["deprecated"] is True
     finally:
         # Clean up the override regardless of test outcome
         app.dependency_overrides.pop(get_current_user, None)
