@@ -21,6 +21,6 @@ docker-compose exec -T backend pytest tests/ -v
 
 # Run frontend tests inside container
 echo "Running frontend tests..."
-docker-compose exec -T frontend npm test -- --run
+docker-compose exec -T frontend bun run test --run
 
 echo "=== All tests passed ==="

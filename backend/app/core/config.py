@@ -57,6 +57,21 @@ class Settings(BaseSettings):
     CELESTRACK_BASE_URL: str = "https://celestrak.org/NORAD/elements"
     TLE_CACHE_HOURS: int = 6
 
+    # Bayesian Threat Scoring
+    BAYESIAN_PRIOR_ADVERSARIAL: float = 0.9
+    BAYESIAN_PRIOR_BENIGN: float = 0.00005
+    ADVERSARIAL_COUNTRIES: list[str] = [
+        "PRC", "CIS", "RUS", "PRK", "IRN", "NKOR", "IRAN"
+    ]
+    SMALL_RCS_MULTIPLIER: float = 1.5
+
+    # Agent Configuration
+    AGENT_THREAT_THRESHOLD: float = 0.7
+    AGENT_MAX_ITERATIONS: int = 10
+
+    # Iridium SBD Configuration
+    IRIDIUM_DEFAULT_GATEWAY: str = "SNOC Tempe"
+
 
 @lru_cache
 def get_settings() -> Settings:

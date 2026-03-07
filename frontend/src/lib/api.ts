@@ -1,3 +1,15 @@
+import type {
+  ProximityThreat,
+  SignalThreat,
+  AnomalyThreat,
+  OrbitalSimilarityThreat,
+  GeoLoiterThreat,
+  RiskSnapshot,
+  FleetRiskCurrent,
+  AdversaryCatalogEntry,
+  IntelligenceReport,
+} from '@/types/threats';
+
 // Use relative URL to leverage Next.js API rewrites in development
 // This avoids CORS and network resolution issues
 const API_BASE = typeof window !== 'undefined' 
@@ -176,6 +188,61 @@ export interface SpaceWeatherEvent {
   kp_index?: number;
 }
 
+// Reentry Tracker types
+export interface ReentryPrediction {
+  norad_id: number;
+  name: string;
+  object_type: string;
+  predicted_epoch: string;
+  window_hours: number;
+  latitude_range: number[] | null;
+  longitude_range: number[] | null;
+  risk_level: string;
+  countdown_seconds: number;
+  source: string;
+}
+
+export interface ReentryHistoryEntry {
+  norad_id: number;
+  name: string;
+  object_type: string;
+  actual_epoch: string;
+  was_controlled: boolean;
+  country: string | null;
+  latitude: number | null;
+  longitude: number | null;
+}
+
+// Space Weather (NOAA SWPC live data)
+export interface SpaceWeatherCurrentResponse {
+  kp_index: number;
+  f10_7: number | null;
+  solar_wind_speed: number | null;
+  storm_level: 'none' | 'minor' | 'moderate' | 'strong' | 'severe' | 'extreme';
+  timestamp: string;
+}
+
+export interface DragImpactSatellite {
+  norad_id: number;
+  name: string;
+  altitude_km: number;
+  estimated_drag_increase_pct: number;
+}
+
+export interface NOAAAlert {
+  product_id: string;
+  issue_datetime: string | null;
+  message: string;
+}
+
+export interface SpaceWeatherImpactResponse {
+  current_conditions: SpaceWeatherCurrentResponse;
+  affected_satellites: DragImpactSatellite[];
+  alert_level: 'green' | 'yellow' | 'orange' | 'red';
+  active_alerts: NOAAAlert[];
+  total_affected: number;
+}
+
 export interface IncidentStats {
   total: number;
   by_status: Record<string, number>;
@@ -189,6 +256,55 @@ export interface SearchResult {
   id: string;
   name: string;
   norad_id?: number;
+}
+
+export interface TransmitterInfo {
+  uuid?: string;
+  description: string;
+  alive: boolean;
+  uplink_low?: number;
+  uplink_high?: number;
+  downlink_low?: number;
+  downlink_high?: number;
+  mode?: string;
+  baud?: number;
+  type?: string;
+  service?: string;
+  status?: string;
+}
+
+export interface OrbitProfileInfo {
+  epoch?: string;
+  inclination_deg?: number;
+  raan_deg?: number;
+  eccentricity?: number;
+  arg_perigee_deg?: number;
+  mean_anomaly_deg?: number;
+  mean_motion_rev_day?: number;
+  period_minutes?: number;
+  apogee_km?: number;
+  perigee_km?: number;
+  orbit_type?: string;
+  tle_line1?: string;
+  tle_line2?: string;
+}
+
+export interface SatelliteProfile {
+  norad_id: number;
+  name: string;
+  international_designator?: string;
+  country?: string;
+  operator?: string;
+  object_type?: string;
+  purpose?: string;
+  is_active: boolean;
+  launch_date?: string;
+  mass_kg?: number;
+  rcs_m2?: number;
+  faction?: string;
+  orbit?: OrbitProfileInfo;
+  transmitters: TransmitterInfo[];
+  sources: string[];
 }
 
 export class ApiClient {
@@ -608,6 +724,39 @@ export class ApiClient {
     });
   }
 
+  // CelesTrak Browser API
+  async getCelestrakGroups(): Promise<{ categories: Record<string, Record<string, string>> }> {
+    return this._fetch('/api/v1/ontology/satellites/celestrak-groups');
+  }
+
+  async previewCelestrakGroup(group: string): Promise<{ group: string; count: number; satellites: Array<{ norad_id: number; name: string }> }> {
+    return this._fetch('/api/v1/ontology/satellites/preview-group', {
+      method: 'POST',
+      body: JSON.stringify({ group }),
+    });
+  }
+
+  async fetchCelestrakGroup(group: string): Promise<{
+    success: boolean;
+    message: string;
+    satellites_created: number;
+    satellites_updated: number;
+    satellite_ids: string[];
+    errors: string[];
+  }> {
+    return this._fetch('/api/v1/ontology/satellites/fetch-group', {
+      method: 'POST',
+      body: JSON.stringify({ group }),
+    });
+  }
+
+  async searchCelestrak(name: string): Promise<{ group: string; count: number; satellites: Array<{ norad_id: number; name: string }> }> {
+    return this._fetch('/api/v1/ontology/satellites/search-celestrak', {
+      method: 'POST',
+      body: JSON.stringify({ name }),
+    });
+  }
+
   // Celestrak Debris Import
   async fetchCelestrakDebris(): Promise<{ status: string; imported: number }> {
     return this._fetch('/api/v1/ontology/debris/fetch-celestrak', { method: 'POST' });
@@ -947,6 +1096,103 @@ export class ApiClient {
     return this._fetch('/api/v1/admin/stats');
   }
 
+  // ========== Threat Detection Endpoints ==========
+  async getProximityThreats(): Promise<ProximityThreat[]> {
+    return this._fetch('/api/v1/threats/proximity');
+  }
+
+  async getSignalThreats(): Promise<SignalThreat[]> {
+    return this._fetch('/api/v1/threats/signal');
+  }
+
+  async getAnomalyThreats(): Promise<AnomalyThreat[]> {
+    return this._fetch('/api/v1/threats/anomaly');
+  }
+
+  async getOrbitalSimilarityThreats(): Promise<OrbitalSimilarityThreat[]> {
+    return this._fetch('/api/v1/threats/orbital-similarity');
+  }
+
+  async getGeoLoiterThreats(): Promise<GeoLoiterThreat[]> {
+    return this._fetch('/api/v1/threats/geo-us-loiter');
+  }
+
+  // ========== Fleet Risk Endpoints ==========
+  async getFleetRiskCurrent(): Promise<FleetRiskCurrent> {
+    return this._fetch('/api/v1/fleet-risk/current');
+  }
+
+  async getFleetRiskTimeline(satId: string): Promise<{ satellite_id: string; satellite_name: string; snapshots: RiskSnapshot[]; current_risk: number }> {
+    return this._fetch(`/api/v1/fleet-risk/timeline/${satId}`);
+  }
+
+  // ========== Adversary Tracking Endpoints ==========
+  async getAdversaryCatalog(): Promise<AdversaryCatalogEntry[]> {
+    return this._fetch('/api/v1/adversary/catalog');
+  }
+
+  async getAdversaryIntelligence(satId: string): Promise<IntelligenceReport> {
+    return this._fetch(`/api/v1/adversary/${satId}/intelligence`);
+  }
+
+  async chatAboutAdversary(satId: string, message: string): Promise<{ reply: string }> {
+    return this._fetch(`/api/v1/adversary/${satId}/chat`, {
+      method: 'POST',
+      body: JSON.stringify({ message, satellite_id: satId }),
+    });
+  }
+
+  // ========== Satellite Profile Endpoints ==========
+  async getSatelliteProfile(noradId: number): Promise<SatelliteProfile> {
+    return this._fetch(`/api/v1/satellite-profile/${noradId}`);
+  }
+
+  // ========== Comms Endpoints ==========
+  async commsChat(messages: Array<{ role: string; content: string }>): Promise<{ reply: string; command_ready?: boolean }> {
+    return this._fetch('/api/v1/comms/chat', {
+      method: 'POST',
+      body: JSON.stringify({ messages }),
+    });
+  }
+
+  async commsSend(message: string, targetSatId?: string): Promise<unknown> {
+    return this._fetch('/api/v1/comms/send', {
+      method: 'POST',
+      body: JSON.stringify({ message, target_satellite_id: targetSatId }),
+    });
+  }
+
+  // ========== Response Endpoints ==========
+  async evaluateResponse(params: {
+    threat_id: string;
+    threat_type: string;
+    threat_score: number;
+    satellite_id: string;
+  }): Promise<unknown> {
+    return this._fetch('/api/v1/response/evaluate', {
+      method: 'POST',
+      body: JSON.stringify(params),
+    });
+  }
+
+  // ========== Reentry Tracker Endpoints ==========
+  async getActiveReentries(): Promise<ReentryPrediction[]> {
+    return this._fetch('/api/v1/reentry/active');
+  }
+
+  async getReentryHistory(): Promise<ReentryHistoryEntry[]> {
+    return this._fetch('/api/v1/reentry/history');
+  }
+
+  // ========== Space Weather (NOAA SWPC) Endpoints ==========
+  async getSpaceWeatherCurrent(): Promise<SpaceWeatherCurrentResponse> {
+    return this._fetch('/api/v1/space-weather/current');
+  }
+
+  async getSpaceWeatherImpactLive(): Promise<SpaceWeatherImpactResponse> {
+    return this._fetch('/api/v1/space-weather/impact');
+  }
+
   // ========== Timeline Endpoints ==========
   async getTimelineEvents(params: {
     date: string;
@@ -1032,6 +1278,130 @@ export class ApiClient {
       throw new Error(error.detail || `API error: ${response.status}`);
     }
     return response.json();
+  }
+
+  // ========== RF Spectrum Endpoints ==========
+  async getRFSatelliteProfile(noradId: number): Promise<RFSatelliteProfile> {
+    return this._fetch(`/api/v1/rf-spectrum/satellite/${noradId}`);
+  }
+
+  async searchRFTransmitters(params?: {
+    band?: string;
+    mode?: string;
+    alive_only?: boolean;
+  }): Promise<RFTransmitterSearchResult> {
+    const searchParams = new URLSearchParams();
+    if (params?.band) searchParams.set('band', params.band);
+    if (params?.mode) searchParams.set('mode', params.mode);
+    if (params?.alive_only !== undefined) searchParams.set('alive_only', params.alive_only.toString());
+    return this._fetch(`/api/v1/rf-spectrum/search?${searchParams}`);
+  }
+
+  async getRFBandSummary(): Promise<RFBandSummary[]> {
+    return this._fetch('/api/v1/rf-spectrum/bands');
+  }
+
+  // ========== Launch Correlation Endpoints ==========
+  async getRecentLaunchCorrelations(): Promise<LaunchCorrelationResponse> {
+    return this._fetch('/api/v1/launch-correlation/recent');
+  }
+
+  async getUncorrelatedObjects(): Promise<UncorrelatedObjectsResponse> {
+    return this._fetch('/api/v1/launch-correlation/uncorrelated');
+  }
+
+  async getUpcomingLaunches(): Promise<UpcomingLaunchesResponse> {
+    return this._fetch('/api/v1/launch-correlation/upcoming');
+  }
+
+  async getLaunchDetail(launchId: string): Promise<LaunchCorrelation> {
+    return this._fetch(`/api/v1/launch-correlation/launch/${launchId}`);
+  }
+
+  // ========== Maneuver Detection Endpoints ==========
+  async getRecentManeuvers(limit: number = 50): Promise<RecentManeuversResponse> {
+    return this._fetch(`/api/v1/maneuver-detection/recent?limit=${limit}`);
+  }
+
+  async getSatelliteManeuverHistory(noradId: number): Promise<ManeuverHistoryResponse> {
+    return this._fetch(`/api/v1/maneuver-detection/satellite/${noradId}/history`);
+  }
+
+  async analyzeManeuvers(noradIds: number[]): Promise<AnalyzeManeuversResponse> {
+    return this._fetch('/api/v1/maneuver-detection/analyze', {
+      method: 'POST',
+      body: JSON.stringify({ norad_ids: noradIds }),
+    });
+  }
+
+  // ========== Ground Track & Footprint Endpoints ==========
+  async getGroundTrack(noradId: number, durationMinutes = 90, intervalSeconds = 60): Promise<GroundTrackResponse> {
+    const params = new URLSearchParams({
+      duration_minutes: durationMinutes.toString(),
+      interval_seconds: intervalSeconds.toString(),
+    });
+    return this._fetch(`/api/v1/ground-track/${noradId}?${params}`);
+  }
+
+  async getSensorFootprint(noradId: number, fovDeg = 30): Promise<SensorFootprintResponse> {
+    const params = new URLSearchParams({ fov_deg: fovDeg.toString() });
+    return this._fetch(`/api/v1/ground-track/${noradId}/footprint?${params}`);
+  }
+
+  async getPassPredictions(noradId: number, lat: number, lon: number, hours = 24): Promise<PassPredictionsResponse> {
+    const params = new URLSearchParams({
+      lat: lat.toString(),
+      lon: lon.toString(),
+      hours: hours.toString(),
+    });
+    return this._fetch(`/api/v1/ground-track/${noradId}/passes?${params}`);
+  }
+
+  // ========== Debris Genealogy Endpoints ==========
+  async getFragmentationEvents(): Promise<FragmentationEvent[]> {
+    return this._fetch('/api/v1/debris-genealogy/events');
+  }
+
+  async getFragmentationEventDetail(eventId: string): Promise<FragmentationEventDetail> {
+    return this._fetch(`/api/v1/debris-genealogy/event/${eventId}`);
+  }
+
+  async getDebrisLineage(noradId: number): Promise<DebrisLineage> {
+    return this._fetch(`/api/v1/debris-genealogy/object/${noradId}/lineage`);
+  }
+
+  // ========== Country Dashboard Endpoints ==========
+  async getCountryDashboardSummary(): Promise<CountryDashboardSummary> {
+    return this._fetch('/api/v1/country-dashboard/summary');
+  }
+
+  async getCountryDetail(countryCode: string): Promise<CountryDashboardDetail> {
+    return this._fetch(`/api/v1/country-dashboard/country/${countryCode}`);
+  }
+
+  async getTopOperators(limit?: number): Promise<TopOperatorsResponse> {
+    const searchParams = new URLSearchParams();
+    if (limit) searchParams.set('limit', limit.toString());
+    return this._fetch(`/api/v1/country-dashboard/operators?${searchParams}`);
+  }
+
+  // ========== Collision Heatmap Endpoints ==========
+  async getCollisionHeatmap(): Promise<CollisionHeatmapResponse> {
+    return this._fetch('/api/v1/collision-heatmap');
+  }
+
+  async getCollisionEvents(params?: {
+    page?: number;
+    page_size?: number;
+    altitude_min?: number;
+    altitude_max?: number;
+  }): Promise<CollisionEventsResponse> {
+    const searchParams = new URLSearchParams();
+    if (params?.page) searchParams.set('page', params.page.toString());
+    if (params?.page_size) searchParams.set('page_size', params.page_size.toString());
+    if (params?.altitude_min !== undefined) searchParams.set('altitude_min', params.altitude_min.toString());
+    if (params?.altitude_max !== undefined) searchParams.set('altitude_max', params.altitude_max.toString());
+    return this._fetch(`/api/v1/collision-heatmap/events?${searchParams}`);
   }
 }
 
@@ -1502,4 +1872,311 @@ export interface SatelliteConnection {
     miss_distance_km?: number;
     risk_level?: string;
   };
+}
+
+// ============== RF Spectrum Interfaces ==============
+
+export interface RFTransmitter {
+  uuid: string;
+  norad_cat_id: number | null;
+  description: string;
+  alive: boolean;
+  type: string;
+  uplink_low: number | null;
+  uplink_high: number | null;
+  downlink_low: number | null;
+  downlink_high: number | null;
+  mode: string | null;
+  baud: number | null;
+  status: string;
+  band: string;
+}
+
+export interface RFBandSummary {
+  band_name: string;
+  frequency_range: string;
+  satellite_count: number;
+  transmitter_count: number;
+}
+
+export interface RFSatelliteProfile {
+  norad_id: number;
+  satellite_name: string;
+  transmitters: RFTransmitter[];
+}
+
+export interface RFTransmitterSearchResult {
+  transmitters: RFTransmitter[];
+  total: number;
+  band_filter: string | null;
+  mode_filter: string | null;
+}
+
+// ========== Launch Correlation Interfaces ==========
+
+export interface LaunchInfo {
+  id: string;
+  name: string;
+  net: string | null;
+  pad_name: string | null;
+  pad_country: string | null;
+  rocket_name: string | null;
+  mission_name: string | null;
+  mission_orbit: string | null;
+  status: string | null;
+}
+
+export interface CorrelatedObject {
+  norad_id: number;
+  name: string;
+  correlation_confidence: number;
+  epoch: string | null;
+  orbit_type: string | null;
+}
+
+export interface LaunchCorrelation {
+  launch: LaunchInfo;
+  correlated_objects: CorrelatedObject[];
+  total_correlated: number;
+}
+
+export interface UncorrelatedObject {
+  norad_id: number;
+  name: string;
+  epoch: string | null;
+  orbit_params: Record<string, unknown>;
+  possible_launches: LaunchInfo[];
+}
+
+export interface LaunchCorrelationResponse {
+  launches: LaunchCorrelation[];
+  total_launches: number;
+  total_correlated_objects: number;
+  cached_at: string | null;
+}
+
+export interface UncorrelatedObjectsResponse {
+  objects: UncorrelatedObject[];
+  total: number;
+}
+
+export interface UpcomingLaunchesResponse {
+  launches: LaunchInfo[];
+  total: number;
+}
+
+// Maneuver Detection types
+export type DetectedManeuverType =
+  | 'station-keeping'
+  | 'orbit-raise'
+  | 'orbit-lower'
+  | 'plane-change'
+  | 'deorbit'
+  | 'unknown';
+
+export interface OrbitalSnapshot {
+  epoch: string;
+  semi_major_axis_km: number;
+  eccentricity: number;
+  inclination_deg: number;
+  raan_deg: number;
+  arg_perigee_deg: number;
+  mean_anomaly_deg: number;
+  mean_motion_rev_day: number;
+}
+
+export interface DetectedManeuver {
+  id: string;
+  norad_id: number;
+  satellite_name: string;
+  detection_time: string;
+  maneuver_type: DetectedManeuverType;
+  delta_a_km: number;
+  delta_i_deg: number;
+  delta_e: number;
+  estimated_delta_v_ms: number;
+  confidence: number;
+  before?: OrbitalSnapshot;
+  after?: OrbitalSnapshot;
+}
+
+export interface RecentManeuversResponse {
+  maneuvers: DetectedManeuver[];
+  total: number;
+  last_scan: string | null;
+}
+
+export interface ManeuverHistoryResponse {
+  norad_id: number;
+  satellite_name: string;
+  maneuvers: DetectedManeuver[];
+  total: number;
+}
+
+export interface AnalyzeManeuversResponse {
+  analyzed: number;
+  maneuvers: DetectedManeuver[];
+  total: number;
+}
+
+// ========== Ground Track & Footprint Types ==========
+
+export interface GroundTrackPoint {
+  time_offset_s: number;
+  latitude: number;
+  longitude: number;
+  altitude_km: number;
+}
+
+export interface GroundTrackResponse {
+  norad_id: number;
+  satellite_name: string;
+  duration_minutes: number;
+  interval_seconds: number;
+  points: GroundTrackPoint[];
+}
+
+export interface SensorFootprintResponse {
+  norad_id: number;
+  center_lat: number;
+  center_lon: number;
+  radius_km: number;
+  altitude_km: number;
+  fov_deg: number;
+}
+
+export interface SatellitePassEntry {
+  rise_time: string;
+  culmination_time: string;
+  set_time: string;
+  max_elevation_deg: number;
+  duration_seconds: number;
+}
+
+export interface PassPredictionsResponse {
+  norad_id: number;
+  satellite_name: string;
+  observer_lat: number;
+  observer_lon: number;
+  passes: SatellitePassEntry[];
+}
+
+// ========== Debris Genealogy Types ==========
+
+export interface FragmentationEvent {
+  id: string;
+  name: string;
+  event_type: string;
+  date: string;
+  parent_object_name: string;
+  parent_norad_id: number | null;
+  parent_intdes: string;
+  fragment_count: number;
+  orbit_regime: string;
+  description: string;
+}
+
+export interface FragmentInfo {
+  norad_id: number;
+  name: string;
+  intdes: string;
+  object_type: string;
+  rcs_size: string | null;
+  launch_year: number | null;
+}
+
+export interface FragmentationEventDetail extends FragmentationEvent {
+  fragments: FragmentInfo[];
+}
+
+export interface DebrisLineage {
+  norad_id: number;
+  name: string;
+  intdes: string;
+  parent_event: FragmentationEvent | null;
+  parent_object_name: string | null;
+  siblings_count: number;
+}
+
+// Country Dashboard Interfaces
+export interface CountrySummary {
+  country_code: string;
+  country_name: string;
+  total_objects: number;
+  payloads: number;
+  rocket_bodies: number;
+  debris: number;
+  leo: number;
+  meo: number;
+  geo: number;
+  heo: number;
+}
+
+export interface OperatorSummary {
+  operator_name: string;
+  country: string;
+  satellite_count: number;
+  primary_purpose: string;
+}
+
+export interface OrbitDistribution {
+  leo: number;
+  meo: number;
+  geo: number;
+  heo: number;
+}
+
+export interface CountryDashboardSummary {
+  total_objects: number;
+  total_countries: number;
+  total_payloads: number;
+  total_rocket_bodies: number;
+  total_debris: number;
+  top_countries: CountrySummary[];
+  orbit_distribution: OrbitDistribution;
+  all_countries: CountrySummary[];
+}
+
+export interface CountryDashboardDetail {
+  summary: CountrySummary;
+  top_operators: OperatorSummary[];
+  orbit_distribution: OrbitDistribution;
+}
+
+export interface TopOperatorsResponse {
+  operators: OperatorSummary[];
+  total: number;
+}
+
+// ========== Collision Heatmap Types ==========
+export interface CollisionHeatmapBand {
+  altitude_min_km: number;
+  altitude_max_km: number;
+  event_count: number;
+  risk_score: number;
+}
+
+export interface ConjunctionPairData {
+  sat1_name: string;
+  sat1_norad: number;
+  sat2_name: string;
+  sat2_norad: number;
+  min_range_km: number;
+  tca: string | null;
+  relative_velocity_km_s: number | null;
+  max_probability: number | null;
+  altitude_km: number | null;
+}
+
+export interface CollisionHeatmapResponse {
+  bands: CollisionHeatmapBand[];
+  total_events: number;
+  last_updated: string;
+}
+
+export interface CollisionEventsResponse {
+  items: ConjunctionPairData[];
+  total: number;
+  page: number;
+  page_size: number;
 }

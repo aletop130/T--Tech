@@ -4,6 +4,20 @@ import { useEffect, useRef, useState } from 'react';
 import { getCesium, type CesiumModule } from '@/lib/cesium/loader';
 import { Satellite } from '@/lib/api';
 
+// Same palette as map/page.tsx — kept in sync
+const GROUP_COLORS = [
+  '#06b6d4', '#f97316', '#a855f7', '#22c55e', '#ec4899',
+  '#eab308', '#3b82f6', '#ef4444', '#14b8a6', '#f59e0b',
+  '#8b5cf6', '#10b981', '#e879f9', '#0ea5e9', '#84cc16',
+];
+
+function hexToColor(Cesium: CesiumModule, hex: string, alpha = 1): InstanceType<CesiumModule['Color']> {
+  const r = parseInt(hex.slice(1, 3), 16) / 255;
+  const g = parseInt(hex.slice(3, 5), 16) / 255;
+  const b = parseInt(hex.slice(5, 7), 16) / 255;
+  return new Cesium.Color(r, g, b, alpha);
+}
+
 interface SatelliteLayerProps {
   viewer: InstanceType<CesiumModule['Viewer']> | null;
   satellites: Satellite[];
@@ -12,6 +26,10 @@ interface SatelliteLayerProps {
     positions: Array<{ lat: number; lon: number; alt: number; time: string }>;
   }>;
   showOrbits?: boolean;
+  hiddenSatelliteIds?: Set<string>;
+  hiddenOrbitIds?: Set<string>;
+  hiddenGroups?: Set<string>;
+  hiddenGroupOrbits?: Set<string>;
 }
 
 export function SatelliteLayer({
@@ -19,6 +37,10 @@ export function SatelliteLayer({
   satellites,
   orbits,
   showOrbits = true,
+  hiddenSatelliteIds,
+  hiddenOrbitIds,
+  hiddenGroups,
+  hiddenGroupOrbits,
 }: SatelliteLayerProps) {
   const cleanupRef = useRef<(() => void) | null>(null);
   const [Cesium, setCesium] = useState<CesiumModule | null>(null);
@@ -31,7 +53,7 @@ export function SatelliteLayer({
   // Track viewer readiness - when entities becomes available, trigger re-render
   useEffect(() => {
     if (!viewer || viewer.isDestroyed()) return;
-    
+
     if (viewer.entities) {
       setViewerReady(true);
       return;
@@ -61,48 +83,50 @@ export function SatelliteLayer({
     }
 
     if (!viewer.entities) {
-      // Viewer not ready yet, wait for viewerReady state to trigger re-run
       return;
     }
 
     const currentEntities = new Set<string>();
 
-    // Helper functions to identify satellite types
-    const isAlliedSat = (sat: Satellite) => {
-      const name = sat.name?.toLowerCase() || '';
-      return name.includes('guardian') || name.includes('deepwatch') || name.includes('terrascan') ||
-             name.includes('starfinder') || name.includes('celestial') || name.includes('windwatcher') ||
-             name.includes('commlink') || name.includes('weathereye') || name.includes('navbeacon') ||
-             name.includes('eyeinsky') || sat.faction === 'allied';
-    };
-
-    const isEnemySat = (sat: Satellite) => {
-      const name = sat.name?.toLowerCase() || '';
-      return name.includes('unknown') || name.includes('hostile') || name.includes('suspect') ||
-             name.includes('tracked') || name.includes('unidentified') || name.includes('contact') ||
-             sat.faction === 'enemy';
-    };
+    // Build group → index map for color assignment
+    const groupIndexMap = new Map<string, number>();
+    let nextIdx = 0;
+    satellites.forEach((sat) => {
+      const group = sat.tags?.[0] || 'Uncategorized';
+      if (!groupIndexMap.has(group)) {
+        groupIndexMap.set(group, nextIdx++);
+      }
+    });
 
     satellites.forEach((sat) => {
+      const group = sat.tags?.[0] || 'Uncategorized';
+
+      // Skip if entire group is hidden
+      if (hiddenGroups?.has(group)) return;
+      // Skip if individual satellite is hidden
+      if (hiddenSatelliteIds?.has(sat.id)) return;
+
       const orbit = orbits.find((o) => o.satellite_id === sat.id);
 
       if (orbit && orbit.positions.length > 0) {
-        // Skip satellites that are neither allied nor enemy (treat as debris)
-        const isAllied = isAlliedSat(sat);
-        const isEnemy = isEnemySat(sat);
-        if (!isAllied && !isEnemy) return;
-
         const positions = orbit.positions.map((pos) =>
           Cesium.Cartesian3.fromDegrees(pos.lon, pos.lat, pos.alt * 1000)
         );
-        
-        const pointColor = isEnemy ? Cesium.Color.RED : Cesium.Color.DODGERBLUE;
-        const orbitColor = isEnemy ? Cesium.Color.RED.withAlpha(0.6) : Cesium.Color.DODGERBLUE.withAlpha(0.6);
-        
+
+        const colorIdx = groupIndexMap.get(group) ?? 0;
+        const colorHex = GROUP_COLORS[colorIdx % GROUP_COLORS.length];
+        const pointColor = hexToColor(Cesium, colorHex);
+        const orbitColor = hexToColor(Cesium, colorHex, 0.6);
+
         const satelliteId = `satellite-${sat.id}`;
         const orbitId = `orbit-${sat.id}`;
 
-        if (showOrbits && positions.length > 1) {
+        // Show orbit if globally enabled AND not hidden per-satellite or per-group
+        const shouldShowOrbit = showOrbits
+          && !hiddenOrbitIds?.has(sat.id)
+          && !hiddenGroupOrbits?.has(group);
+
+        if (shouldShowOrbit && positions.length > 1) {
           const entity = viewer.entities.add({
             id: orbitId,
             name: `${sat.name} Orbit`,
@@ -168,7 +192,7 @@ export function SatelliteLayer({
       }
       currentEntities.clear();
     };
-  }, [viewer, satellites, orbits, showOrbits, Cesium, viewerReady]);
+  }, [viewer, satellites, orbits, showOrbits, Cesium, viewerReady, hiddenSatelliteIds, hiddenOrbitIds, hiddenGroups, hiddenGroupOrbits]);
 
   useEffect(() => {
     return () => {

@@ -23,7 +23,7 @@ export function GroundVehicleLayer({
   }, []);
 
   useEffect(() => {
-    if (!viewer || !Cesium) return;
+    if (!viewer || !Cesium || !viewer.entities) return;
 
     if (cleanupRef.current) {
       cleanupRef.current();

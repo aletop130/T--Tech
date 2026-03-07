@@ -60,7 +60,7 @@ export function SimulatedSatelliteLayer({
   }, []);
 
   useEffect(() => {
-    if (!viewer || !Cesium) return;
+    if (!viewer || !Cesium || !viewer.entities) return;
 
     // Get all entity IDs for current satellites (without suffixes)
     const currentSatIds = new Set(satellites.map(s => `sim-sat-${s.id}`));

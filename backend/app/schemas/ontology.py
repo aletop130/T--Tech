@@ -351,6 +351,28 @@ SatelliteDetail.model_rebuild()
 
 # ============== CelesTrack ==============
 
+class CelestrackGroupFetchRequest(BaseSchema):
+    """Request to fetch a CelesTrak group."""
+    group: str = Field(..., min_length=1, max_length=50, description="CelesTrak group identifier")
+
+
+class CelestrackSearchRequest(BaseSchema):
+    """Request to search CelesTrak by name."""
+    name: str = Field(..., min_length=2, max_length=100, description="Satellite name to search")
+
+
+class CelestrackGroupPreviewResponse(BaseSchema):
+    """Response previewing a CelesTrak group."""
+    group: str
+    count: int
+    satellites: list[dict]
+
+
+class CelestrackGroupsResponse(BaseSchema):
+    """Response listing all CelesTrak groups."""
+    categories: dict[str, dict[str, str]]
+
+
 class CelestrackFetchRequest(BaseSchema):
     """Request to fetch satellites from CelesTrack."""
     norad_ids: list[int] = Field(..., min_length=1, max_length=100, description="List of NORAD IDs to fetch")

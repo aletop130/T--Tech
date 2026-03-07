@@ -15,6 +15,17 @@ from app.db.models.audit import AuditEvent
 from app.db.models.users import User, Tenant
 from app.db.models.detour import DetourSatelliteState, DetourConjunctionAnalysis, DetourManeuverPlan, DetourAgentSession
 from app.db.models.chat_memory import ChatMemoryEntry, ChatMemorySummary, ChatSession
+from app.db.models.threats import (
+    ThreatEvent,
+    SignalThreat,
+    AnomalyThreat,
+    OrbitalSimilarityThreat,
+    GeoLoiterThreat,
+    ThreatResponse,
+    FleetRiskSnapshot,
+    ThreatConfig,
+    CommsTranscription as CommsTranscriptionModel,
+)
 from app.db.models.operations import (
     RoutePlan,
     Waypoint,
@@ -62,5 +73,14 @@ __all__ = [
     "ChatMemoryEntry",
     "ChatMemorySummary",
     "ChatSession",
+    "ThreatEvent",
+    "SignalThreat",
+    "AnomalyThreat",
+    "OrbitalSimilarityThreat",
+    "GeoLoiterThreat",
+    "ThreatResponse",
+    "FleetRiskSnapshot",
+    "ThreatConfig",
+    "CommsTranscriptionModel",
 ]
 

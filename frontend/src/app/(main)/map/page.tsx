@@ -8,32 +8,43 @@ import { api, GroundStation, Satellite, ConjunctionEvent, PositionReport } from 
 import { getDebris, getOrbit } from '@/lib/api/debris';
 import { getCesium, type CesiumModule } from '@/lib/cesium/loader';
 import type { DebrisObject, OrbitTrackState } from '@/lib/types/debris';
-import { CesiumViewer } from '@/components/CesiumMap/CesiumViewer';
-import { SatelliteLayer } from '@/components/CesiumMap/SatelliteLayer';
-import { GroundStationLayer } from '@/components/CesiumMap/GroundStationLayer';
-import { GroundVehicleLayer } from '@/components/CesiumMap/GroundVehicleLayer';
-import { MilitaryVehicleLayer } from '@/components/CesiumMap/MilitaryVehicleLayer';
-import { ConjunctionLayer } from '@/components/CesiumMap/ConjunctionLayer';
-import { SatelliteInfoCard } from '@/components/CesiumMap/SatelliteInfoCard';
-import { GroundStationInfoCard } from '@/components/CesiumMap/GroundStationInfoCard';
-import { GroundVehicleInfoCard } from '@/components/CesiumMap/GroundVehicleInfoCard';
-import { ConjunctionInfoCard } from '@/components/CesiumMap/ConjunctionInfoCard';
-import { DebrisInstancedLayer } from '@/components/CesiumMap/DebrisInstancedLayer';
-import { DebrisInfoCard } from '@/components/CesiumMap/DebrisInfoCard';
-import { DebrisAddMenu } from '@/components/CesiumMap/DebrisAddMenu';
-import { OrbitalTrackLayer } from '@/components/CesiumMap/OrbitalTrackLayer';
-import { MovingSatelliteMarker } from '@/components/CesiumMap/MovingSatelliteMarker';
-import { SolarSystemLayer } from '@/components/CesiumMap/SolarSystemLayer';
-import { PlanetInfoBox } from '@/components/CesiumMap/PlanetInfoBox';
 import { PLANETS, type CelestialBody } from '@/lib/solarSystem/data';
 import { AgentChat } from '@/components/Chat/AgentChat';
 import { CompactAlertsButton } from '@/components/ProximityAlertPanel/CompactAlertsButton';
 import { cesiumController } from '@/lib/cesium/controller';
-import { SimulatedSatelliteLayer } from '@/components/CesiumMap/SimulatedSatelliteLayer';
-import { MilitarySymbolLayer } from '@/components/CesiumMap/MilitarySymbolLayer';
-import { MissionNarrative } from '@/components/Simulation/MissionNarrative';
-import { MissionHUD } from '@/components/Simulation/MissionHUD';
-import { useSARSimulation } from '@/lib/simulation/useSARSimulation';
+import { useItalyDefenseSimulation } from '@/lib/simulation/useItalyDefenseSimulation';
+
+// Dynamic imports for heavy CesiumMap components (no SSR)
+const noSSR = { ssr: false };
+const CesiumViewer = dynamic(() => import('@/components/CesiumMap/CesiumViewer').then(m => ({ default: m.CesiumViewer })), noSSR);
+const SatelliteLayer = dynamic(() => import('@/components/CesiumMap/SatelliteLayer').then(m => ({ default: m.SatelliteLayer })), noSSR);
+const GroundStationLayer = dynamic(() => import('@/components/CesiumMap/GroundStationLayer').then(m => ({ default: m.GroundStationLayer })), noSSR);
+const GroundVehicleLayer = dynamic(() => import('@/components/CesiumMap/GroundVehicleLayer').then(m => ({ default: m.GroundVehicleLayer })), noSSR);
+const MilitaryVehicleLayer = dynamic(() => import('@/components/CesiumMap/MilitaryVehicleLayer').then(m => ({ default: m.MilitaryVehicleLayer })), noSSR);
+const ConjunctionLayer = dynamic(() => import('@/components/CesiumMap/ConjunctionLayer').then(m => ({ default: m.ConjunctionLayer })), noSSR);
+const SatelliteInfoCard = dynamic(() => import('@/components/CesiumMap/SatelliteInfoCard').then(m => ({ default: m.SatelliteInfoCard })), noSSR);
+const GroundStationInfoCard = dynamic(() => import('@/components/CesiumMap/GroundStationInfoCard').then(m => ({ default: m.GroundStationInfoCard })), noSSR);
+const GroundVehicleInfoCard = dynamic(() => import('@/components/CesiumMap/GroundVehicleInfoCard').then(m => ({ default: m.GroundVehicleInfoCard })), noSSR);
+const ConjunctionInfoCard = dynamic(() => import('@/components/CesiumMap/ConjunctionInfoCard').then(m => ({ default: m.ConjunctionInfoCard })), noSSR);
+const DebrisInstancedLayer = dynamic(() => import('@/components/CesiumMap/DebrisInstancedLayer').then(m => ({ default: m.DebrisInstancedLayer })), noSSR);
+const DebrisInfoCard = dynamic(() => import('@/components/CesiumMap/DebrisInfoCard').then(m => ({ default: m.DebrisInfoCard })), noSSR);
+const DebrisAddMenu = dynamic(() => import('@/components/CesiumMap/DebrisAddMenu').then(m => ({ default: m.DebrisAddMenu })), noSSR);
+const CelestrakBrowserDialog = dynamic(() => import('@/components/CesiumMap/CelestrakBrowserDialog').then(m => ({ default: m.CelestrakBrowserDialog })), noSSR);
+const OrbitalTrackLayer = dynamic(() => import('@/components/CesiumMap/OrbitalTrackLayer').then(m => ({ default: m.OrbitalTrackLayer })), noSSR);
+const MovingSatelliteMarker = dynamic(() => import('@/components/CesiumMap/MovingSatelliteMarker').then(m => ({ default: m.MovingSatelliteMarker })), noSSR);
+const SolarSystemLayer = dynamic(() => import('@/components/CesiumMap/SolarSystemLayer').then(m => ({ default: m.SolarSystemLayer })), noSSR);
+const PlanetInfoBox = dynamic(() => import('@/components/CesiumMap/PlanetInfoBox').then(m => ({ default: m.PlanetInfoBox })), noSSR);
+const SimulatedSatelliteLayer = dynamic(() => import('@/components/CesiumMap/SimulatedSatelliteLayer').then(m => ({ default: m.SimulatedSatelliteLayer })), noSSR);
+const MilitarySymbolLayer = dynamic(() => import('@/components/CesiumMap/MilitarySymbolLayer').then(m => ({ default: m.MilitarySymbolLayer })), noSSR);
+const DefenseDomeLayer = dynamic(() => import('@/components/CesiumMap/DefenseDomeLayer').then(m => ({ default: m.DefenseDomeLayer })), noSSR);
+const MissileTrajectoryLayer = dynamic(() => import('@/components/CesiumMap/MissileTrajectoryLayer').then(m => ({ default: m.MissileTrajectoryLayer })), noSSR);
+const SatelliteCoverageConeLayer = dynamic(() => import('@/components/CesiumMap/SatelliteCoverageConeLayer').then(m => ({ default: m.SatelliteCoverageConeLayer })), noSSR);
+const ASATTrajectoryLayer = dynamic(() => import('@/components/CesiumMap/ASATTrajectoryLayer').then(m => ({ default: m.ASATTrajectoryLayer })), noSSR);
+const HostileSatelliteLayer = dynamic(() => import('@/components/CesiumMap/HostileSatelliteLayer').then(m => ({ default: m.HostileSatelliteLayer })), noSSR);
+const ItalyDefenseHUD = dynamic(() => import('@/components/Simulation/ItalyDefenseHUD').then(m => ({ default: m.ItalyDefenseHUD })), noSSR);
+const ItalyDefenseNarrative = dynamic(() => import('@/components/Simulation/ItalyDefenseNarrative').then(m => ({ default: m.ItalyDefenseNarrative })), noSSR);
+const GroundTrackLayer = dynamic(() => import('@/components/CesiumMap/GroundTrackLayer').then(m => ({ default: m.GroundTrackLayer })), noSSR);
+const CollisionHeatmapLayer = dynamic(() => import('@/components/CesiumMap/CollisionHeatmapLayer').then(m => ({ default: m.CollisionHeatmapLayer })), noSSR);
 
 declare global {
   interface Window {
@@ -41,8 +52,6 @@ declare global {
   }
 }
 
-// Dynamically import Cesium to avoid SSR issues (simplified for testing)
-const DynamicCesiumViewer = CesiumViewer;
 
 // Initialize satellite.js promise - wait for it before using
 let satellitePromise: Promise<typeof import('satellite.js') | null> | null = null;
@@ -69,56 +78,28 @@ interface OrbitData {
   epoch?: string;
 }
 
-// Mock space agency configuration
-const ALLIED_COUNTRY = 'Italy';
-const ALLIED_OPERATOR = 'Guardian Space Command';
+// Distinct color palette for satellite groups
+const GROUP_COLORS = [
+  '#06b6d4', // cyan
+  '#f97316', // orange
+  '#a855f7', // purple
+  '#22c55e', // green
+  '#ec4899', // pink
+  '#eab308', // yellow
+  '#3b82f6', // blue
+  '#ef4444', // red
+  '#14b8a6', // teal
+  '#f59e0b', // amber
+  '#8b5cf6', // violet
+  '#10b981', // emerald
+  '#e879f9', // fuchsia
+  '#0ea5e9', // sky
+  '#84cc16', // lime
+];
 
-const ENEMY_COUNTRIES = ['Unknown Territory', 'Hostile Region', 'Restricted Zone', 'Monitored Area'];
-const ENEMY_OPERATORS = ['Shadow Fleet', 'Rogue Command', 'Hostile Ops', 'Unknown Entity', 'Suspect Agency'];
+const getGroupColor = (groupIndex: number): string =>
+  GROUP_COLORS[groupIndex % GROUP_COLORS.length];
 
-// Helper to check if satellite is allied
-const isAlliedSatellite = (sat: Satellite): boolean => {
-  const name = sat.name?.toLowerCase() || '';
-  return name.includes('guardian') || name.includes('deepwatch') || name.includes('terrascan') ||
-         name.includes('starfinder') || name.includes('celestial') || name.includes('windwatcher') ||
-         name.includes('commlink') || name.includes('weathereye') || name.includes('navbeacon') ||
-         name.includes('eyeinsky');
-};
-
-// Helper to check if satellite is enemy
-const isEnemySatellite = (sat: Satellite): boolean => {
-  const name = sat.name?.toLowerCase() || '';
-  return name.includes('unknown') || name.includes('hostile') || name.includes('suspect') ||
-         name.includes('tracked') || name.includes('unidentified') || name.includes('contact');
-};
-
-// Mock satellite metadata
-const mockSatelliteMetadata = (satellites: Satellite[]): Satellite[] => {
-  return satellites.map((sat) => {
-    if (isAlliedSatellite(sat)) {
-      return {
-        ...sat,
-        country: ALLIED_COUNTRY,
-        operator: ALLIED_OPERATOR,
-        faction: 'allied' as const,
-      };
-    } else if (isEnemySatellite(sat)) {
-      // Deterministic mocking based on satellite ID
-      const idHash = sat.id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-      return {
-        ...sat,
-        country: ENEMY_COUNTRIES[idHash % ENEMY_COUNTRIES.length],
-        operator: ENEMY_OPERATORS[idHash % ENEMY_OPERATORS.length],
-        faction: 'enemy' as const,
-      };
-    }
-    // Neutral satellites
-    return {
-      ...sat,
-      faction: 'neutral' as const,
-    };
-    });
-};
 
 function MapPageContent() {
   const searchParams = useSearchParams();
@@ -131,9 +112,7 @@ const [viewer, setViewer] = useState<InstanceType<CesiumModule['Viewer']> | null
   const [orbits, setOrbits] = useState<OrbitData[]>([]);
   const [loading, setLoading] = useState(true);
   const [satelliteReady, setSatelliteReady] = useState(false);
-  const [fetchingFamous, setFetchingFamous] = useState(false);
-  const [fetchMessage, setFetchMessage] = useState<string | null>(null);
-  const [fetchIntent, setFetchIntent] = useState<Intent>(Intent.SUCCESS);
+  const [celestrakDialogOpen, setCelestrakDialogOpen] = useState(false);
   const [selectedStation, setSelectedStation] = useState<GroundStation | null>(null);
   const [selectedSatellite, setSelectedSatellite] = useState<Satellite | null>(null);
   const [selectedVehicle, setSelectedVehicle] = useState<PositionReport | null>(null);
@@ -153,11 +132,19 @@ const [viewer, setViewer] = useState<InstanceType<CesiumModule['Viewer']> | null
   const [showPlanetInfo, setShowPlanetInfo] = useState(false);
   const [solarSimulationTime, setSolarSimulationTime] = useState(Date.now());
   const [isSimulationMode, setIsSimulationMode] = useState(false);
+  const [showGroundTrack, setShowGroundTrack] = useState(true);
+
+  // Per-satellite and per-group visibility
+  const [hiddenSatellites, setHiddenSatellites] = useState<Set<string>>(new Set());
+  const [hiddenOrbits, setHiddenOrbits] = useState<Set<string>>(new Set());
+  const [hiddenGroups, setHiddenGroups] = useState<Set<string>>(new Set());
+  const [hiddenGroupOrbits, setHiddenGroupOrbits] = useState<Set<string>>(new Set());
 
   // Debris visualization state
   const [debris, setDebris] = useState<DebrisObject[]>([]);
   const [debrisPositions, setDebrisPositions] = useState<InstanceType<CesiumModule['Cartesian3']>[]>([]);
   const [showDebris, setShowDebris] = useState(true);
+  const [showCollisionHeatmap, setShowCollisionHeatmap] = useState(false);
   const [selectedDebris, setSelectedDebris] = useState<DebrisObject | null>(null);
   const [speed, setSpeed] = useState(1);
   const speedRef = useRef(1);
@@ -180,36 +167,40 @@ const DEBRIS_REFRESH_MS = 15_000;
 const DISPLAY_OBJECT_LIMIT = 2500;
 const DEBRIS_ORBIT_CLASSES = "LEO";
   
-  // SAR Simulation hook
+  // Italy Defense Simulation hook
   const {
     time: simTime,
     isPlaying: simIsPlaying,
     isComplete: simIsComplete,
     isPaused: simIsPaused,
-    stepMode: simStepMode,
     currentStep: simCurrentStep,
+    currentPhase: simCurrentPhase,
     keyEvents: simKeyEvents,
     totalDuration: simTotalDuration,
+    bases: simBases,
+    missiles: simMissiles,
+    interceptors: simInterceptors,
     satellites: simSatellites,
     groundUnits: simGroundUnits,
+    score: simScore,
+    asatMissiles: simASATMissiles,
+    hostileSatellites: simHostileSatellites,
+    defenseModifier: simDefenseModifier,
     togglePlayPause: simTogglePlayPause,
     resetSimulation: simReset,
-    toggleStepMode: simToggleStepMode,
     startSimulation: simStart,
     nextStep: simNextStep,
     prevStep: simPrevStep,
     freeCameraMode: simFreeCameraMode,
     toggleFreeCameraMode: simToggleFreeCameraMode,
-  } = useSARSimulation(viewer, isSimulationMode);
+  } = useItalyDefenseSimulation(viewer, isSimulationMode);
 
   const handleChatSimulationControl = useCallback(
     (command: { action: string; mode?: string }) => {
-      if (command.action !== 'start_sar_simulation') {
+      if (command.action !== 'start_italy_defense' && command.action !== 'start_sar_simulation') {
         return;
       }
 
-      // Mirror the "Start SAR Simulation" button behavior:
-      // enter simulation mode only; mission start remains user-driven via START MISSION.
       const shouldEnterSimulation = !command.mode || command.mode === 'enter_simulation_mode';
       if (shouldEnterSimulation && !isSimulationMode) {
         setIsSimulationMode(true);
@@ -382,8 +373,8 @@ updatedOrbits.forEach((orbit) => {
     };
   }, [satellites, orbits]);
 
-  const loadData = async () => {
-    setLoading(true);
+  const loadData = async (isRefresh = false) => {
+    if (!isRefresh) setLoading(true);
     try {
       const [stationsData, satellitesWithOrbits, conjunctionsData, vehiclesData] = await Promise.all([
         api.getGroundStations({ page_size: 100 }),
@@ -393,33 +384,26 @@ updatedOrbits.forEach((orbit) => {
       ]);
 
       setGroundStations(stationsData.items);
-      // Apply mock metadata to satellites
-      const satellitesWithMockData = mockSatelliteMetadata(satellitesWithOrbits);
-      setSatellites(satellitesWithMockData);
+      setSatellites(satellitesWithOrbits);
       setConjunctions(conjunctionsData.items);
       setGroundVehicles(vehiclesData.items);
 
-      // Filter to only allied and enemy satellites (skip debris)
-      const realSatellites = satellitesWithOrbits.filter((sat) => 
-        isAlliedSatellite(sat) || isEnemySatellite(sat)
-      );
-      
-      // Generate orbit positions from TLE if available
-      const generatedOrbits: OrbitData[] = realSatellites.map((sat) => {
-        const tle1 = sat.latest_orbit?.tle_line1;
-        const tle2 = sat.latest_orbit?.tle_line2;
-        
-        if (tle1 && tle2 && satelliteModule) {
-          // Use TLE for realistic orbit
-          return generateOrbitFromTLE(sat.id, tle1, tle2, sat.latest_orbit?.epoch);
-        } else {
-          // Fallback to simplified orbit
-          return {
-            satellite_id: sat.id,
-            positions: generateOrbitPositions(sat),
-          };
-        }
-      });
+      // Generate orbit positions from TLE if available for all satellites
+      const generatedOrbits: OrbitData[] = satellitesWithOrbits
+        .filter(sat => sat.latest_orbit?.tle_line1 && sat.latest_orbit?.tle_line2)
+        .map((sat) => {
+          const tle1 = sat.latest_orbit!.tle_line1!;
+          const tle2 = sat.latest_orbit!.tle_line2!;
+
+          if (satelliteModule) {
+            return generateOrbitFromTLE(sat.id, tle1, tle2, sat.latest_orbit?.epoch);
+          } else {
+            return {
+              satellite_id: sat.id,
+              positions: generateOrbitPositions(sat),
+            };
+          }
+        });
       
       setOrbits(generatedOrbits);
 
@@ -437,7 +421,7 @@ updatedOrbits.forEach((orbit) => {
     } catch (error) {
       console.warn('Failed to load map data:', error);
     } finally {
-      setLoading(false);
+      if (!isRefresh) setLoading(false);
     }
   };
 
@@ -554,33 +538,6 @@ const loadDebris = async () => {
     };
   }, [selectedSatellite, selectedDebris, viewer, orbits]);
 
-const fetchFamousSatellites = async () => {
-    setFetchingFamous(true);
-    setFetchMessage(null);
-    
-    try {
-      const result = await api.fetchFamousSatellites();
-      
-      if (result.success) {
-        setFetchIntent(Intent.SUCCESS);
-        setFetchMessage(result.message);
-        
-        // Reload data to get new satellites with orbits
-        await loadData();
-        
-        // Clear message after 5 seconds
-        setTimeout(() => setFetchMessage(null), 5000);
-      } else {
-        setFetchIntent(Intent.DANGER);
-        setFetchMessage(result.message || 'Failed to fetch satellites');
-      }
-    } catch (error) {
-      setFetchIntent(Intent.DANGER);
-      setFetchMessage(error instanceof Error ? error.message : 'Failed to fetch satellites');
-    } finally {
-      setFetchingFamous(false);
-    }
-  };
 
   // Generate orbit positions from TLE using satellite.js
   const generateOrbitFromTLE = useCallback((
@@ -738,7 +695,7 @@ const fetchFamousSatellites = async () => {
           </div>
         ) : (
           <div className="w-full h-full">
-            <DynamicCesiumViewer
+            <CesiumViewer
               className="w-full h-full"
               onViewerReady={handleViewerReady}
             />
@@ -751,6 +708,10 @@ const fetchFamousSatellites = async () => {
                     satellites={satellites}
                     orbits={orbits}
                     showOrbits={showOrbits}
+                    hiddenSatelliteIds={hiddenSatellites}
+                    hiddenOrbitIds={hiddenOrbits}
+                    hiddenGroups={hiddenGroups}
+                    hiddenGroupOrbits={hiddenGroupOrbits}
                   />
                 )}
                 {!isSimulationMode && (
@@ -779,6 +740,12 @@ const fetchFamousSatellites = async () => {
                     viewer={viewer}
                     conjunctions={conjunctions}
                     satellitePositions={satellitePositionsRef.current}
+                  />
+                )}
+                {!isSimulationMode && (
+                  <CollisionHeatmapLayer
+                    viewer={viewer}
+                    visible={showCollisionHeatmap}
                   />
                 )}
                 {!isSimulationMode && (
@@ -829,8 +796,16 @@ const fetchFamousSatellites = async () => {
                     <MovingSatelliteMarker viewer={viewer} orbitTrack={orbitTrack} maneuverStartMs={maneuverStartMs} />
                   </>
                 )}
-                
-                {/* SAR Simulation Layers */}
+                {!isSimulationMode && (
+                  <GroundTrackLayer
+                    viewer={viewer}
+                    selectedSatelliteNoradId={selectedSatellite?.norad_id ?? null}
+                    visible={showGroundTrack}
+                    selectedStation={selectedStation}
+                  />
+                )}
+
+                {/* Italy Defense Simulation Layers */}
                 {isSimulationMode && (
                   <>
                     <SimulatedSatelliteLayer
@@ -854,12 +829,37 @@ const fetchFamousSatellites = async () => {
                         id: unit.id,
                         name: unit.name,
                         sidc: unit.sidc,
-                        position: unit.position,
+                        position: (unit as any).position || unit.initialPosition,
                         affiliation: unit.affiliation,
                         status: unit.status,
-                        heading: unit.movements?.find(m => m.time <= simTime)?.heading,
-                        speed: unit.movements?.find(m => m.time <= simTime)?.speed,
                       }))}
+                    />
+                    <DefenseDomeLayer
+                      viewer={viewer}
+                      bases={simBases}
+                      simulationTime={simTime}
+                    />
+                    <MissileTrajectoryLayer
+                      viewer={viewer}
+                      missiles={simMissiles}
+                      interceptors={simInterceptors}
+                      simulationTime={simTime}
+                    />
+                    <SatelliteCoverageConeLayer
+                      viewer={viewer}
+                      satellites={simSatellites}
+                      simulationTime={simTime}
+                    />
+                    <ASATTrajectoryLayer
+                      viewer={viewer}
+                      asatMissiles={simASATMissiles}
+                      simulationTime={simTime}
+                    />
+                    <HostileSatelliteLayer
+                      viewer={viewer}
+                      hostileSatellites={simHostileSatellites}
+                      satellites={simSatellites}
+                      simulationTime={simTime}
                     />
                   </>
                 )}
@@ -906,7 +906,7 @@ const fetchFamousSatellites = async () => {
           icon={isSimulationMode ? 'cross' : 'play'}
           large
         >
-          {isSimulationMode ? 'Exit Simulation' : 'Start SAR Simulation'}
+          {isSimulationMode ? 'Exit Simulation' : 'Start Simulation'}
         </Button>
       </div>
 
@@ -919,8 +919,7 @@ const fetchFamousSatellites = async () => {
             3D Globe View
           </h1>
           <div className="flex items-center gap-2">
-            <Tag minimal intent="primary">Allied: {satellites.filter(isAlliedSatellite).length}</Tag>
-            <Tag minimal intent="danger">Enemy: {satellites.filter(isEnemySatellite).length}</Tag>
+            <Tag minimal intent="primary">Satellites: {satellites.length}</Tag>
           </div>
           <div className="flex items-center gap-2 ml-auto">
             <Button
@@ -957,13 +956,12 @@ const fetchFamousSatellites = async () => {
             />
             <Button
               intent={Intent.PRIMARY}
-              loading={fetchingFamous}
-              onClick={fetchFamousSatellites}
+              onClick={() => setCelestrakDialogOpen(true)}
               icon="satellite"
               minimal
               small
             >
-              Refresh
+              CelesTrak
             </Button>
           </div>
         </div>
@@ -975,11 +973,7 @@ const fetchFamousSatellites = async () => {
               <>
                 <div className="flex items-center gap-1">
                   <span className="w-2 h-2 rounded-full bg-blue-500"></span>
-                  <span className="text-sda-text-secondary">Allied</span>
-                </div>
-                <div className="flex items-center gap-1">
-                  <span className="w-2 h-2 rounded-full bg-red-500"></span>
-                  <span className="text-sda-text-secondary">Enemy</span>
+                  <span className="text-sda-text-secondary">Satellites</span>
                 </div>
                 <div className="border-l border-sda-border-default pl-4 flex items-center gap-3">
                 <Checkbox
@@ -1037,6 +1031,18 @@ const fetchFamousSatellites = async () => {
                   label="Debris"
                   labelElement={<span className="text-xs text-sda-text-secondary">Debris</span>}
                 />
+                <Checkbox
+                  checked={showGroundTrack}
+                  onChange={(e) => setShowGroundTrack(e.currentTarget.checked)}
+                  label="Track"
+                  labelElement={<span className="text-xs text-sda-text-secondary">Track</span>}
+                />
+                <Checkbox
+                  checked={showCollisionHeatmap}
+                  onChange={(e) => setShowCollisionHeatmap(e.currentTarget.checked)}
+                  label="Collision"
+                  labelElement={<span className="text-xs text-sda-text-secondary">Collision</span>}
+                />
                 <DebrisAddMenu debrisCount={debris.length} />
               </div>
             </>
@@ -1044,11 +1050,7 @@ const fetchFamousSatellites = async () => {
             <>
               <div className="flex items-center gap-1">
                 <span className="w-2 h-2 rounded-full bg-blue-500"></span>
-                <span className="text-sda-text-secondary">Allied</span>
-              </div>
-              <div className="flex items-center gap-1">
-                <span className="w-2 h-2 rounded-full bg-red-500"></span>
-                <span className="text-sda-text-secondary">Enemy</span>
+                <span className="text-sda-text-secondary">Satellites</span>
               </div>
               <div className="border-l border-sda-border-default pl-4 flex items-center gap-3">
                 <Checkbox
@@ -1103,77 +1105,128 @@ const fetchFamousSatellites = async () => {
                 <div className="p-3 border-b border-sda-border-default">
                   <span className="text-sm font-semibold text-sda-text-primary flex items-center gap-2">
                     <Icon icon="satellite" className="text-sda-accent-cyan" />
-                    Elements ({satellites.filter(sat => isAlliedSatellite(sat) || isEnemySatellite(sat)).length})
+                    Elements ({satellites.length})
                   </span>
-                  <div className="flex items-center gap-3 mt-2 text-xs text-sda-text-muted">
-                    <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-blue-500"></span> Allied</span>
-                    <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-500"></span> Enemy</span>
-                  </div>
                 </div>
                 <div className="flex-1 overflow-auto p-3">
-                  {/* Allied Satellites Folder */}
-                  <div className="mb-3">
-                    <div className="flex items-center gap-2 mb-1">
-                      <Icon icon="folder-close" className="text-blue-500" size={14} />
-                      <span className="text-sm font-semibold text-blue-500 flex items-center gap-1">
-                        <span className="w-2 h-2 rounded-full bg-blue-500"></span>
-                        Allied Forces
-                      </span>
-                      <Tag minimal intent="primary" className="ml-auto">{satellites.filter(isAlliedSatellite).length}</Tag>
-                    </div>
-                    <div className="space-y-1 ml-4 border-l-2 border-blue-500 pl-2">
-                      {satellites.filter(isAlliedSatellite).slice(0, 10).map((sat) => (
-                        <div
-                          key={sat.id}
-                          className={`p-2 text-sm hover:bg-sda-bg-tertiary rounded cursor-pointer ${
-                            selectedSatellite?.id === sat.id ? 'bg-sda-bg-tertiary' : ''
-                          }`}
-                          onClick={() => flyToSatellite(sat)}
-                        >
-                          <div className="flex items-center justify-between">
-                            <span className="font-medium truncate max-w-[120px]">{sat.name}</span>
-                            {loadingSatellite && selectedSatellite?.id === sat.id ? (
-                              <Spinner size={16} />
-                            ) : (
-                              <Tag minimal intent="primary">{sat.norad_id}</Tag>
-                            )}
+                  {/* Satellites grouped by CelesTrak tag */}
+                  {(() => {
+                    const grouped = satellites.reduce((acc, sat) => {
+                      const group = sat.tags?.[0] || 'Uncategorized';
+                      (acc[group] = acc[group] || []).push(sat);
+                      return acc;
+                    }, {} as Record<string, Satellite[]>);
+                    const groupNames = Object.keys(grouped);
+                    return groupNames.map((group, groupIdx) => {
+                      const groupSats = grouped[group];
+                      const color = getGroupColor(groupIdx);
+                      const isGroupHidden = hiddenGroups.has(group);
+                      const isGroupOrbitsHidden = hiddenGroupOrbits.has(group);
+                      return (
+                        <div key={group} className="mb-3">
+                          <div className="flex items-center gap-2 mb-1">
+                            <Icon icon="folder-close" size={14} style={{ color }} />
+                            <span className="text-sm font-semibold flex items-center gap-1" style={{ color }}>
+                              <span className="w-2 h-2 rounded-full" style={{ backgroundColor: color }}></span>
+                              {group}
+                            </span>
+                            <div className="ml-auto flex items-center gap-1">
+                              <button
+                                title={isGroupHidden ? 'Show group' : 'Hide group'}
+                                className="p-0.5 rounded hover:bg-sda-bg-tertiary"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setHiddenGroups(prev => {
+                                    const next = new Set(prev);
+                                    if (next.has(group)) next.delete(group); else next.add(group);
+                                    return next;
+                                  });
+                                }}
+                              >
+                                <Icon icon={isGroupHidden ? 'eye-off' : 'eye-open'} size={12} className={isGroupHidden ? 'text-sda-text-muted' : 'text-sda-text-secondary'} />
+                              </button>
+                              <button
+                                title={isGroupOrbitsHidden ? 'Show orbits' : 'Hide orbits'}
+                                className="p-0.5 rounded hover:bg-sda-bg-tertiary"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setHiddenGroupOrbits(prev => {
+                                    const next = new Set(prev);
+                                    if (next.has(group)) next.delete(group); else next.add(group);
+                                    return next;
+                                  });
+                                }}
+                              >
+                                <Icon icon="path" size={12} className={isGroupOrbitsHidden ? 'text-sda-text-muted' : 'text-sda-text-secondary'} />
+                              </button>
+                              <Tag minimal style={{ color, borderColor: color }} className="ml-1">{groupSats.length}</Tag>
+                            </div>
                           </div>
+                          {!isGroupHidden && (
+                            <div className="space-y-1 ml-4 pl-2" style={{ borderLeft: `2px solid ${color}` }}>
+                              {groupSats.slice(0, 10).map((sat) => {
+                                const isSatHidden = hiddenSatellites.has(sat.id);
+                                const isSatOrbitHidden = hiddenOrbits.has(sat.id);
+                                return (
+                                  <div
+                                    key={sat.id}
+                                    className={`p-2 text-sm hover:bg-sda-bg-tertiary rounded cursor-pointer ${
+                                      selectedSatellite?.id === sat.id ? 'bg-sda-bg-tertiary' : ''
+                                    }`}
+                                    onClick={() => flyToSatellite(sat)}
+                                  >
+                                    <div className="flex items-center justify-between">
+                                      <span className="font-medium truncate max-w-[100px]">{sat.name}</span>
+                                      <div className="flex items-center gap-1">
+                                        <button
+                                          title={isSatHidden ? 'Show satellite' : 'Hide satellite'}
+                                          className="p-0.5 rounded hover:bg-sda-bg-tertiary"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setHiddenSatellites(prev => {
+                                              const next = new Set(prev);
+                                              if (next.has(sat.id)) next.delete(sat.id); else next.add(sat.id);
+                                              return next;
+                                            });
+                                          }}
+                                        >
+                                          <Icon icon={isSatHidden ? 'eye-off' : 'eye-open'} size={12} className={isSatHidden ? 'text-sda-text-muted' : 'text-sda-text-secondary'} />
+                                        </button>
+                                        <button
+                                          title={isSatOrbitHidden ? 'Show orbit' : 'Hide orbit'}
+                                          className="p-0.5 rounded hover:bg-sda-bg-tertiary"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setHiddenOrbits(prev => {
+                                              const next = new Set(prev);
+                                              if (next.has(sat.id)) next.delete(sat.id); else next.add(sat.id);
+                                              return next;
+                                            });
+                                          }}
+                                        >
+                                          <Icon icon="path" size={12} className={isSatOrbitHidden ? 'text-sda-text-muted' : 'text-sda-text-secondary'} />
+                                        </button>
+                                        {loadingSatellite && selectedSatellite?.id === sat.id ? (
+                                          <Spinner size={14} />
+                                        ) : (
+                                          <Tag minimal style={{ color, borderColor: color, fontSize: '10px' }}>{sat.norad_id}</Tag>
+                                        )}
+                                      </div>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                              {groupSats.length > 10 && (
+                                <div className="p-2 text-xs text-sda-text-muted">
+                                  +{groupSats.length - 10} more
+                                </div>
+                              )}
+                            </div>
+                          )}
                         </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Enemy Satellites Folder */}
-                  <div>
-                    <div className="flex items-center gap-2 mb-1">
-                      <Icon icon="folder-close" className="text-red-500" size={14} />
-                      <span className="text-sm font-semibold text-red-500 flex items-center gap-1">
-                        <span className="w-2 h-2 rounded-full bg-red-500"></span>
-                        Enemy Forces
-                      </span>
-                      <Tag minimal intent="danger" className="ml-auto">{satellites.filter(isEnemySatellite).length}</Tag>
-                    </div>
-                    <div className="space-y-1 ml-4 border-l-2 border-red-500 pl-2">
-                      {satellites.filter(isEnemySatellite).slice(0, 10).map((sat) => (
-                        <div
-                          key={sat.id}
-                          className={`p-2 text-sm hover:bg-sda-bg-tertiary rounded cursor-pointer ${
-                            selectedSatellite?.id === sat.id ? 'bg-sda-bg-tertiary' : ''
-                          }`}
-                          onClick={() => flyToSatellite(sat)}
-                        >
-                          <div className="flex items-center justify-between">
-                            <span className="font-medium truncate max-w-[120px]">{sat.name}</span>
-                            {loadingSatellite && selectedSatellite?.id === sat.id ? (
-                              <Spinner size={16} />
-                            ) : (
-                              <Tag minimal intent="danger">{sat.norad_id}</Tag>
-                            )}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
- </div>
+                      );
+                    });
+                  })()}
 
                    {/* Debris Folder */}
                    <div>
@@ -1415,7 +1468,7 @@ const fetchFamousSatellites = async () => {
         {/* Right Panel - AI Chat */}
         <div className="absolute right-4 top-16 bottom-4 w-96 pointer-events-auto flex flex-col gap-4">
           {/* AI Chat Panel */}
-          <div className="flex-[2] bg-sda-bg-secondary/60 backdrop-blur-sm rounded-lg border border-sda-border-default px-4 py-2 shadow-lg flex flex-col overflow-hidden min-h-0">
+          <div className="flex-[2] bg-sda-bg-secondary/90 backdrop-blur-md rounded-lg border border-sda-border-default px-4 py-2 shadow-lg flex flex-col overflow-hidden min-h-0">
             <div className="flex items-center justify-between p-2 border-b border-sda-border-default">
               <span className="text-sm font-semibold text-sda-text-primary flex items-center gap-2">
                 <Icon icon="chat" className="text-sda-accent-cyan" />
@@ -1431,25 +1484,16 @@ const fetchFamousSatellites = async () => {
           </div>
         </div>
 
-        {/* Left Panel - Mission HUD (Simulation Mode Only) */}
+        {/* Left Panel - Italy Defense HUD (Simulation Mode Only) */}
         {isSimulationMode && (
-          <MissionHUD
+          <ItalyDefenseHUD
             simulationTime={simTime}
             totalDuration={simTotalDuration}
-            stepMode={simStepMode}
-            currentStep={simCurrentStep}
+            currentPhase={simCurrentPhase}
             keyEvents={simKeyEvents}
-            satellites={simSatellites.map(s => ({
-              id: s.id,
-              name: s.name,
-              status: s.status,
-              fuelPercent: s.fuelPercent,
-            }))}
-            groundAssets={[
-              { id: 'phantom-6', name: 'Phantom-6 Team', status: simTime < 210 ? 'WAITING' : simTime < 240 ? 'EXTRACTING' : 'SECURED' },
-              { id: 'hms-defender', name: 'HMS Defender', status: 'OPERATIONAL' },
-              { id: 'seahawk', name: 'MH-60 Seahawk', status: simTime < 120 ? 'STANDBY' : simTime < 270 ? 'ACTIVE' : 'RTB' },
-            ]}
+            bases={simBases}
+            satellites={simSatellites}
+            score={simScore}
             isPlaying={simIsPlaying}
             isComplete={simIsComplete}
             isPaused={simIsPaused}
@@ -1458,59 +1502,59 @@ const fetchFamousSatellites = async () => {
               simReset();
               setIsSimulationMode(false);
             }}
-            onToggleStepMode={simToggleStepMode}
             onNextStep={simNextStep}
             onPrevStep={simPrevStep}
             freeCameraMode={simFreeCameraMode}
             onToggleFreeCameraMode={simToggleFreeCameraMode}
+            asatMissiles={simASATMissiles}
+            hostileSatellites={simHostileSatellites}
+            defenseModifier={simDefenseModifier}
           />
         )}
       </div>
 
-      {/* Fetch message toast */}
-      {fetchMessage && (
-        <div className={`absolute bottom-6 left-1/2 -translate-x-1/2 z-30 p-3 rounded shadow-lg ${
-          fetchIntent === Intent.SUCCESS 
-            ? 'bg-green-500/90 text-white' 
-            : 'bg-red-500/90 text-white'
-        }`}>
-          {fetchMessage}
-        </div>
-      )}
-      
-      {/* SAR Simulation UI */}
+      {/* CelesTrak Browser Dialog */}
+      <CelestrakBrowserDialog
+        isOpen={celestrakDialogOpen}
+        onClose={() => setCelestrakDialogOpen(false)}
+        onFetched={() => loadData(true)}
+      />
+
+      {/* Italy Defense Simulation UI */}
       {isSimulationMode && (
         <>
           {/* Start Mission Button - Only show when simulation hasn't started */}
           {!simIsPlaying && !simIsComplete && simTime === 0 && (
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-              <div className="bg-slate-900 border border-cyan-500 rounded-lg p-8 max-w-lg text-center shadow-2xl">
-                <h2 className="text-2xl font-bold text-cyan-400 mb-4">Operation Guardian Angel</h2>
+              <div className="bg-slate-900 border border-red-500 rounded-lg p-8 max-w-lg text-center shadow-2xl">
+                <h2 className="text-2xl font-bold text-red-400 mb-2">OPERATION SCUDO D'ITALIA</h2>
+                <p className="text-sm text-cyan-400 mb-4 font-mono">ITALY MISSILE DEFENSE SIMULATION</p>
                 <p className="text-slate-300 mb-6">
-                  Allied special forces team Phantom-6 has been isolated 45km southwest of Misrata.
-                  Your mission: Execute precision SAR operation using satellite overwatch and ground assets.
+                  Intelligence reports confirm imminent multi-domain attack from Iran targeting Italian military installations and allied satellite constellation.
+                  NATO integrated air defense network must intercept incoming ballistic missiles while defending the satellite
+                  constellation from ASAT kinetic kill vehicles, co-orbital hostile satellites, electronic warfare, and cyber attacks.
                 </p>
                 <div className="space-y-2 text-sm text-slate-400 mb-6">
-                  <p>Mission Duration: 4 hours (compressed to 2 minutes)</p>
-                  <p>Primary Asset: ReconSat-1</p>
-                  <p>Extraction Unit: MH-60 Seahawk</p>
+                  <p>Ground: 8 ballistic missiles (Shahab-3, Emad, Khorramshahr)</p>
+                  <p>Space: 3 ASAT missiles, 3 co-orbital threats, 3 EW attacks, 2 cyber attacks</p>
+                  <p>Defense: 8 NATO/Italian bases + 6 allied satellites</p>
+                  <p>Duration: 15 min sim time (1 min real-time at 15x)</p>
                 </div>
                 <Button
-                  intent={Intent.SUCCESS}
+                  intent={Intent.DANGER}
                   large
                   onClick={simStart}
-                  icon="play"
+                  icon="shield"
                   className="px-8 py-3 text-lg font-bold"
                 >
-                  START MISSION
+                  ACTIVATE DEFENSE
                 </Button>
               </div>
             </div>
           )}
-          <MissionNarrative
+          <ItalyDefenseNarrative
             simulationTime={simTime}
             isPlaying={simIsPlaying}
-            stepMode={simStepMode}
           />
         </>
       )}

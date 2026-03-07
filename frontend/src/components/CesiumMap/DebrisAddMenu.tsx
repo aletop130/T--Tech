@@ -72,7 +72,7 @@ export const DebrisAddMenu: React.FC<DebrisAddMenuProps> = ({
         minimal
         intent={Intent.WARNING}
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-1"
+        className="flex items-center gap-1 whitespace-nowrap"
       >
         <span className="w-2 h-2 rounded-full" style={{ backgroundColor: '#f59e0b' }}></span>
         <span>Debris: {debrisCount ?? 0}</span>

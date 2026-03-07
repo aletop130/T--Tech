@@ -1,17 +1,24 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  output: 'standalone',
   reactStrictMode: true,
   turbopack: {},
   transpilePackages: [
-   "@blueprintjs/core",
-    "@blueprintjs/icons",
-    "@blueprintjs/select",
-    "@blueprintjs/table",
-    "@blueprintjs/datetime2",
-    "@blueprintjs/popover2",
-    "cesium",
     "resium",
   ],
+  experimental: {
+    optimizePackageImports: [
+      "lucide-react",
+      "date-fns",
+      "d3",
+      "@blueprintjs/core",
+      "@blueprintjs/icons",
+      "@blueprintjs/select",
+      "@blueprintjs/table",
+      "@blueprintjs/datetime2",
+      "@blueprintjs/popover2",
+    ],
+  },
   webpack: (config, { isServer }) => {
     if (!isServer) {
       config.resolve.fallback = {
@@ -61,17 +68,25 @@ const nextConfig = {
     // Set global object for Cesium workers
     config.output.globalObject = 'this';
 
+    // Docker dev: use polling for file watching
+    if (process.env.DOCKER_ENV === '1') {
+      config.watchOptions = {
+        poll: 500,
+        aggregateTimeout: 300,
+      };
+    }
+
     return config;
   },
   async rewrites() {
+    const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://backend:8000';
     return [
       {
         source: '/api/:path*',
-        destination: 'http://backend:8000/api/:path*',
+        destination: `${backendUrl}/api/:path*`,
       },
     ];
   },
 };
 
 module.exports = nextConfig;
-

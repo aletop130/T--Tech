@@ -63,32 +63,30 @@ async def insert_satellites():
                 "SELECT id FROM satellites WHERE norad_id = $1 AND tenant_id = $2",
                 norad_id, tenant_id
             )
-            
+
             if existing:
-                # Update name
                 await conn.execute(
-                    """UPDATE satellites 
-                       SET name = $1, country = $2, operator = $3, updated_at = $4
+                    """UPDATE satellites
+                       SET name = $1, country = $2, operator = $3, faction = 'allied', updated_at = $4
                        WHERE id = $5""",
                     data["name"], data["country"], data["operator"], now, existing
                 )
                 updated += 1
                 print(f"  Updated: {data['name']} (NORAD {norad_id})")
             else:
-                # Insert new
                 sat_id = str(uuid4())
                 await conn.execute(
-                    """INSERT INTO satellites 
-                       (id, tenant_id, norad_id, name, object_type, country, operator, 
-                        is_active, classification, created_at, updated_at, created_by)
-                       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)""",
+                    """INSERT INTO satellites
+                       (id, tenant_id, norad_id, name, object_type, country, operator,
+                        faction, is_active, classification, created_at, updated_at, created_by)
+                       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)""",
                     sat_id, tenant_id, norad_id, data["name"], "satellite",
-                    data["country"], data["operator"], True, "unclassified",
+                    data["country"], data["operator"], "allied", True, "unclassified",
                     now, now, "manual_insert"
                 )
                 created += 1
                 print(f"  Created: {data['name']} (NORAD {norad_id})")
-        
+
         # Insert enemy satellites
         print("\nInserting enemy satellites...")
         for norad_id, data in ENEMY_SATELLITES.items():
@@ -97,27 +95,25 @@ async def insert_satellites():
                 "SELECT id FROM satellites WHERE norad_id = $1 AND tenant_id = $2",
                 norad_id, tenant_id
             )
-            
+
             if existing:
-                # Update name
                 await conn.execute(
-                    """UPDATE satellites 
-                       SET name = $1, country = $2, operator = $3, updated_at = $4
+                    """UPDATE satellites
+                       SET name = $1, country = $2, operator = $3, faction = 'enemy', updated_at = $4
                        WHERE id = $5""",
                     data["name"], data["country"], data["operator"], now, existing
                 )
                 updated += 1
                 print(f"  Updated: {data['name']} (NORAD {norad_id})")
             else:
-                # Insert new
                 sat_id = str(uuid4())
                 await conn.execute(
-                    """INSERT INTO satellites 
-                       (id, tenant_id, norad_id, name, object_type, country, operator, 
-                        is_active, classification, created_at, updated_at, created_by)
-                       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)""",
+                    """INSERT INTO satellites
+                       (id, tenant_id, norad_id, name, object_type, country, operator,
+                        faction, is_active, classification, created_at, updated_at, created_by)
+                       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)""",
                     sat_id, tenant_id, norad_id, data["name"], "satellite",
-                    data["country"], data["operator"], True, "unclassified",
+                    data["country"], data["operator"], "enemy", True, "unclassified",
                     now, now, "manual_insert"
                 )
                 created += 1

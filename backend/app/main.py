@@ -1,5 +1,6 @@
 """FastAPI main application."""
 import asyncio
+import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime
 
@@ -9,6 +10,7 @@ from fastapi.responses import JSONResponse
 import anyio
 import structlog
 from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
+from sqlalchemy import select, func
 from starlette.types import ASGIApp, Scope, Receive, Send
 
 from app.core.config import settings
@@ -63,10 +65,101 @@ class LoggingContextMiddleware:
             structlog.contextvars.clear_contextvars()
 
 
+async def _seed_initial_data():
+    """Seed ground stations, debris, and ground vehicles if the DB is empty."""
+    from app.db.base import async_session_factory
+    from app.db.models.ontology import GroundStation, Satellite, ObjectType
+    from app.db.models.operations import PositionReport
+    from app.services.audit import AuditService
+    from app.services.ontology import OntologyService
+    from app.services.debris import DebrisService
+    from app.services.celestrack import (
+        GROUND_STATIONS,
+        SENSORS,
+        create_ground_stations_if_missing,
+        create_sensors_if_missing,
+    )
+
+    tenant_id = "default"
+    user_id = "system_seed"
+
+    try:
+        async with async_session_factory() as session:
+            audit = AuditService(session)
+            ontology = OntologyService(session, audit)
+
+            # --- Ground Stations ---
+            gs_count = await session.scalar(
+                select(func.count()).select_from(GroundStation).where(
+                    GroundStation.tenant_id == tenant_id
+                )
+            ) or 0
+            if gs_count == 0:
+                await create_ground_stations_if_missing(ontology, tenant_id, user_id)
+                await create_sensors_if_missing(ontology, tenant_id, user_id)
+                await session.commit()
+                logger.info("Seeded ground stations and sensors")
+
+            # --- Debris ---
+            debris_count = await session.scalar(
+                select(func.count()).select_from(Satellite).where(
+                    Satellite.tenant_id == tenant_id,
+                    Satellite.object_type == ObjectType.DEBRIS.value,
+                )
+            ) or 0
+            if debris_count == 0:
+                debris_svc = DebrisService(session, audit)
+                created = await debris_svc.generate_synthetic_debris(
+                    tenant_id, count=500, user_id=user_id,
+                )
+                logger.info("Seeded synthetic debris", count=created)
+
+            # --- Ground Vehicles ---
+            vehicle_count = await session.scalar(
+                select(func.count()).select_from(PositionReport).where(
+                    PositionReport.tenant_id == tenant_id,
+                    PositionReport.entity_type == "ground_vehicle",
+                )
+            ) or 0
+            if vehicle_count == 0:
+                import random
+                vehicles = [
+                    {"name": "ALPHA-1", "lat": 41.90, "lon": 12.50},
+                    {"name": "BRAVO-2", "lat": 48.86, "lon": 2.35},
+                    {"name": "CHARLIE-3", "lat": 38.72, "lon": -9.14},
+                    {"name": "DELTA-4", "lat": 52.52, "lon": 13.41},
+                    {"name": "ECHO-5", "lat": 40.42, "lon": -3.70},
+                ]
+                now = datetime.utcnow()
+                for v in vehicles:
+                    session.add(PositionReport(
+                        id=str(uuid.uuid4()),
+                        tenant_id=tenant_id,
+                        entity_id=v["name"],
+                        entity_type="ground_vehicle",
+                        report_time=now,
+                        latitude=v["lat"],
+                        longitude=v["lon"],
+                        altitude_m=0,
+                        heading_deg=random.uniform(0, 360),
+                        velocity_magnitude_ms=0,
+                        data_source="system_seed",
+                        created_at=now,
+                        updated_at=now,
+                        created_by=user_id,
+                    ))
+                await session.commit()
+                logger.info("Seeded ground vehicles", count=len(vehicles))
+
+    except Exception as exc:
+        logger.error("Failed to seed initial data", error=str(exc), exc_info=True)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan handler."""
     logger.info("Starting SDA Platform", version=settings.APP_VERSION)
+    await _seed_initial_data()
     yield
     logger.info("Shutting down SDA Platform")
 
@@ -113,6 +206,10 @@ async def global_exception_handler(request: Request, exc: Exception):
 
 # Include API router
 app.include_router(api_router, prefix="/api/v1")
+
+# Mount WebSocket router (no /api/v1 prefix for WS)
+from app.api.v1.websocket import router as ws_router
+app.include_router(ws_router)
 
 
 @app.get("/health", response_model=HealthResponse)

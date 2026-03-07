@@ -1,10 +1,30 @@
 'use client';
 
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Button, InputGroup, Card, Elevation, Tag, Spinner, Icon, Collapse, Divider } from '@blueprintjs/core';
+import { Tag, Spinner, Icon, Collapse, Card, Elevation, Button } from '@blueprintjs/core';
+import { TooltipProvider } from '@/components/ui/tooltip';
+import { RotateCcwIcon, WrenchIcon, ChevronDownIcon, ChevronRightIcon, ZapIcon } from 'lucide-react';
+import {
+  PromptInput,
+  PromptInputBody,
+  PromptInputTextarea,
+  PromptInputFooter,
+  PromptInputTools,
+  PromptInputSubmit,
+  type PromptInputMessage,
+} from '@/components/ai-elements/prompt-input';
+import {
+  Conversation,
+  ConversationContent,
+  ConversationScrollButton,
+} from '@/components/ai-elements/conversation';
+import {
+  Message,
+  MessageContent,
+  MessageResponse,
+} from '@/components/ai-elements/message';
 import { cesiumController, CesiumAction } from '@/lib/cesium/controller';
 import { SSEChatClient } from '@/lib/sse-client';
-import { MarkdownMessage } from './MarkdownMessage';
 import { DetourAgentPanel } from './DetourAgentPanel';
 import { useDetourStore } from '@/lib/store/detour';
 import { AgentTimeline } from './AgentTimeline';
@@ -42,7 +62,6 @@ interface AgentState {
 const CHAT_CONNECT_TIMEOUT_MS = 20000;
 const CHAT_STREAM_IDLE_TIMEOUT_MS = 30000;
 
-// Pattern that should be routed to the orchestration endpoint.
 const ORCHESTRATION_PATTERNS = [
   /analizza.*congiunzione/i,
   /\bdetour\b/i,
@@ -54,8 +73,11 @@ const ORCHESTRATION_PATTERNS = [
   /analisi.*rischio/i,
   /step.*by.*step/i,
   /passo.*passo/i,
-  /\b(start|avvia|avviare|inizia|iniziare|lancia|launch)\b.*\b(sar|simulation|simulazione|mission|missione)\b/i,
+  /\b(start|avvia|avviare|inizia|iniziare|lancia|launch)\b.*\b(sar|simulation|simulazione|mission|missione|defense|difesa)\b/i,
   /operation\s+guardian\s+angel/i,
+  /operation\s+scudo/i,
+  /italy.*defense/i,
+  /missile.*defense/i,
 ];
 
 function requiresOrchestration(message: string): boolean {
@@ -64,12 +86,8 @@ function requiresOrchestration(message: string): boolean {
 
 function isLikelyConfirmationMessage(message: string): boolean {
   const normalized = message.toLowerCase().trim();
-  if (!normalized) {
-    return false;
-  }
-  if (['conferma', 'confirm', 'yes', 'ok', 'procedi', 'esegui'].includes(normalized)) {
-    return true;
-  }
+  if (!normalized) return false;
+  if (['conferma', 'confirm', 'yes', 'ok', 'procedi', 'esegui'].includes(normalized)) return true;
   return ['conferma', 'confirm', 'procedi', 'esegui'].some((token) => normalized.includes(token));
 }
 
@@ -78,29 +96,13 @@ function extractConjunctionId(message: string): string | null {
   return match ? match[0].toUpperCase() : null;
 }
 
-function extractSatelliteId(message: string): string | null {
-  const issMatch = message.match(/\b(ISS|ZARYA)\b/i);
-  if (issMatch) return '25544';
-  
-  const noradMatch = message.match(/\bNORAD\s*#?(\d+)\b/i);
-  if (noradMatch) return noradMatch[1];
-  
-  return null;
-}
-
 function isStepByStepRequest(message: string): boolean {
   return /step.*by.*step|passo.*passo/i.test(message);
 }
 
 function describeMapUpdate(actionType: string | undefined): string {
-  if (!actionType) {
-    return 'aggiornamento visuale';
-  }
-
-  const normalized = actionType.startsWith('cesium.')
-    ? actionType.replace('cesium.', '')
-    : actionType;
-
+  if (!actionType) return 'aggiornamento visuale';
+  const normalized = actionType.startsWith('cesium.') ? actionType.replace('cesium.', '') : actionType;
   const labels: Record<string, string> = {
     flyTo: 'focus camera',
     addEntity: 'nuovo oggetto',
@@ -110,9 +112,52 @@ function describeMapUpdate(actionType: string | undefined): string {
     loadCzml: 'traiettorie caricate',
     removeLayer: 'layer rimosso',
   };
-
   return labels[normalized] || 'aggiornamento visuale';
 }
+
+function formatAction(action: CesiumAction): string {
+  switch (action.type) {
+    case 'cesium.setClock':
+      return `Set Clock: ${action.payload.multiplier}x`;
+    case 'cesium.loadCzml':
+      return `Load CZML: "${String(action.payload.layerId)}"`;
+    case 'cesium.addEntity':
+      return `Add ${String(action.payload.entityType)}: ${String(action.payload.name)}`;
+    case 'cesium.flyTo': {
+      const coords = action.payload.entityId
+        ? `entity: ${String(action.payload.entityId)}`
+        : `(${Number(action.payload.longitude).toFixed(2)}, ${Number(action.payload.latitude).toFixed(2)})`;
+      return `FlyTo: ${coords}`;
+    }
+    case 'cesium.toggle': {
+      const toggles = [];
+      if (action.payload.showOrbits !== undefined) toggles.push(`orbits: ${action.payload.showOrbits ? 'ON' : 'OFF'}`);
+      if (action.payload.showCoverage !== undefined) toggles.push(`coverage: ${action.payload.showCoverage ? 'ON' : 'OFF'}`);
+      return `Toggle: ${toggles.join(', ')}`;
+    }
+    case 'cesium.removeLayer':
+      return `Remove Layer: ${String(action.payload.layerId)}`;
+    case 'cesium.setSelected':
+      return `Select: ${action.payload.entityId ? String(action.payload.entityId) : 'none'}`;
+    default:
+      return 'Unknown action';
+  }
+}
+
+function formatToolCall(toolCall: { tool_name: string; arguments: Record<string, unknown> }): string {
+  const args = Object.entries(toolCall.arguments)
+    .map(([key, value]) => `${key}=${JSON.stringify(value)}`)
+    .join(', ');
+  return `${toolCall.tool_name}(${args})`;
+}
+
+const quickPrompts = [
+  'Simula 2 ore con 3 satelliti',
+  'Mostra access windows a Fucino',
+  'Fly to ISS',
+  'Calcola conjunctions',
+  'Analizza congiunzione CONJ-2024-001',
+];
 
 export function AgentChat({
   onSendMessage,
@@ -127,7 +172,6 @@ export function AgentChat({
   const [expandedActions, setExpandedActions] = useState<Set<string>>(new Set());
   const [expandedTools, setExpandedTools] = useState<Set<string>>(new Set());
   const [currentToolCalls, setCurrentToolCalls] = useState<{ tool_name: string; arguments: Record<string, unknown> }[]>([]);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
   const sseClientRef = useRef<SSEChatClient | null>(null);
   const generateSessionId = () => {
     if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
@@ -137,28 +181,18 @@ export function AgentChat({
   };
   const sessionRef = useRef<string>(generateSessionId());
   const mapSessionRef = useRef<string>(generateSessionId());
-  
-  // New state for orchestration
+
   const [activeAgents, setActiveAgents] = useState<AgentState[]>([]);
   const [memoryUsage, setMemoryUsage] = useState(0);
   const [memoryWarning, setMemoryWarning] = useState<string | null>(null);
   const [showAgentTimeline, setShowAgentTimeline] = useState(false);
-  
-  // Detour state
+
   const {
     isStepByStepMode,
     startStepByStep,
     selectedSatellite,
     selectedConjunction,
   } = useDetourStore();
-
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
-
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages, streamingText]);
 
   useEffect(() => {
     return () => {
@@ -167,11 +201,10 @@ export function AgentChat({
   }, []);
 
   const handleOrchestration = useCallback(async (message: string) => {
-    // Show agent timeline
     setShowAgentTimeline(true);
     setActiveAgents([]);
     setMemoryWarning(null);
-    
+
     const assistantMessageId = (Date.now() + 1).toString();
     const assistantMessage: ChatDisplayMessage = {
       id: assistantMessageId,
@@ -181,18 +214,16 @@ export function AgentChat({
       timestamp: new Date().toISOString(),
       isStreaming: true,
     };
-    
+
     setMessages((prev) => [...prev, assistantMessage]);
-    
+
     let connectTimeout: ReturnType<typeof setTimeout> | null = null;
     try {
       const controller = new AbortController();
       connectTimeout = setTimeout(() => controller.abort(), CHAT_CONNECT_TIMEOUT_MS);
       const response = await fetch('/api/v1/ai/chat/orchestrate', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         signal: controller.signal,
         body: JSON.stringify({
           message,
@@ -203,99 +234,60 @@ export function AgentChat({
       });
       clearTimeout(connectTimeout);
       connectTimeout = null;
-      
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-      
+
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+
       const reader = response.body?.getReader();
       const decoder = new TextDecoder();
       let fullContent = '';
-      
-      if (!reader) {
-        throw new Error('No response body');
-      }
-      
+
+      if (!reader) throw new Error('No response body');
+
       while (true) {
         const readResult = await Promise.race([
           reader.read(),
           new Promise<never>((_, reject) =>
-            setTimeout(
-              () => reject(new Error('Timeout: nessuna risposta dal backend.')),
-              CHAT_STREAM_IDLE_TIMEOUT_MS
-            )
+            setTimeout(() => reject(new Error('Timeout: nessuna risposta dal backend.')), CHAT_STREAM_IDLE_TIMEOUT_MS)
           ),
         ]);
         const { done, value } = readResult;
         if (done) break;
-        
+
         const chunk = decoder.decode(value, { stream: true });
         const lines = chunk.split('\n\n');
-        
+
         for (const line of lines) {
           if (!line.trim()) continue;
-          
           if (line.startsWith('data: ')) {
             const data = line.slice(6);
-            
             if (data === '[DONE]') {
               setMessages((msgs) =>
                 msgs.map((msg) =>
-                  msg.id === assistantMessageId
-                    ? { ...msg, content: fullContent, isStreaming: false }
-                    : msg
+                  msg.id === assistantMessageId ? { ...msg, content: fullContent, isStreaming: false } : msg
                 )
               );
               setIsLoading(false);
               setShowAgentTimeline(false);
               continue;
             }
-            
             try {
               const event = JSON.parse(data);
-              
               switch (event.type) {
                 case 'session':
-                  if (typeof event.session_id === 'string' && event.session_id.length > 0) {
-                    sessionRef.current = event.session_id;
-                  }
+                  if (typeof event.session_id === 'string' && event.session_id.length > 0) sessionRef.current = event.session_id;
                   break;
-
                 case 'agent_start':
-                  setActiveAgents((prev) => [
-                    ...prev,
-                    { name: event.agent, status: 'running', message: event.message },
-                  ]);
+                  setActiveAgents((prev) => [...prev, { name: event.agent, status: 'running', message: event.message }]);
                   fullContent += `\n${event.message}\n`;
-                  setMessages((msgs) =>
-                    msgs.map((msg) =>
-                      msg.id === assistantMessageId
-                        ? { ...msg, content: fullContent }
-                        : msg
-                    )
-                  );
+                  setMessages((msgs) => msgs.map((msg) => msg.id === assistantMessageId ? { ...msg, content: fullContent } : msg));
                   break;
-                  
                 case 'agent_complete':
-                  setActiveAgents((prev) =>
-                    prev.map((agent) =>
-                      agent.name === event.agent
-                        ? { ...agent, status: 'complete' }
-                        : agent
-                    )
-                  );
+                  setActiveAgents((prev) => prev.map((agent) => agent.name === event.agent ? { ...agent, status: 'complete' } : agent));
                   if (event.agent === 'all') {
                     fullContent += `\n${event.message}`;
-                    setMessages((msgs) =>
-                      msgs.map((msg) =>
-                        msg.id === assistantMessageId
-                          ? { ...msg, content: fullContent, isStreaming: false }
-                          : msg
-                      )
-                    );
+                    setMessages((msgs) => msgs.map((msg) => msg.id === assistantMessageId ? { ...msg, content: fullContent, isStreaming: false } : msg));
                   }
                   break;
-                  
                 case 'cesium_action':
                   try {
                     if (typeof event.action?.type === 'string' && event.action.type.startsWith('cesium.')) {
@@ -303,66 +295,32 @@ export function AgentChat({
                     } else {
                       cesiumController.executeAction(event.action);
                     }
-                    
-                    const actionMsg = `🎬 Mappa aggiornata: ${describeMapUpdate(event.action?.type)}`;
-                    fullContent += `\n${actionMsg}`;
-                    setMessages((msgs) =>
-                      msgs.map((msg) =>
-                        msg.id === assistantMessageId
-                          ? { ...msg, content: fullContent }
-                          : msg
-                      )
-                    );
+                    fullContent += `\nMappa aggiornata: ${describeMapUpdate(event.action?.type)}`;
+                    setMessages((msgs) => msgs.map((msg) => msg.id === assistantMessageId ? { ...msg, content: fullContent } : msg));
                   } catch (error) {
                     console.warn('Cesium action failed:', error);
                   }
                   break;
-
                 case 'confirmation_required':
-                  fullContent += `\n⚠️ Conferma richiesta: ${event.operation?.summary || 'operazione pending'}\n`;
-                  setMessages((msgs) =>
-                    msgs.map((msg) =>
-                      msg.id === assistantMessageId
-                        ? { ...msg, content: fullContent }
-                        : msg
-                    )
-                  );
+                  fullContent += `\nConferma richiesta: ${event.operation?.summary || 'operazione pending'}\n`;
+                  setMessages((msgs) => msgs.map((msg) => msg.id === assistantMessageId ? { ...msg, content: fullContent } : msg));
                   break;
-                  
                 case 'memory_usage':
                   setMemoryUsage(event.percentage);
                   break;
-
                 case 'memory_error':
-                  if (typeof event.error === 'string') {
-                    setMemoryWarning(event.error);
-                  }
+                  if (typeof event.error === 'string') setMemoryWarning(event.error);
                   break;
-                  
                 case 'content':
                   fullContent += event.chunk;
-                  setMessages((msgs) =>
-                    msgs.map((msg) =>
-                      msg.id === assistantMessageId
-                        ? { ...msg, content: fullContent }
-                        : msg
-                    )
-                  );
+                  setMessages((msgs) => msgs.map((msg) => msg.id === assistantMessageId ? { ...msg, content: fullContent } : msg));
                   break;
-                  
                 case 'error':
                   console.error('Orchestration error:', event.error);
-                  fullContent += `\n❌ Errore: ${event.error}`;
-                  setMessages((msgs) =>
-                    msgs.map((msg) =>
-                      msg.id === assistantMessageId
-                        ? { ...msg, content: fullContent, isStreaming: false }
-                        : msg
-                    )
-                  );
+                  fullContent += `\nErrore: ${event.error}`;
+                  setMessages((msgs) => msgs.map((msg) => msg.id === assistantMessageId ? { ...msg, content: fullContent, isStreaming: false } : msg));
                   setIsLoading(false);
                   break;
-
                 case 'simulation_control':
                   if (typeof event.action === 'string') {
                     onSimulationControl?.({
@@ -370,14 +328,8 @@ export function AgentChat({
                       mode: typeof event.mode === 'string' ? event.mode : undefined,
                       source: typeof event.source === 'string' ? event.source : undefined,
                     });
-                    fullContent += `\n🎯 Comando simulazione: ${event.action}`;
-                    setMessages((msgs) =>
-                      msgs.map((msg) =>
-                        msg.id === assistantMessageId
-                          ? { ...msg, content: fullContent }
-                          : msg
-                      )
-                    );
+                    fullContent += `\nComando simulazione: ${event.action}`;
+                    setMessages((msgs) => msgs.map((msg) => msg.id === assistantMessageId ? { ...msg, content: fullContent } : msg));
                   }
                   break;
               }
@@ -393,36 +345,22 @@ export function AgentChat({
       const errorMessage =
         error instanceof DOMException && error.name === 'AbortError'
           ? 'Timeout: nessuna risposta dal backend entro il limite previsto.'
-          : error instanceof Error
-            ? error.message
-            : 'Errore sconosciuto';
-      setMessages((msgs) =>
-        msgs.map((msg) =>
-          msg.id === assistantMessageId
-            ? {
-                ...msg,
-                content: `❌ Errore: ${errorMessage}`,
-                isStreaming: false,
-              }
-            : msg
-        )
-      );
+          : error instanceof Error ? error.message : 'Errore sconosciuto';
+      setMessages((msgs) => msgs.map((msg) => msg.id === assistantMessageId ? { ...msg, content: `Errore: ${errorMessage}`, isStreaming: false } : msg));
       setIsLoading(false);
       setShowAgentTimeline(false);
     } finally {
-      if (connectTimeout) {
-        clearTimeout(connectTimeout);
-      }
+      if (connectTimeout) clearTimeout(connectTimeout);
     }
   }, [onSimulationControl]);
 
-  const handleSend = useCallback(async () => {
-    if (!input.trim() || isLoading) return;
+  const handleSendText = useCallback(async (text: string) => {
+    if (!text.trim() || isLoading) return;
 
     const userMessage: ChatDisplayMessage = {
       id: Date.now().toString(),
       role: 'user',
-      content: input.trim(),
+      content: text.trim(),
       timestamp: new Date().toISOString(),
     };
 
@@ -433,28 +371,25 @@ export function AgentChat({
     setCurrentToolCalls([]);
     setMemoryWarning(null);
 
-    // Step-by-step mode can be explicitly requested in chat.
     if (isStepByStepRequest(userMessage.content) && !isStepByStepMode) {
       const conjunctionId = extractConjunctionId(userMessage.content) || selectedConjunction;
       const satelliteId = selectedSatellite;
       if (conjunctionId && satelliteId) {
         try {
           await startStepByStep(conjunctionId, satelliteId);
-          const assistantMessage: ChatDisplayMessage = {
+          setMessages((prev) => [...prev, {
             id: (Date.now() + 1).toString(),
             role: 'assistant',
             content: `Pipeline step-by-step avviata su ${conjunctionId}.`,
             timestamp: new Date().toISOString(),
-          };
-          setMessages((prev) => [...prev, assistantMessage]);
+          }]);
         } catch (error) {
-          const assistantMessage: ChatDisplayMessage = {
+          setMessages((prev) => [...prev, {
             id: (Date.now() + 1).toString(),
             role: 'assistant',
             content: `Impossibile avviare step-by-step: ${error instanceof Error ? error.message : 'errore sconosciuto'}`,
             timestamp: new Date().toISOString(),
-          };
-          setMessages((prev) => [...prev, assistantMessage]);
+          }]);
         } finally {
           setIsLoading(false);
         }
@@ -462,10 +397,7 @@ export function AgentChat({
       }
     }
 
-    const baseIntentMatch = requiresOrchestration(userMessage.content);
-    const routeToOrchestrator =
-      baseIntentMatch || isLikelyConfirmationMessage(userMessage.content);
-
+    const routeToOrchestrator = requiresOrchestration(userMessage.content) || isLikelyConfirmationMessage(userMessage.content);
     if (routeToOrchestrator) {
       await handleOrchestration(userMessage.content);
       return;
@@ -476,8 +408,7 @@ export function AgentChat({
 
       if (useStreaming) {
         const assistantMessageId = (Date.now() + 1).toString();
-        
-        const assistantMessage: ChatDisplayMessage = {
+        setMessages((prev) => [...prev, {
           id: assistantMessageId,
           role: 'assistant',
           content: '',
@@ -485,95 +416,36 @@ export function AgentChat({
           toolCalls: [],
           timestamp: new Date().toISOString(),
           isStreaming: true,
-        };
-        
-        setMessages((prev) => [...prev, assistantMessage]);
+        }]);
 
         sseClientRef.current = new SSEChatClient({
           onThinking: () => {},
-          
           onMessageChunk: (chunk: string, isComplete: boolean) => {
             setStreamingText((prev) => {
               const newText = prev + chunk;
-              setMessages((msgs) =>
-                msgs.map((msg) =>
-                  msg.id === assistantMessageId
-                    ? { ...msg, content: newText, isStreaming: !isComplete }
-                    : msg
-                )
-              );
+              setMessages((msgs) => msgs.map((msg) => msg.id === assistantMessageId ? { ...msg, content: newText, isStreaming: !isComplete } : msg));
               return newText;
             });
           },
-          
           onToolCall: (toolName: string, args: Record<string, unknown>) => {
             const toolCall = { tool_name: toolName, arguments: args };
             setCurrentToolCalls((prev) => [...prev, toolCall]);
-            setMessages((msgs) =>
-              msgs.map((msg) =>
-                msg.id === assistantMessageId
-                  ? { ...msg, toolCalls: [...(msg.toolCalls || []), toolCall] }
-                  : msg
-              )
-            );
+            setMessages((msgs) => msgs.map((msg) => msg.id === assistantMessageId ? { ...msg, toolCalls: [...(msg.toolCalls || []), toolCall] } : msg));
           },
-          
           onAction: (action: { type: string; payload: Record<string, unknown> }) => {
-            const cesiumAction: CesiumAction = {
-              type: action.type as CesiumAction['type'],
-              payload: action.payload,
-            };
-            try {
-              cesiumController.dispatch(cesiumAction);
-            } catch (error) {
-              console.warn('Cesium action failed (viewer not available):', error);
-            }
-            setMessages((msgs) =>
-              msgs.map((msg) =>
-                msg.id === assistantMessageId
-                  ? { ...msg, actions: [...(msg.actions || []), cesiumAction] }
-                  : msg
-              )
-            );
+            const cesiumAction: CesiumAction = { type: action.type as CesiumAction['type'], payload: action.payload };
+            try { cesiumController.dispatch(cesiumAction); } catch (error) { console.warn('Cesium action failed (viewer not available):', error); }
+            setMessages((msgs) => msgs.map((msg) => msg.id === assistantMessageId ? { ...msg, actions: [...(msg.actions || []), cesiumAction] } : msg));
           },
-
-          onSession: (sessionId: string) => {
-            if (sessionId) {
-              sessionRef.current = sessionId;
-            }
-          },
-
-          onMemoryUsage: (percentage: number) => {
-            setMemoryUsage(percentage);
-          },
-
-          onMemoryError: (error: string) => {
-            setMemoryWarning(error);
-          },
-          
+          onSession: (sessionId: string) => { if (sessionId) sessionRef.current = sessionId; },
+          onMemoryUsage: (percentage: number) => { setMemoryUsage(percentage); },
+          onMemoryError: (error: string) => { setMemoryWarning(error); },
           onError: (error: string, details?: string) => {
             console.warn('SSE Error:', error, details);
-            setMessages((msgs) =>
-              msgs.map((msg) =>
-                msg.id === assistantMessageId
-                  ? { ...msg, content: msg.content + `\n\nError: ${error}`, isStreaming: false }
-                  : msg
-              )
-            );
+            setMessages((msgs) => msgs.map((msg) => msg.id === assistantMessageId ? { ...msg, content: msg.content + `\n\nError: ${error}`, isStreaming: false } : msg));
           },
-          
           onDone: (finalMessage: string, actionsCount: number) => {
-            setMessages((msgs) =>
-              msgs.map((msg) =>
-                msg.id === assistantMessageId
-                  ? { 
-                      ...msg, 
-                      content: finalMessage || msg.content,
-                      isStreaming: false,
-                    }
-                  : msg
-              )
-            );
+            setMessages((msgs) => msgs.map((msg) => msg.id === assistantMessageId ? { ...msg, content: finalMessage || msg.content, isStreaming: false } : msg));
             setIsLoading(false);
           },
         });
@@ -583,55 +455,41 @@ export function AgentChat({
           sceneState as unknown as Record<string, unknown>,
           sessionRef.current,
         );
-        
-        } else if (onSendMessage) {
+      } else if (onSendMessage) {
         const response = await onSendMessage(userMessage.content, sceneState as unknown as Record<string, unknown>);
-        
-        const assistantMessage: ChatDisplayMessage = {
+        setMessages((prev) => [...prev, {
           id: (Date.now() + 1).toString(),
           role: 'assistant',
           content: response.message,
           actions: response.actions,
           timestamp: new Date().toISOString(),
-        };
-        
-        setMessages((prev) => [...prev, assistantMessage]);
-        
+        }]);
         if (response.actions && response.actions.length > 0) {
-          try {
-            cesiumController.dispatchAll(response.actions);
-          } catch (error) {
-            console.warn('Cesium actions failed (viewer not available):', error);
-          }
+          try { cesiumController.dispatchAll(response.actions); } catch (error) { console.warn('Cesium actions failed (viewer not available):', error); }
         }
-        
         setIsLoading(false);
       } else {
         await new Promise((resolve) => setTimeout(resolve, 1000));
-        
-        const mockResponse: ChatDisplayMessage = {
+        setMessages((prev) => [...prev, {
           id: (Date.now() + 1).toString(),
           role: 'assistant',
           content: `Analizzando la richiesta: "${userMessage.content}"\n\nPer procedere con la simulazione, ho bisogno di ulteriori dettagli sui parametri desiderati.`,
           timestamp: new Date().toISOString(),
-        };
-        setMessages((prev) => [...prev, mockResponse]);
+        }]);
         setIsLoading(false);
       }
     } catch (error) {
       console.warn('Chat error:', error);
-      const errorMessage: ChatDisplayMessage = {
+      setMessages((prev) => [...prev, {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
         content: `Errore: ${error instanceof Error ? error.message : 'Errore sconosciuto'}`,
         timestamp: new Date().toISOString(),
-      };
-      setMessages((prev) => [...prev, errorMessage]);
+      }]);
       setIsLoading(false);
     }
   }, [
     handleOrchestration,
-    input,
     isLoading,
     isStepByStepMode,
     onSendMessage,
@@ -641,21 +499,16 @@ export function AgentChat({
     useStreaming,
   ]);
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSend();
-    }
-  };
+  const handlePromptSubmit = useCallback((message: PromptInputMessage) => {
+    if (!message.text?.trim()) return;
+    handleSendText(message.text);
+  }, [handleSendText]);
 
   const toggleActions = (messageId: string) => {
     setExpandedActions((prev) => {
       const next = new Set(prev);
-      if (next.has(messageId)) {
-        next.delete(messageId);
-      } else {
-        next.add(messageId);
-      }
+      if (next.has(messageId)) next.delete(messageId);
+      else next.add(messageId);
       return next;
     });
   };
@@ -663,66 +516,14 @@ export function AgentChat({
   const toggleTools = (messageId: string) => {
     setExpandedTools((prev) => {
       const next = new Set(prev);
-      if (next.has(messageId)) {
-        next.delete(messageId);
-      } else {
-        next.add(messageId);
-      }
+      if (next.has(messageId)) next.delete(messageId);
+      else next.add(messageId);
       return next;
     });
   };
 
-  const formatAction = (action: CesiumAction): string => {
-    switch (action.type) {
-      case 'cesium.setClock':
-        return `⏱️ Set Clock: ${action.payload.multiplier}x`;
-      case 'cesium.loadCzml':
-        return `📡 Load CZML: "${String(action.payload.layerId)}"`;
-      case 'cesium.addEntity':
-        return `🛰️ Add ${String(action.payload.entityType)}: ${String(action.payload.name)}`;
-      case 'cesium.flyTo':
-        const coords = action.payload.entityId 
-          ? `entity: ${String(action.payload.entityId)}`
-          : `(${Number(action.payload.longitude).toFixed(2)}, ${Number(action.payload.latitude).toFixed(2)})`;
-        return `🎯 FlyTo: ${coords}`;
-      case 'cesium.toggle':
-        const toggles = [];
-        if (action.payload.showOrbits !== undefined) toggles.push(`orbits: ${action.payload.showOrbits ? 'ON' : 'OFF'}`);
-        if (action.payload.showCoverage !== undefined) toggles.push(`coverage: ${action.payload.showCoverage ? 'ON' : 'OFF'}`);
-        return `🔘 Toggle: ${toggles.join(', ')}`;
-      case 'cesium.removeLayer':
-        return `🗑️ Remove Layer: ${String(action.payload.layerId)}`;
-      case 'cesium.setSelected':
-        return `👆 Select: ${action.payload.entityId ? String(action.payload.entityId) : 'none'}`;
-      default:
-        return `❓ Unknown action`;
-    }
-  };
-
-  const formatToolCall = (toolCall: { tool_name: string; arguments: Record<string, unknown> }): string => {
-    const args = Object.entries(toolCall.arguments)
-      .map(([key, value]) => `${key}=${JSON.stringify(value)}`)
-      .join(', ');
-    return `🔧 ${toolCall.tool_name}(${args})`;
-  };
-
-  const quickPrompts = [
-    'Simula 2 ore con 3 satelliti',
-    'Mostra access windows a Fucino',
-    'Fly to ISS',
-    'Calcola conjunctions',
-    'Analizza congiunzione CONJ-2024-001',
-  ];
-
-  const handleQuickPrompt = (prompt: string) => {
-    setInput(prompt);
-  };
-
   const handleNewSession = useCallback(() => {
-    if (isLoading) {
-      return;
-    }
-
+    if (isLoading) return;
     sseClientRef.current?.close();
     sessionRef.current = generateSessionId();
     mapSessionRef.current = generateSessionId();
@@ -738,211 +539,174 @@ export function AgentChat({
     setShowAgentTimeline(false);
   }, [isLoading]);
 
-   return (
-      <div className="flex flex-col h-full glass-panel">
-        <div className="p-3 border-b border-sda-border-default/50">
-          <div className="flex items-center justify-between mb-2">
-            <h2 className="text-lg font-semibold text-sda-text-primary flex items-center gap-2">
-              <Icon icon="chat" className="text-sda-accent-cyan" />
-              AI Assistant
-            </h2>
-            <Button
-              small
-              minimal
-              icon="reset"
-              onClick={handleNewSession}
-              disabled={isLoading}
-            >
-              New Session
-            </Button>
-          </div>
-          <div className="flex items-center gap-3 mb-2">
+  const chatStatus = isLoading ? (streamingText ? 'streaming' as const : 'submitted' as const) : ('ready' as const);
+
+  return (
+    <TooltipProvider>
+      <div className="flex flex-col h-full">
+        {/* Compact status bar */}
+        <div className="flex items-center justify-between px-3 py-2 border-b border-sda-border-default/30">
+          <div className="flex items-center gap-2">
             {useStreaming && (
-              <Tag minimal intent="success">
-                <Icon icon="satellite" size={10} className="mr-1" /> SSE
+              <Tag minimal intent="success" className="!text-[10px] !px-1.5 !py-0 !min-h-0">
+                <Icon icon="satellite" size={8} className="mr-0.5" /> SSE
               </Tag>
             )}
             <MemoryIndicator percentage={memoryUsage} />
             {memoryWarning && (
-              <Tag minimal intent="warning">
-                <Icon icon="warning-sign" size={10} className="mr-1" />
-                Memory degraded
+              <Tag minimal intent="warning" className="!text-[10px] !px-1.5 !py-0 !min-h-0">
+                <Icon icon="warning-sign" size={8} className="mr-0.5" /> Mem
               </Tag>
             )}
           </div>
-          {memoryWarning && (
-            <p className="text-xs text-orange-300 mb-2">{memoryWarning}</p>
-          )}
-          <p className="text-xs text-sda-text-muted">Ask for simulations, analysis, or map controls</p>
+          <button
+            onClick={handleNewSession}
+            disabled={isLoading}
+            className="p-1 rounded hover:bg-sda-bg-tertiary text-sda-text-muted hover:text-sda-text-primary transition-colors disabled:opacity-30"
+            title="New Session"
+          >
+            <RotateCcwIcon size={14} />
+          </button>
         </div>
-
-      <div className="flex-1 overflow-auto p-3 space-y-3">
-        {/* Agent Timeline */}
-        {showAgentTimeline && (
-          <AgentTimeline agents={activeAgents} />
-        )}
-        
-        {messages.length === 0 && (
-          <div className="text-center text-sda-text-muted py-8">
-            <Icon icon="chat" size={40} className="mb-2 opacity-50" />
-            <p className="text-sm">Start a conversation with the AI agent</p>
-            <p className="text-xs mt-1">Try asking for simulations or analysis</p>
-          </div>
+        {memoryWarning && (
+          <p className="text-[10px] text-orange-300 px-3 py-1">{memoryWarning}</p>
         )}
 
-        {messages.map((message) => (
-          <div key={message.id} className="space-y-2">
-            <div
-              className={`flex ${
-                message.role === 'user' ? 'justify-end' : 'justify-start'
-              }`}
-            >
-               <div
-                 className={`max-w-[85%] rounded-lg px-3 py-2 ${
-                   message.role === 'user'
-                     ? 'bg-sda-bg-tertiary text-sda-accent-blue'
-                     : 'bg-sda-bg-secondary text-sda-text-primary'
-                 }`}
-               >
-                <div className="text-sm">
-                  {message.role === 'assistant' ? (
-                    <MarkdownMessage content={message.content} />
-                  ) : (
-                    <div className="whitespace-pre-wrap">{message.content}</div>
-                  )}
-                  {message.isStreaming && (
-                    <span className="inline-block w-2 h-4 ml-1 bg-sda-accent-cyan animate-pulse" />
-                  )}
-                </div>
-                <div className="text-xs opacity-60 mt-1">
-                  {new Date(message.timestamp).toLocaleTimeString()}
-                </div>
-              </div>
-            </div>
+        {/* Messages area */}
+        <Conversation className="flex-1 min-h-0">
+          <ConversationContent className="gap-4 p-3">
+            {showAgentTimeline && <AgentTimeline agents={activeAgents} />}
 
-            {message.toolCalls && message.toolCalls.length > 0 && (
-              <div className="pl-4">
-                <Button
-                  small
-                  minimal
-                  icon={expandedTools.has(message.id) ? 'chevron-down' : 'chevron-right'}
-                  onClick={() => toggleTools(message.id)}
-                  className="text-sda-text-muted text-xs"
-                >
-                  Tools ({message.toolCalls.length})
-                </Button>
-                 <Collapse isOpen={expandedTools.has(message.id)}>
-                   <Card elevation={Elevation.ONE} className="mt-2 p-2 glass-panel">
-                     {message.toolCalls.map((toolCall, idx) => (
-                       <div
-                         key={idx}
-                         className="text-xs text-sda-text-secondary py-1 border-b border-sda-border-default last:border-0 font-mono"
-                       >
-                        {formatToolCall(toolCall)}
-                      </div>
-                    ))}
-                  </Card>
-                </Collapse>
+            {messages.length === 0 && (
+              <div className="flex flex-col items-center justify-center h-full text-center text-sda-text-muted py-8 gap-3">
+                <div className="w-10 h-10 rounded-full bg-sda-bg-tertiary flex items-center justify-center">
+                  <ZapIcon size={20} className="text-sda-accent-cyan" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-sda-text-secondary">AI Assistant</p>
+                  <p className="text-xs mt-0.5">Simulations, analysis, map controls</p>
+                </div>
+                <div className="flex flex-wrap gap-1.5 justify-center mt-2 max-w-[280px]">
+                  {quickPrompts.map((prompt) => (
+                    <button
+                      key={prompt}
+                      onClick={() => setInput(prompt)}
+                      className="text-[11px] px-2 py-1 rounded-md bg-sda-bg-tertiary text-sda-text-secondary hover:text-sda-text-primary hover:bg-sda-bg-elevated border border-sda-border-default/50 transition-colors"
+                    >
+                      {prompt}
+                    </button>
+                  ))}
+                </div>
               </div>
             )}
 
-            {message.actions && message.actions.length > 0 && (
-              <div className="pl-4">
-                <Button
-                  small
-                  minimal
-                  icon={expandedActions.has(message.id) ? 'chevron-down' : 'chevron-right'}
-                  onClick={() => toggleActions(message.id)}
-                  className="text-sda-text-muted text-xs"
-                >
-                  Actions ({message.actions.length})
-                </Button>
-                 <Collapse isOpen={expandedActions.has(message.id)}>
-                   <Card elevation={Elevation.ONE} className="mt-2 p-2 glass-panel">
-                     {message.actions.map((action, idx) => (
-                       <div
-                         key={idx}
-                         className="text-xs text-sda-text-secondary py-1 border-b border-sda-border-default last:border-0"
-                       >
-                        {formatAction(action)}
+            {messages.map((message) => (
+              <div key={message.id} className="space-y-1">
+                <Message from={message.role === 'system' ? 'assistant' : message.role}>
+                  <MessageContent>
+                    {message.role === 'assistant' ? (
+                      <div className="text-sm">
+                        <MessageResponse>{message.content}</MessageResponse>
+                        {message.isStreaming && (
+                          <span className="inline-block w-1.5 h-4 ml-0.5 bg-sda-accent-cyan animate-pulse rounded-sm" />
+                        )}
                       </div>
-                    ))}
-                  </Card>
-                </Collapse>
+                    ) : (
+                      <div className="text-sm whitespace-pre-wrap">{message.content}</div>
+                    )}
+                  </MessageContent>
+                </Message>
+
+                {/* Tool calls expandable */}
+                {message.toolCalls && message.toolCalls.length > 0 && (
+                  <div className="pl-1">
+                    <button
+                      onClick={() => toggleTools(message.id)}
+                      className="flex items-center gap-1 text-[11px] text-sda-text-muted hover:text-sda-text-secondary transition-colors py-0.5"
+                    >
+                      {expandedTools.has(message.id) ? <ChevronDownIcon size={12} /> : <ChevronRightIcon size={12} />}
+                      <WrenchIcon size={10} />
+                      Tools ({message.toolCalls.length})
+                    </button>
+                    {expandedTools.has(message.id) && (
+                      <div className="mt-1 rounded-md bg-sda-bg-primary/80 border border-sda-border-default/50 p-2">
+                        {message.toolCalls.map((toolCall, idx) => (
+                          <div key={idx} className="text-[11px] text-sda-text-secondary py-0.5 font-mono border-b border-sda-border-default/30 last:border-0">
+                            {formatToolCall(toolCall)}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Actions expandable */}
+                {message.actions && message.actions.length > 0 && (
+                  <div className="pl-1">
+                    <button
+                      onClick={() => toggleActions(message.id)}
+                      className="flex items-center gap-1 text-[11px] text-sda-text-muted hover:text-sda-text-secondary transition-colors py-0.5"
+                    >
+                      {expandedActions.has(message.id) ? <ChevronDownIcon size={12} /> : <ChevronRightIcon size={12} />}
+                      <ZapIcon size={10} />
+                      Actions ({message.actions.length})
+                    </button>
+                    {expandedActions.has(message.id) && (
+                      <div className="mt-1 rounded-md bg-sda-bg-primary/80 border border-sda-border-default/50 p-2">
+                        {message.actions.map((action, idx) => (
+                          <div key={idx} className="text-[11px] text-sda-text-secondary py-0.5 border-b border-sda-border-default/30 last:border-0">
+                            {formatAction(action)}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
-            )}
-          </div>
-        ))}
-
-         {isLoading && !streamingText && (
-           <div className="flex justify-start">
-             <div className="glass-panel rounded-lg px-3 py-2 flex items-center gap-2">
-              <Spinner size={16} />
-              <span className="text-sm text-sda-text-muted">AI is thinking...</span>
-            </div>
-          </div>
-        )}
-
-        {/* Detour Agent Pipeline Panel */}
-        {isStepByStepMode && (
-          <div className="mt-4">
-            <DetourAgentPanel
-              onStepComplete={(agent, approved) => {
-                console.log(`Step ${agent} ${approved ? 'approved' : 'rejected'}`);
-              }}
-              onPipelineComplete={(result) => {
-                console.log('Pipeline completed:', result);
-              }}
-              onPipelineCancelled={() => {
-                console.log('Pipeline cancelled');
-              }}
-            />
-          </div>
-        )}
-
-        <div ref={messagesEndRef} />
-      </div>
-
-      {messages.length === 0 && (
-        <div className="px-3 pb-2">
-          <p className="text-xs text-sda-text-muted mb-2">Quick prompts:</p>
-          <div className="flex flex-wrap gap-1">
-            {quickPrompts.map((prompt) => (
-              <Tag
-                key={prompt}
-                minimal
-                interactive
-                className="cursor-pointer text-xs"
-                onClick={() => handleQuickPrompt(prompt)}
-              >
-                {prompt}
-              </Tag>
             ))}
-          </div>
+
+            {isLoading && !streamingText && (
+              <div className="flex items-center gap-2 text-sda-text-muted">
+                <Spinner size={14} />
+                <span className="text-xs">Thinking...</span>
+              </div>
+            )}
+
+            {isStepByStepMode && (
+              <DetourAgentPanel
+                onStepComplete={(agent, approved) => console.log(`Step ${agent} ${approved ? 'approved' : 'rejected'}`)}
+                onPipelineComplete={(result) => console.log('Pipeline completed:', result)}
+                onPipelineCancelled={() => console.log('Pipeline cancelled')}
+              />
+            )}
+          </ConversationContent>
+          <ConversationScrollButton />
+        </Conversation>
+
+        {/* ai-elements PromptInput */}
+        <div className="border-t border-sda-border-default/30 [&_[data-slot=input-group]]:border-0 [&_[data-slot=input-group]]:shadow-none [&_[data-slot=input-group]]:ring-0">
+          <PromptInput onSubmit={handlePromptSubmit} className="!rounded-none !border-0">
+            <PromptInputBody>
+              <PromptInputTextarea
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                placeholder="Ask for a simulation, analysis, or map action..."
+                className="!min-h-10 !max-h-32 !text-sm !bg-transparent !border-0 !ring-0 focus:!ring-0 !shadow-none text-sda-text-primary placeholder:text-sda-text-muted"
+              />
+            </PromptInputBody>
+            <PromptInputFooter className="!py-1.5 !px-2">
+              <PromptInputTools>
+                <span className="text-[10px] text-sda-text-muted">Enter to send</span>
+              </PromptInputTools>
+              <PromptInputSubmit
+                disabled={!input.trim() && !isLoading}
+                status={chatStatus}
+                className="!h-7 !w-7 !bg-sda-accent-cyan hover:!bg-sda-accent-cyan/80 !text-black !rounded-md"
+              />
+            </PromptInputFooter>
+          </PromptInput>
         </div>
-      )}
-
-      <Divider />
-
-      <div className="p-3">
-        <InputGroup
-          placeholder="Ask for a simulation, analysis, or map action..."
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={handleKeyDown}
-          large
-          rightElement={
-            <Button
-              icon="send-message"
-              intent="primary"
-              minimal
-              onClick={handleSend}
-              disabled={!input.trim() || isLoading}
-            />
-          }
-          className="bg-sda-bg-primary"
-        />
       </div>
-    </div>
+    </TooltipProvider>
   );
 }

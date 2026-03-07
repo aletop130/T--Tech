@@ -14,7 +14,7 @@ from app.core.security import TokenData
 from app.core.exceptions import NotFoundError
 from app.services.ontology import OntologyService
 from app.services.debris import DebrisService
-from app.services.celestrack import CelesTrackService, get_celestrack_service, FAMOUS_SATELLITES, ALLIED_SATELLITES, ENEMY_SATELLITES
+from app.services.celestrack import CelesTrackService, get_celestrack_service, FAMOUS_SATELLITES, ALLIED_SATELLITES, ENEMY_SATELLITES, CELESTRAK_GROUPS
 from app.services.debris_import import fetch_debris_tle, import_debris
 from app.physics.propagator import propagate_tle
 from app.schemas.common import PaginatedResponse
@@ -39,6 +39,10 @@ from app.schemas.ontology import (
     CelestrackFetchRequest,
     CelestrackFetchResponse,
     CelestrackRefreshResponse,
+    CelestrackGroupFetchRequest,
+    CelestrackSearchRequest,
+    CelestrackGroupPreviewResponse,
+    CelestrackGroupsResponse,
     DebrisResponse,
     DebrisObject,
     DebrisOrbitInfo,
@@ -327,6 +331,71 @@ async def create_satellite(
         tenant_id=user.tenant_id,
         user_id=user.sub,
     )
+
+
+@router.get("/satellites/celestrak-groups", response_model=CelestrackGroupsResponse)
+async def get_celestrak_groups(
+    user: Annotated[TokenData, Depends(get_current_user)],
+):
+    """Return the catalog of CelesTrak satellite groups."""
+    return CelestrackGroupsResponse(categories=CELESTRAK_GROUPS)
+
+
+@router.post("/satellites/preview-group", response_model=CelestrackGroupPreviewResponse)
+async def preview_celestrak_group(
+    data: CelestrackGroupFetchRequest,
+    user: Annotated[TokenData, Depends(get_current_user)],
+):
+    """Preview satellites in a CelesTrak group (no DB write)."""
+    celestrack = get_celestrack_service()
+    try:
+        result = await celestrack.preview_group(data.group)
+        return CelestrackGroupPreviewResponse(**result)
+    finally:
+        await celestrack.close()
+
+
+@router.post("/satellites/fetch-group", response_model=CelestrackFetchResponse, status_code=201)
+async def fetch_celestrak_group(
+    data: CelestrackGroupFetchRequest,
+    user: Annotated[TokenData, Depends(get_current_user)],
+):
+    """Fetch and store all satellites from a CelesTrak group."""
+    celestrack = get_celestrack_service()
+    try:
+        result = await celestrack.fetch_and_store_by_group(
+            group=data.group,
+            tenant_id=user.tenant_id,
+            user_id=user.sub,
+        )
+        return CelestrackFetchResponse(
+            success=result.get("success", False),
+            message=f"Group '{data.group}': created {result.get('satellites_created', 0)}, updated {result.get('satellites_updated', 0)}",
+            satellites_created=result.get("satellites_created", 0),
+            satellites_updated=result.get("satellites_updated", 0),
+            satellite_ids=result.get("satellite_ids", []),
+            errors=result.get("errors", []),
+        )
+    finally:
+        await celestrack.close()
+
+
+@router.post("/satellites/search-celestrak", response_model=CelestrackGroupPreviewResponse)
+async def search_celestrak(
+    data: CelestrackSearchRequest,
+    user: Annotated[TokenData, Depends(get_current_user)],
+):
+    """Search CelesTrak by satellite name."""
+    celestrack = get_celestrack_service()
+    try:
+        result = await celestrack.search_celestrak(data.name)
+        return CelestrackGroupPreviewResponse(
+            group=result.get("query", data.name),
+            count=result.get("count", 0),
+            satellites=result.get("satellites", []),
+        )
+    finally:
+        await celestrack.close()
 
 
 @router.get("/satellites/{satellite_id}", response_model=SatelliteDetail)

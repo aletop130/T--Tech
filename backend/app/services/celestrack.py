@@ -57,14 +57,106 @@ ENEMY_SATELLITES = {
 # Backward compatibility - combine all for existing references
 FAMOUS_SATELLITES = {**ALLIED_SATELLITES, **ENEMY_SATELLITES}
 
+# CelesTrak group catalog for browsing
+CELESTRAK_GROUPS: dict[str, dict[str, str]] = {
+    "Special Interest": {
+        "last-30-days": "Last 30 Days",
+        "stations": "Space Stations",
+        "visual": "Brightest (Visual)",
+        "active": "Active Satellites",
+        "analyst": "Analyst Satellites",
+    },
+    "Debris": {
+        "cosmos-1408-debris": "COSMOS 1408 Debris",
+        "fengyun-1c-debris": "Fengyun 1C Debris",
+        "iridium-33-debris": "Iridium 33 Debris",
+        "cosmos-2251-debris": "COSMOS 2251 Debris",
+    },
+    "Weather": {
+        "weather": "Weather",
+        "noaa": "NOAA",
+        "goes": "GOES",
+        "resource": "Earth Resources",
+        "sarsat": "Search & Rescue (SARSAT)",
+    },
+    "Communications": {
+        "geo": "Geostationary",
+        "intelsat": "Intelsat",
+        "ses": "SES",
+        "starlink": "Starlink",
+        "oneweb": "OneWeb",
+        "iridium-NEXT": "Iridium NEXT",
+        "orbcomm": "Orbcomm",
+        "globalstar": "Globalstar",
+        "amateur": "Amateur Radio",
+    },
+    "Navigation": {
+        "gnss": "GNSS (All)",
+        "gps-ops": "GPS Operational",
+        "glo-ops": "GLONASS Operational",
+        "galileo": "Galileo",
+        "beidou": "Beidou",
+    },
+    "Science": {
+        "science": "Space & Earth Science",
+        "geodetic": "Geodetic",
+        "engineering": "Engineering",
+        "education": "Education",
+    },
+    "Military": {
+        "military": "Military",
+    },
+    "Other": {
+        "cubesat": "CubeSats",
+        "radar": "Radar Calibration",
+        "other": "Miscellaneous",
+    },
+}
+
 
 class CelesTrackClient:
     """HTTP client for CelesTrack API."""
-    
+
     def __init__(self, base_url: Optional[str] = None):
         self.base_url = base_url or settings.CELESTRACK_BASE_URL
         self.client = httpx.AsyncClient(timeout=30.0)
-    
+
+    @staticmethod
+    def _parse_tle_block(name: str, line1: str, line2: str) -> dict:
+        """Parse a single 3-line TLE block into a dict."""
+        # Extract NORAD ID from line 2 columns 3-7
+        norad_id = int(line2[2:7].strip())
+
+        # Parse epoch from line 1 (columns 19-32)
+        epoch_str = line1[18:32].strip()
+        year = int(epoch_str[0:2])
+        day_of_year = float(epoch_str[2:])
+
+        if year < 57:
+            year += 2000
+        else:
+            year += 1900
+
+        start_of_year = datetime(year, 1, 1)
+        epoch = start_of_year + timedelta(days=day_of_year - 1)
+
+        classification = line1[7:8].strip() or "U"
+        intl_designator = line1[9:17].strip()
+        element_set = int(line1[64:68].strip())
+        rev_num = int(line2[63:68].strip())
+
+        return {
+            "norad_id": norad_id,
+            "name": name,
+            "tle_line1": line1,
+            "tle_line2": line2,
+            "epoch": epoch,
+            "classification": classification,
+            "international_designator": intl_designator,
+            "element_set_number": element_set,
+            "revolution_number": rev_num,
+        }
+
     async def fetch_tle_by_norad_id(self, norad_id: int) -> Optional[dict]:
         """Fetch TLE data for a specific satellite by NORAD ID."""
         try:
@@ -73,72 +165,97 @@ class CelesTrackClient:
                 "CATNR": norad_id,
                 "FORMAT": "TLE"
             }
-            
+
             logger.info("Fetching TLE from CelesTrack", norad_id=norad_id)
             response = await self.client.get(url, params=params)
             response.raise_for_status()
-            
+
             tle_text = response.text.strip()
             if not tle_text or "No GP data found" in tle_text:
                 logger.warning("No TLE found for satellite", norad_id=norad_id)
                 return None
-            
+
             lines = tle_text.split('\n')
             if len(lines) < 3:
                 logger.warning("Invalid TLE format", norad_id=norad_id)
                 return None
-            
-            name = lines[0].strip()
-            line1 = lines[1].strip()
-            line2 = lines[2].strip()
-            
-            # Parse epoch from line 1 (columns 19-32)
-            epoch_str = line1[18:32].strip()
-            year = int(epoch_str[0:2])
-            day_of_year = float(epoch_str[2:])
-            
-            # Convert to full year
-            if year < 57:
-                year += 2000
-            else:
-                year += 1900
-            
-            # Calculate epoch datetime
-            start_of_year = datetime(year, 1, 1)
-            epoch = start_of_year + timedelta(days=day_of_year - 1)
-            
-            # Parse classification
-            classification = line1[7:8].strip() or "U"
-            
-            # Parse international designator
-            intl_designator = line1[9:17].strip()
-            
-            # Parse element set number
-            element_set = int(line1[64:68].strip())
-            
-            # Parse revolution number from line 2
-            rev_num = int(line2[63:68].strip())
-            
-            logger.info("TLE fetched successfully", norad_id=norad_id, epoch=epoch.isoformat())
-            
-            return {
-                "norad_id": norad_id,
-                "name": name,
-                "tle_line1": line1,
-                "tle_line2": line2,
-                "epoch": epoch,
-                "classification": classification,
-                "international_designator": intl_designator,
-                "element_set_number": element_set,
-                "revolution_number": rev_num,
-            }
-            
+
+            try:
+                result = self._parse_tle_block(lines[0].strip(), lines[1].strip(), lines[2].strip())
+                result["norad_id"] = norad_id  # Override with requested ID
+                logger.info("TLE fetched successfully", norad_id=norad_id, epoch=result["epoch"].isoformat())
+                return result
+            except Exception as e:
+                logger.warning("Failed to parse TLE block", norad_id=norad_id, error=str(e))
+                return None
+
         except httpx.HTTPStatusError as e:
             logger.error("HTTP error fetching TLE", norad_id=norad_id, error=str(e))
             return None
         except Exception as e:
             logger.error("Error fetching TLE", norad_id=norad_id, error=str(e))
             return None
+
+    async def fetch_tle_by_group(self, group: str) -> list[dict]:
+        """Fetch TLE data for all satellites in a CelesTrak group."""
+        try:
+            url = f"{self.base_url}/gp.php"
+            params = {"GROUP": group, "FORMAT": "TLE"}
+
+            logger.info("Fetching TLE group from CelesTrack", group=group)
+            response = await self.client.get(url, params=params, timeout=60.0)
+            response.raise_for_status()
+
+            tle_text = response.text.strip()
+            if not tle_text or "No GP data found" in tle_text:
+                logger.warning("No TLE found for group", group=group)
+                return []
+
+            lines = [l.rstrip() for l in tle_text.split('\n') if l.strip()]
+            results = []
+
+            for i in range(0, len(lines) - 2, 3):
+                try:
+                    result = self._parse_tle_block(lines[i].strip(), lines[i+1].strip(), lines[i+2].strip())
+                    results.append(result)
+                except Exception:
+                    continue
+
+            logger.info("Group TLEs fetched", group=group, count=len(results))
+            return results
+        except Exception as e:
+            logger.error("Error fetching TLE group", group=group, error=str(e))
+            return []
+
+    async def search_by_name(self, name: str) -> list[dict]:
+        """Search CelesTrak satellites by name."""
+        try:
+            url = f"{self.base_url}/gp.php"
+            params = {"NAME": name, "FORMAT": "TLE"}
+
+            logger.info("Searching CelesTrack by name", name=name)
+            response = await self.client.get(url, params=params, timeout=30.0)
+            response.raise_for_status()
+
+            tle_text = response.text.strip()
+            if not tle_text or "No GP data found" in tle_text:
+                return []
+
+            lines = [l.rstrip() for l in tle_text.split('\n') if l.strip()]
+            results = []
+
+            for i in range(0, len(lines) - 2, 3):
+                try:
+                    result = self._parse_tle_block(lines[i].strip(), lines[i+1].strip(), lines[i+2].strip())
+                    results.append(result)
+                except Exception:
+                    continue
+
+            logger.info("Name search results", name=name, count=len(results))
+            return results
+        except Exception as e:
+            logger.error("Error searching CelesTrack", name=name, error=str(e))
+            return []
     
     async def fetch_famous_satellites(self) -> list[dict]:
         """Fetch TLE data for the famous satellites (all factions)."""
@@ -639,6 +756,145 @@ class CelesTrackService:
             "errors": errors,
         }
     
+    async def preview_group(self, group: str) -> dict:
+        """Preview satellites in a CelesTrak group without storing."""
+        tle_data_list = await self.client.fetch_tle_by_group(group)
+        satellites = [
+            {"norad_id": d["norad_id"], "name": d["name"]}
+            for d in tle_data_list
+        ]
+        return {
+            "group": group,
+            "count": len(satellites),
+            "satellites": satellites,
+        }
+
+    async def search_celestrak(self, name: str) -> dict:
+        """Search CelesTrak by name without storing."""
+        tle_data_list = await self.client.search_by_name(name)
+        satellites = [
+            {"norad_id": d["norad_id"], "name": d["name"]}
+            for d in tle_data_list
+        ]
+        return {
+            "query": name,
+            "count": len(satellites),
+            "satellites": satellites,
+        }
+
+    async def fetch_and_store_by_group(
+        self,
+        group: str,
+        tenant_id: str,
+        user_id: Optional[str] = None,
+        db: Optional[AsyncSession] = None,
+    ) -> dict:
+        """Fetch satellites from a CelesTrak group and store in database."""
+        from app.services.ontology import OntologyService
+        from app.services.audit import AuditService
+        from app.db.base import async_session_factory
+        from app.schemas.ontology import SatelliteCreate, OrbitCreate
+
+        tle_data_list = await self.client.fetch_tle_by_group(group)
+
+        if not tle_data_list:
+            return {
+                "success": False,
+                "message": f"No TLE data fetched for group {group}",
+                "satellites_created": 0,
+                "satellites_updated": 0,
+                "errors": [],
+            }
+
+        created_count = 0
+        updated_count = 0
+        errors = []
+        satellite_ids = []
+
+        async def process_satellites(session):
+            nonlocal created_count, updated_count
+            audit = AuditService(session)
+            ontology = OntologyService(session, audit)
+
+            for tle_data in tle_data_list:
+                try:
+                    norad_id = tle_data["norad_id"]
+                    existing = await ontology.get_satellite_by_norad(norad_id, tenant_id)
+
+                    if existing:
+                        satellite_id = str(existing.id)
+                        orbit_data = OrbitCreate(
+                            satellite_id=satellite_id,
+                            epoch=tle_data["epoch"],
+                            tle_line1=tle_data["tle_line1"],
+                            tle_line2=tle_data["tle_line2"],
+                            source="celestrack",
+                            semi_major_axis_km=None,
+                            eccentricity=None,
+                            inclination_deg=None,
+                            raan_deg=None,
+                            arg_perigee_deg=None,
+                            mean_anomaly_deg=None,
+                            mean_motion_rev_day=None,
+                        )
+                        await ontology.create_orbit(orbit_data, tenant_id, user_id)
+                        updated_count += 1
+                        satellite_ids.append(satellite_id)
+                    else:
+                        sat_data = SatelliteCreate(
+                            norad_id=norad_id,
+                            name=tle_data.get("name", f"Satellite {norad_id}"),
+                            country=None,
+                            operator=None,
+                            classification=tle_data.get("classification", "unclassified"),
+                            international_designator=tle_data.get("international_designator"),
+                            is_active=True,
+                            mass_kg=None,
+                            rcs_m2=None,
+                            tags=[group],
+                        )
+
+                        satellite = await ontology.create_satellite(sat_data, tenant_id, user_id)
+                        satellite_id = str(satellite.id)
+
+                        orbit_data = OrbitCreate(
+                            satellite_id=satellite_id,
+                            epoch=tle_data["epoch"],
+                            tle_line1=tle_data["tle_line1"],
+                            tle_line2=tle_data["tle_line2"],
+                            source="celestrack",
+                            semi_major_axis_km=None,
+                            eccentricity=None,
+                            inclination_deg=None,
+                            raan_deg=None,
+                            arg_perigee_deg=None,
+                            mean_anomaly_deg=None,
+                            mean_motion_rev_day=None,
+                        )
+                        await ontology.create_orbit(orbit_data, tenant_id, user_id)
+                        created_count += 1
+                        satellite_ids.append(satellite_id)
+
+                except Exception as e:
+                    errors.append(f"Failed to process NORAD {tle_data.get('norad_id')}: {str(e)}")
+                    logger.error("Failed to store satellite from group", error=str(e), group=group)
+
+        if db:
+            await process_satellites(db)
+            await db.commit()
+        else:
+            async with async_session_factory() as session:
+                await process_satellites(session)
+                await session.commit()
+
+        return {
+            "success": True,
+            "satellites_created": created_count,
+            "satellites_updated": updated_count,
+            "satellite_ids": satellite_ids,
+            "errors": errors,
+        }
+
     async def close(self):
         """Close the service."""
         await self.client.close()

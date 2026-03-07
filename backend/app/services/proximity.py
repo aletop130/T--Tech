@@ -440,40 +440,47 @@ class ProximityDetectionService:
         approach_velocity_kms: float,
         is_hostile: bool,
         alert_level: str,
+        country_code: str = "",
+        rcs_size: str = "",
     ) -> float:
-        """Calculate threat score 0-100."""
-        score = 0.0
-        
-        # Distance factor (closer = higher score)
-        if distance_km <= 1:
-            score += 50
-        elif distance_km <= 5:
-            score += 40
-        elif distance_km <= 10:
-            score += 30
-        elif distance_km <= 25:
-            score += 20
-        else:
-            score += 10
-        
-        # Velocity factor (faster approach = higher score)
-        if approach_velocity_kms > 10:
-            score += 20
-        elif approach_velocity_kms > 5:
-            score += 15
-        elif approach_velocity_kms > 1:
-            score += 10
-        else:
-            score += 5
-        
-        # Hostile bonus
-        if is_hostile:
-            score += 20
-        
-        # Alert level bonus
-        if alert_level == 'critical':
-            score += 10
-        
+        """Calculate threat score 0-100 using Bayesian posterior when available.
+
+        Uses Bayesian scoring from the proximity threat model when country_code
+        is provided. Falls back to heuristic scoring otherwise.
+        """
+        try:
+            from app.physics.bayesian_scorer import score_satellite
+            posterior = score_satellite(distance_km, country_code or ("UNK" if not is_hostile else "PRC"), rcs_size)
+            # Convert 0-1 posterior to 0-100 scale
+            score = posterior * 100.0
+        except Exception:
+            # Fallback to heuristic scoring
+            score = 0.0
+            if distance_km <= 1:
+                score += 50
+            elif distance_km <= 5:
+                score += 40
+            elif distance_km <= 10:
+                score += 30
+            elif distance_km <= 25:
+                score += 20
+            else:
+                score += 10
+
+            if approach_velocity_kms > 10:
+                score += 20
+            elif approach_velocity_kms > 5:
+                score += 15
+            elif approach_velocity_kms > 1:
+                score += 10
+            else:
+                score += 5
+
+            if is_hostile:
+                score += 20
+            if alert_level == 'critical':
+                score += 10
+
         return min(score, 100)
     
     async def _get_active_event(

@@ -28,6 +28,28 @@
   --sda-accent-green: #3fb950;
   --sda-accent-yellow: #d29922;
   --sda-accent-red: #f85149;
+
+  /* shadcn/ui CSS variables (dark) */
+  --background: 0 0% 2%;
+  --foreground: 0 0% 94%;
+  --card: 0 0% 4%;
+  --card-foreground: 0 0% 94%;
+  --popover: 0 0% 4%;
+  --popover-foreground: 0 0% 94%;
+  --primary: 200 70% 52%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 0 0% 8%;
+  --secondary-foreground: 0 0% 94%;
+  --muted: 0 0% 10%;
+  --muted-foreground: 0 0% 63%;
+  --accent: 0 0% 10%;
+  --accent-foreground: 0 0% 94%;
+  --destructive: 0 84% 60%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 0 0% 16%;
+  --input: 0 0% 16%;
+  --ring: 200 70% 52%;
+  --radius: 0.5rem;
 }
 
 html {

@@ -50,7 +50,7 @@ export function MilitarySymbolLayer({ viewer, units }: MilitarySymbolLayerProps)
   }, []);
 
   useEffect(() => {
-    if (!viewer || !Cesium) return;
+    if (!viewer || !Cesium || !viewer.entities) return;
 
     const createdEntities: string[] = [];
 
