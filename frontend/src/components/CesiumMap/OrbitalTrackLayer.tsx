@@ -119,13 +119,24 @@ useEffect(() => {
   startIdx = ((startIdx % totalPoints) + totalPoints) % totalPoints;
 
   // Gather the visible points, wrapping around the array if needed.
+  // Filter out adjacent near-duplicate points to avoid Cesium's
+  // EllipsoidGeodesic minimum-granularity error.
   const visiblePoints: any[] = [];
   for (let i = 0; i < trailCount; i++) {
     const idx = (startIdx + i) % totalPoints;
-    visiblePoints.push(points[idx]);
+    const pt = points[idx];
+    if (visiblePoints.length > 0) {
+      const prev = visiblePoints[visiblePoints.length - 1];
+      const dx = pt.x - prev.x;
+      const dy = pt.y - prev.y;
+      const dz = pt.z - prev.z;
+      const distSq = dx * dx + dy * dy + dz * dz;
+      if (distSq < 100000) continue; // skip if < ~316 m apart to reduce triangulation artifacts
+    }
+    visiblePoints.push(new Cesium.Cartesian3(pt.x, pt.y, pt.z));
   }
 
-  const polylineColor = baseColor ?? Cesium.Color.WHITE;
+  const polylineColor = (baseColor ?? Cesium.Color.WHITE).withAlpha(0.12);
 
   // Unique ID – we can use the start time of the track to keep it stable
   const entityId = `orbit-track-${orbitTrack.timeStartMs}`;
@@ -134,19 +145,19 @@ useEffect(() => {
     polyline: {
       positions: visiblePoints,
       width: lineWidth,
-      material: new Cesium.PolylineGlowMaterialProperty({
-        glowPower: 0.2,
-        color: polylineColor,
-      }),
+      arcType: Cesium.ArcType.NONE,
+      material: new Cesium.ColorMaterialProperty(polylineColor),
       clampToGround: false,
     },
   });
   entityRef.current = entity;
 
   // Register a tick handler to update the visible segment as time progresses.
-const updateTrail = () => {
+  // Only rebuild geometry when the discrete orbital index changes to avoid
+  // flooding the Cesium geometry worker with allocations (causes OOM).
+  let lastTrailStart = -1;
+  const updateTrail = () => {
       if (!viewer || !Cesium) return;
-      // Guard against missing Cesium clock (e.g., during unit tests)
       if (!viewer.clock || typeof viewer.clock.currentTime === "undefined") return;
       const simMs = Cesium.JulianDate.toDate(viewer.clock.currentTime).getTime();
       const elapsed = simMs - orbitTrack.timeStartMs;
@@ -154,10 +165,20 @@ const updateTrail = () => {
       let idx = Math.floor(idxFloat);
       idx = ((idx % totalPoints) + totalPoints) % totalPoints;
       const start = ((idx - behind) % totalPoints + totalPoints) % totalPoints;
+      if (start === lastTrailStart) return; // index unchanged, skip rebuild
+      lastTrailStart = start;
       const newPoints: any[] = [];
       for (let i = 0; i < trailCount; i++) {
         const ptIdx = (start + i) % totalPoints;
-        newPoints.push(points[ptIdx]);
+        const pt = points[ptIdx];
+        if (newPoints.length > 0) {
+          const prev = newPoints[newPoints.length - 1];
+          const dx = pt.x - prev.x;
+          const dy = pt.y - prev.y;
+          const dz = pt.z - prev.z;
+          if (dx * dx + dy * dy + dz * dz < 100000) continue;
+        }
+        newPoints.push(new Cesium.Cartesian3(pt.x, pt.y, pt.z));
       }
       if (entityRef.current && entityRef.current.polyline) {
         entityRef.current.polyline.positions = newPoints;
@@ -211,20 +232,14 @@ const updateTrail = () => {
         // Outside animation window – ensure base colour is restored and stop animating
         col = base;
         if (entityRef.current?.polyline) {
-          entityRef.current.polyline.material = new Cesium.PolylineGlowMaterialProperty({
-            glowPower: 0.2,
-            color: base,
-          });
+          entityRef.current.polyline.material = base.withAlpha(0.12);
         }
         return; // stop the loop
       }
 
       // Apply colour to the polyline material
       if (entityRef.current?.polyline) {
-        entityRef.current.polyline.material = new Cesium.PolylineGlowMaterialProperty({
-          glowPower: 0.2,
-          color: col,
-        });
+        entityRef.current.polyline.material = col.withAlpha(0.25);
       }
 
       animationHandle = requestAnimationFrame(update);

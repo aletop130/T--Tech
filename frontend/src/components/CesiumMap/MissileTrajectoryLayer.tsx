@@ -47,6 +47,7 @@ export function MissileTrajectoryLayer({
         polyline: {
           positions: m.trajectoryPoints,
           width: 2,
+          arcType: Cesium.ArcType.NONE,
           material: new Cesium.PolylineGlowMaterialProperty({
             glowPower: 0.15,
             color: isIntercepted
@@ -69,6 +70,7 @@ export function MissileTrajectoryLayer({
             polyline: {
               positions: trailPoints,
               width: 4,
+              arcType: Cesium.ArcType.NONE,
               material: new Cesium.PolylineGlowMaterialProperty({
                 glowPower: 0.3,
                 color: Cesium.Color.ORANGERED,
@@ -195,6 +197,7 @@ export function MissileTrajectoryLayer({
         polyline: {
           positions: [intc.startPosition, currentPos],
           width: 3,
+          arcType: Cesium.ArcType.NONE,
           material: new Cesium.PolylineGlowMaterialProperty({
             glowPower: 0.25,
             color: isHit

@@ -165,6 +165,75 @@ async def propose_mitigation(
     )
 
 
+@router.post("/chat/agent")
+async def agent_chat(
+    request: Request,
+    user: Annotated[TokenData, Depends(get_current_user)],
+    service: Annotated[AIService, Depends(get_ai_service)],
+):
+    """AEGIS agentic multi-turn chat with tool calling.
+
+    This endpoint runs the AEGIS agent loop which can:
+    - Execute multiple tool calls across up to 8 iterations
+    - Query data on-demand (satellites, conjunctions, threats, etc.)
+    - Control the Cesium map (camera, overlays, mood)
+    - Pause for dramatic effect and narrate analysis
+
+    Events streamed:
+    - agent_thinking: Agent is processing (step number)
+    - tool_call: Tool invocation with name and arguments
+    - tool_result: Tool execution result
+    - action: Cesium map action to dispatch
+    - agent_pause: Pause with countdown
+    - narration: Styled narrative text
+    - scene_mood: Scene atmosphere change
+    - content: Final response text chunks
+    - heartbeat: Keep-alive signal
+    - memory_usage: Context window percentage
+    - session: Session ID
+    - error: Error messages
+    """
+    body = await request.json()
+    messages = body.get("messages", [])
+    scene_state = body.get("sceneState", {})
+    session_id = body.get("session_id") or body.get("sessionId")
+
+    logger.info(
+        "agent_chat_request",
+        tenant_id=user.tenant_id,
+        user_id=user.sub,
+        session_id=session_id,
+        message_count=len(messages),
+    )
+
+    async def generate() -> AsyncGenerator[str, None]:
+        try:
+            async for data in service.stream_agentic_chat(
+                messages=messages,
+                scene_state=scene_state,
+                tenant_id=user.tenant_id,
+                session_id=session_id,
+                user_id=user.sub,
+            ):
+                if await request.is_disconnected():
+                    break
+                yield data
+        except asyncio.CancelledError:
+            return
+        except Exception as e:
+            yield f"data: {json.dumps({'type': 'error', 'error': str(e)})}\n\n"
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
 @router.post("/chat/orchestrate")
 async def orchestrate_chat(
     request: Request,

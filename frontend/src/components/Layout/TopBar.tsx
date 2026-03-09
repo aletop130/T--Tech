@@ -67,9 +67,9 @@ export function TopBar() {
   ) : undefined;
 
   return (
-    <header className="h-14 bg-sda-bg-secondary border-b border-sda-border-default flex items-center px-4 gap-4">
+    <header className="h-10 bg-sda-bg-secondary border-b border-sda-border-default flex items-center px-3 gap-3">
       {/* Global Search */}
-      <div className="flex-1 max-w-xl">
+      <div className="flex-1 max-w-md">
         <Popover
           content={searchResultsMenu}
           isOpen={searchResults.length > 0}
@@ -78,16 +78,18 @@ export function TopBar() {
           matchTargetWidth
         >
           <InputGroup
-            placeholder="Search satellites, stations, incidents... (Ctrl+K)"
+            placeholder="Search... (Ctrl+K)"
             leftIcon="search"
+            small
             value={searchQuery}
             onChange={(e) => handleSearch(e.target.value)}
             rightElement={
               isSearching ? (
-                <Button minimal loading />
+                <Button minimal loading small />
               ) : searchQuery ? (
                 <Button
                   minimal
+                  small
                   icon="cross"
                   onClick={() => {
                     setSearchQuery('');
@@ -100,16 +102,14 @@ export function TopBar() {
         </Popover>
       </div>
 
-      {/* Status Indicators */}
-      <div className="flex items-center gap-4">
-        <div className="flex items-center gap-2 text-sm">
-          <span className="w-2 h-2 rounded-full bg-sda-accent-green animate-pulse" />
-          <span className="text-sda-text-secondary">Systems Nominal</span>
-        </div>
+      {/* Status Indicator */}
+      <div className="flex items-center gap-1.5 text-xs">
+        <span className="w-1.5 h-1.5 rounded-full bg-sda-accent-green animate-pulse" />
+        <span className="text-sda-text-secondary">Nominal</span>
       </div>
 
       {/* Settings */}
-      <Button minimal icon="cog" onClick={() => window.location.href = '/admin'} />
+      <Button minimal small icon="cog" onClick={() => window.location.href = '/admin'} />
     </header>
   );
 }

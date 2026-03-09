@@ -151,7 +151,7 @@ services:
       target: dev
     container_name: sda-frontend
     environment:
-      - NEXT_PUBLIC_API_URL=http://localhost:8000
+      - NEXT_PUBLIC_API_URL=http://backend:8000
       - FRONTEND_MODE=${FRONTEND_MODE:-build}
       - DOCKER_ENV=1
     volumes:

@@ -2,7 +2,7 @@
 import asyncio
 import uuid
 from contextlib import asynccontextmanager
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
@@ -66,9 +66,9 @@ class LoggingContextMiddleware:
 
 
 async def _seed_initial_data():
-    """Seed ground stations, debris, and ground vehicles if the DB is empty."""
+    """Seed ground stations, debris, ground vehicles, and conjunctions if the DB is empty."""
     from app.db.base import async_session_factory
-    from app.db.models.ontology import GroundStation, Satellite, ObjectType
+    from app.db.models.ontology import GroundStation, Satellite, ObjectType, ConjunctionEvent
     from app.db.models.operations import PositionReport
     from app.services.audit import AuditService
     from app.services.ontology import OntologyService
@@ -99,6 +99,40 @@ async def _seed_initial_data():
                 await create_sensors_if_missing(ontology, tenant_id, user_id)
                 await session.commit()
                 logger.info("Seeded ground stations and sensors")
+
+            # --- Satellites (from CelesTrak) ---
+            sat_count = await session.scalar(
+                select(func.count()).select_from(Satellite).where(
+                    Satellite.tenant_id == tenant_id,
+                    Satellite.object_type != ObjectType.DEBRIS.value,
+                )
+            ) or 0
+            if sat_count == 0:
+                from app.services.celestrack import get_celestrack_service
+                celestrack = get_celestrack_service()
+                try:
+                    allied = await celestrack.fetch_and_store_allied_satellites(
+                        tenant_id=tenant_id, user_id=user_id, db=session,
+                    )
+                    enemy = await celestrack.fetch_and_store_enemy_satellites(
+                        tenant_id=tenant_id, user_id=user_id, db=session,
+                    )
+                    # Seed Italian and NATO allied satellites
+                    from app.services.celestrack import ITALIAN_SATELLITES, NATO_ALLIED_SATELLITES
+                    italian_ids = list(ITALIAN_SATELLITES.keys())
+                    nato_ids = list(NATO_ALLIED_SATELLITES.keys())
+                    intl = await celestrack.fetch_and_store_satellites(
+                        norad_ids=italian_ids + nato_ids,
+                        tenant_id=tenant_id, user_id=user_id, db=session,
+                    )
+                    logger.info(
+                        "Seeded satellites from CelesTrak",
+                        allied_created=allied.get("satellites_created", 0),
+                        enemy_created=enemy.get("satellites_created", 0),
+                        intl_created=intl.get("satellites_created", 0),
+                    )
+                finally:
+                    await celestrack.close()
 
             # --- Debris ---
             debris_count = await session.scalar(
@@ -150,6 +184,53 @@ async def _seed_initial_data():
                     ))
                 await session.commit()
                 logger.info("Seeded ground vehicles", count=len(vehicles))
+
+            # --- Conjunction Events ---
+            conj_count = await session.scalar(
+                select(func.count()).select_from(ConjunctionEvent).where(
+                    ConjunctionEvent.tenant_id == tenant_id
+                )
+            ) or 0
+            if conj_count == 0:
+                import random as _rng
+                sat_rows = (await session.execute(
+                    select(Satellite.id, Satellite.norad_id).where(
+                        Satellite.tenant_id == tenant_id,
+                        Satellite.object_type != ObjectType.DEBRIS.value,
+                    ).limit(60)
+                )).all()
+                if len(sat_rows) >= 2:
+                    now = datetime.utcnow()
+                    conj_created = 0
+                    for _ in range(25):
+                        s1, s2 = _rng.sample(list(sat_rows), 2)
+                        miss_dist = _rng.uniform(0.05, 12.0)
+                        risk = "low"
+                        if miss_dist < 0.5:
+                            risk = "critical"
+                        elif miss_dist < 2.0:
+                            risk = "high"
+                        elif miss_dist < 5.0:
+                            risk = "medium"
+                        tca = now + timedelta(hours=_rng.randint(1, 96))
+                        session.add(ConjunctionEvent(
+                            id=str(uuid.uuid4()),
+                            tenant_id=tenant_id,
+                            primary_object_id=s1.id,
+                            secondary_object_id=s2.id,
+                            tca=tca,
+                            miss_distance_km=round(miss_dist, 3),
+                            risk_level=risk,
+                            risk_score=round(100 - miss_dist * 8, 1),
+                            screening_volume_km=10.0,
+                            is_actionable=risk in ("high", "critical"),
+                            created_at=now,
+                            updated_at=now,
+                            created_by=user_id,
+                        ))
+                        conj_created += 1
+                    await session.commit()
+                    logger.info("Seeded conjunction events", count=conj_created)
 
     except Exception as exc:
         logger.error("Failed to seed initial data", error=str(exc), exc_info=True)

@@ -6,6 +6,8 @@ aggregates by country and operator, and caches for 6 hours.
 
 from __future__ import annotations
 
+import csv
+import io
 import time
 from typing import Optional
 
@@ -16,10 +18,16 @@ from app.core.logging import get_logger
 logger = get_logger(__name__)
 
 CELESTRAK_GP_URL = "https://celestrak.org/NORAD/elements/gp.php?GROUP=ACTIVE&FORMAT=JSON"
+CELESTRAK_SATCAT_CSV_URL = "https://celestrak.org/pub/satcat.csv"
 
 CACHE_TTL = 6 * 3600  # 6 hours
 
 _cache: dict[str, object] = {
+    "data": None,
+    "timestamp": 0.0,
+}
+
+_satcat_cache: dict[str, object] = {
     "data": None,
     "timestamp": 0.0,
 }
@@ -168,6 +176,42 @@ async def _fetch_gp_data() -> list[dict]:
         return []
 
 
+async def _fetch_satcat_lookup() -> dict[int, dict]:
+    """Fetch SATCAT CSV from CelesTrak as a lookup table keyed by NORAD_CAT_ID."""
+    now = time.time()
+    if _satcat_cache["data"] is not None and (now - _satcat_cache["timestamp"]) < CACHE_TTL:
+        return _satcat_cache["data"]  # type: ignore[return-value]
+
+    logger.info("Fetching SATCAT CSV from CelesTrak...")
+    try:
+        async with httpx.AsyncClient(timeout=90.0) as client:
+            resp = await client.get(CELESTRAK_SATCAT_CSV_URL)
+            resp.raise_for_status()
+            text = resp.text
+
+            lookup: dict[int, dict] = {}
+            reader = csv.DictReader(io.StringIO(text))
+            for row in reader:
+                try:
+                    norad_id = int(row.get("NORAD_CAT_ID", "").strip())
+                    lookup[norad_id] = {
+                        "owner": (row.get("OWNER") or "UNK").strip(),
+                        "object_type": (row.get("OBJECT_TYPE") or "").strip(),
+                    }
+                except (ValueError, TypeError):
+                    continue
+
+            _satcat_cache["data"] = lookup
+            _satcat_cache["timestamp"] = now
+            logger.info(f"Cached SATCAT lookup with {len(lookup)} entries")
+            return lookup
+    except Exception as e:
+        logger.error(f"Failed to fetch SATCAT CSV: {e}")
+        if _satcat_cache["data"] is not None:
+            return _satcat_cache["data"]  # type: ignore[return-value]
+        return {}
+
+
 def _country_name(code: str) -> str:
     return COUNTRY_NAMES.get(code, code)
 
@@ -175,6 +219,7 @@ def _country_name(code: str) -> str:
 async def get_global_summary() -> dict:
     """Build the global summary with all countries."""
     records = await _fetch_gp_data()
+    satcat_lookup = await _fetch_satcat_lookup()
 
     countries: dict[str, dict] = {}
     orbit_dist = {"LEO": 0, "MEO": 0, "GEO": 0, "HEO": 0}
@@ -183,11 +228,13 @@ async def get_global_summary() -> dict:
     total_debris = 0
 
     for rec in records:
-        cc = (rec.get("COUNTRY_CODE") or rec.get("TLE_LINE0", "")[:5] or "UNK").strip()
+        norad_id = rec.get("NORAD_CAT_ID")
+        satcat_entry = satcat_lookup.get(norad_id, {}) if norad_id else {}
+        cc = satcat_entry.get("owner") or (rec.get("COUNTRY_CODE") or "UNK").strip()
         if not cc:
             cc = "UNK"
 
-        obj_type = _classify_object_type(rec.get("OBJECT_TYPE"))
+        obj_type = _classify_object_type(satcat_entry.get("object_type") or rec.get("OBJECT_TYPE"))
         orbit_class = _classify_orbit(rec.get("MEAN_MOTION"), rec.get("ECCENTRICITY"))
 
         entry = countries.setdefault(cc, {
@@ -241,6 +288,7 @@ async def get_global_summary() -> dict:
 async def get_country_detail(country_code: str) -> dict:
     """Detailed breakdown for one country."""
     records = await _fetch_gp_data()
+    satcat_lookup = await _fetch_satcat_lookup()
 
     cc_upper = country_code.upper()
     summary = {
@@ -259,11 +307,13 @@ async def get_country_detail(country_code: str) -> dict:
     operators: dict[str, dict] = {}
 
     for rec in records:
-        rec_cc = (rec.get("COUNTRY_CODE") or "UNK").strip().upper()
+        norad_id = rec.get("NORAD_CAT_ID")
+        satcat_entry = satcat_lookup.get(norad_id, {}) if norad_id else {}
+        rec_cc = (satcat_entry.get("owner") or rec.get("COUNTRY_CODE") or "UNK").strip().upper()
         if rec_cc != cc_upper:
             continue
 
-        obj_type = _classify_object_type(rec.get("OBJECT_TYPE"))
+        obj_type = _classify_object_type(satcat_entry.get("object_type") or rec.get("OBJECT_TYPE"))
         orbit_class = _classify_orbit(rec.get("MEAN_MOTION"), rec.get("ECCENTRICITY"))
 
         summary["total_objects"] += 1
@@ -301,14 +351,17 @@ async def get_country_detail(country_code: str) -> dict:
 async def get_top_operators(limit: int = 50) -> dict:
     """Top operators across all countries."""
     records = await _fetch_gp_data()
+    satcat_lookup = await _fetch_satcat_lookup()
 
     operators: dict[str, dict] = {}
 
     for rec in records:
-        cc = (rec.get("COUNTRY_CODE") or "UNK").strip()
+        norad_id = rec.get("NORAD_CAT_ID")
+        satcat_entry = satcat_lookup.get(norad_id, {}) if norad_id else {}
+        cc = (satcat_entry.get("owner") or rec.get("COUNTRY_CODE") or "UNK").strip()
         name = rec.get("OBJECT_NAME", "Unknown")
         op_key = name.split()[0] if name else "Unknown"
-        obj_type = _classify_object_type(rec.get("OBJECT_TYPE"))
+        obj_type = _classify_object_type(satcat_entry.get("object_type") or rec.get("OBJECT_TYPE"))
 
         op_entry = operators.setdefault(op_key, {
             "operator_name": op_key,

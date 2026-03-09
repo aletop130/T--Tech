@@ -38,7 +38,7 @@ class LLMConfig:
     # Endpoint
     base_url: str = "https://api.regolo.ai/v1"
     api_key: str = "not-needed"
-    model: str = "gpt-oss-120b"
+    model: str = "qwen3.5-122b"
 
     # Generation parameters
     temperature: float = 0.3          # low for deterministic tool-calling
@@ -66,7 +66,7 @@ class LLMConfig:
             model=(
                 os.getenv("NEMOTRON_MODEL")
                 or os.getenv("REGOLO_MODEL")
-                or "gpt-oss-120b"
+                or "qwen3.5-122b"
             ),
             temperature=float(
                 os.getenv("NEMOTRON_TEMPERATURE")

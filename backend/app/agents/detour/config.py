@@ -21,7 +21,7 @@ class DetourLLMConfig:
     instance (``app.core.config``).  Defaults are enforced according to the
     implementation plan:
 
-    - model: ``gpt-oss-120b`` (or the value of ``REGOLO_MODEL``)
+    - model: ``qwen3.5-122b`` (or the value of ``REGOLO_MODEL``)
     - base_url: ``https://api.regolo.ai/v1`` (or ``REGOLO_BASE_URL``)
     - temperature: ``0.2`` – deterministic behaviour for agent prompts
     - max_model_len: ``8192`` (or ``DETOUR_REGOLO_MAX_MODEL_LEN``)
@@ -32,7 +32,7 @@ class DetourLLMConfig:
 
     # Core model settings – fall back to the specification defaults if the
     # environment variable is missing.
-    model: str = getattr(settings, "REGOLO_MODEL", "gpt-oss-120b")
+    model: str = getattr(settings, "REGOLO_MODEL", "qwen3.5-122b")
     base_url: str = getattr(settings, "REGOLO_BASE_URL", "https://api.regolo.ai/v1")
     api_key: str | None = getattr(settings, "REGOLO_API_KEY", None)
     # The implementation plan mandates a deterministic temperature of 0.2.

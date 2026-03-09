@@ -17,7 +17,12 @@ from typing import Dict, List, Optional, Tuple
 import httpx
 
 from app.physics.constants import MU_EARTH
-from app.services.celestrack import ALLIED_SATELLITES, ENEMY_SATELLITES
+from app.services.celestrack import (
+    ALLIED_SATELLITES,
+    ENEMY_SATELLITES,
+    ITALIAN_SATELLITES,
+    NATO_ALLIED_SATELLITES,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -119,9 +124,11 @@ class ManeuverDetectionService:
         self._all_maneuvers: List[dict] = []
 
     def _get_tracked_satellites(self) -> Dict[int, dict]:
-        """Get all tracked satellites (allied + enemy)."""
+        """Get all tracked satellites (allied + italian + nato + enemy)."""
         tracked = {}
         tracked.update(ALLIED_SATELLITES)
+        tracked.update(ITALIAN_SATELLITES)
+        tracked.update(NATO_ALLIED_SATELLITES)
         tracked.update(ENEMY_SATELLITES)
         return tracked
 

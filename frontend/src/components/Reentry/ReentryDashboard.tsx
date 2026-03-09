@@ -233,7 +233,7 @@ export function ReentryDashboard() {
                 No active reentry predictions at this time.
               </Callout>
             ) : (
-              <HTMLTable bordered condensed striped style={{ width: '100%' }}>
+              <HTMLTable bordered  striped style={{ width: '100%' }}>
                 <thead>
                   <tr>
                     <SortableHeader label="Name" sortKey="name" currentKey={sortKey} dir={sortDir} onSort={handleSort} />
@@ -285,7 +285,7 @@ export function ReentryDashboard() {
             {history.length === 0 ? (
               <Callout>No historical reentry data available.</Callout>
             ) : (
-              <HTMLTable bordered condensed striped style={{ width: '100%' }}>
+              <HTMLTable bordered  striped style={{ width: '100%' }}>
                 <thead>
                   <tr>
                     <th>Name</th>

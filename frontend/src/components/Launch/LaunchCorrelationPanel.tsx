@@ -56,7 +56,7 @@ function LaunchCard({ correlation }: { correlation: LaunchCorrelation }) {
             {launch.rocket_name && <span>| {launch.rocket_name}</span>}
             {launch.pad_name && <span>| {launch.pad_name}</span>}
             {launch.pad_country && (
-              <Tag minimal small style={{ fontSize: '10px' }}>{launch.pad_country}</Tag>
+              <Tag minimal  style={{ fontSize: '10px' }}>{launch.pad_country}</Tag>
             )}
           </div>
         </div>
@@ -78,7 +78,7 @@ function LaunchCard({ correlation }: { correlation: LaunchCorrelation }) {
 
       {launch.mission_orbit && (
         <div className="mt-1">
-          <Tag minimal small intent="primary" style={{ fontSize: '10px' }}>
+          <Tag minimal  intent="primary" style={{ fontSize: '10px' }}>
             {launch.mission_orbit}
           </Tag>
         </div>
@@ -142,17 +142,17 @@ function UpcomingLaunchCard({ launch }: { launch: LaunchInfo }) {
         {launch.rocket_name && <span>| {launch.rocket_name}</span>}
         {launch.pad_name && <span>| {launch.pad_name}</span>}
         {launch.pad_country && (
-          <Tag minimal small style={{ fontSize: '10px' }}>{launch.pad_country}</Tag>
+          <Tag minimal  style={{ fontSize: '10px' }}>{launch.pad_country}</Tag>
         )}
         {launch.mission_orbit && (
-          <Tag minimal small intent="primary" style={{ fontSize: '10px' }}>
+          <Tag minimal  intent="primary" style={{ fontSize: '10px' }}>
             {launch.mission_orbit}
           </Tag>
         )}
       </div>
       {launch.status && (
         <div className="mt-1">
-          <Tag minimal small intent={launch.status === 'Go for Launch' ? 'success' : 'none'} style={{ fontSize: '10px' }}>
+          <Tag minimal  intent={launch.status === 'Go for Launch' ? 'success' : 'none'} style={{ fontSize: '10px' }}>
             {launch.status}
           </Tag>
         </div>
@@ -303,8 +303,8 @@ export function LaunchCorrelationPanel() {
               </div>
               <div className="flex gap-2 text-xs" style={{ color: 'var(--sda-text-secondary)' }}>
                 {obj.epoch && <span>Epoch: {formatDate(obj.epoch)}</span>}
-                {obj.orbit_params?.orbit_type && (
-                  <Tag minimal small style={{ fontSize: '10px' }}>
+                {obj.orbit_params?.orbit_type !== undefined && obj.orbit_params?.orbit_type !== null && (
+                  <Tag minimal  style={{ fontSize: '10px' }}>
                     {String(obj.orbit_params.orbit_type)}
                   </Tag>
                 )}

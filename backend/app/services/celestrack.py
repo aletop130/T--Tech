@@ -2,6 +2,7 @@
 from datetime import datetime, timedelta
 from typing import Optional
 import httpx
+from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logging import get_logger
@@ -54,8 +55,35 @@ ENEMY_SATELLITES = {
     54216: {"name": "CONTACT-X2", "country": "Unknown", "operator": "Unknown", "faction": "enemy"},
 }
 
+# Italian satellites (ASI / Italian MoD) - Displayed as BLUE
+ITALIAN_SATELLITES = {
+    31598: {"name": "COSMO-SkyMed 1", "country": "Italy", "operator": "ASI/MoD", "faction": "allied"},
+    32376: {"name": "COSMO-SkyMed 2", "country": "Italy", "operator": "ASI/MoD", "faction": "allied"},
+    33412: {"name": "COSMO-SkyMed 3", "country": "Italy", "operator": "ASI/MoD", "faction": "allied"},
+    36599: {"name": "COSMO-SkyMed 4", "country": "Italy", "operator": "ASI/MoD", "faction": "allied"},
+    44873: {"name": "CSG-1", "country": "Italy", "operator": "ASI/MoD", "faction": "allied"},
+    51444: {"name": "CSG-2", "country": "Italy", "operator": "ASI/MoD", "faction": "allied"},
+    44072: {"name": "PRISMA", "country": "Italy", "operator": "ASI", "faction": "allied"},
+    42900: {"name": "OPTSAT-3000", "country": "Italy", "operator": "Italian MoD", "faction": "allied"},
+    39613: {"name": "ATHENA-FIDUS", "country": "Italy/France", "operator": "ASI/CNES", "faction": "allied"},
+    26694: {"name": "SICRAL-1", "country": "Italy", "operator": "Italian MoD", "faction": "allied"},
+    37605: {"name": "SICRAL-1B", "country": "Italy", "operator": "Italian MoD", "faction": "allied"},
+    40258: {"name": "SICRAL-2", "country": "Italy", "operator": "Italian MoD", "faction": "allied"},
+}
+
+# NATO Allied satellites (European key assets) - Displayed as BLUE
+NATO_ALLIED_SATELLITES = {
+    39634: {"name": "Sentinel-1A", "country": "Europe", "operator": "ESA", "faction": "allied"},
+    41456: {"name": "Sentinel-1B", "country": "Europe", "operator": "ESA", "faction": "allied"},
+    36793: {"name": "Pleiades-1A", "country": "France", "operator": "CNES", "faction": "allied"},
+    38012: {"name": "Pleiades-1B", "country": "France", "operator": "CNES", "faction": "allied"},
+    37846: {"name": "Galileo FOC-1", "country": "Europe", "operator": "ESA", "faction": "allied"},
+    38857: {"name": "Galileo FOC-2", "country": "Europe", "operator": "ESA", "faction": "allied"},
+    43234: {"name": "Carbonite-2", "country": "United Kingdom", "operator": "UK MoD", "faction": "allied"},
+}
+
 # Backward compatibility - combine all for existing references
-FAMOUS_SATELLITES = {**ALLIED_SATELLITES, **ENEMY_SATELLITES}
+FAMOUS_SATELLITES = {**ALLIED_SATELLITES, **ITALIAN_SATELLITES, **NATO_ALLIED_SATELLITES, **ENEMY_SATELLITES}
 
 # CelesTrak group catalog for browsing
 CELESTRAK_GROUPS: dict[str, dict[str, str]] = {
@@ -945,7 +973,7 @@ SENSORS = [
     {
         "name": "Space Surveillance Telescope",
         "code": "SST",
-        "sensor_type": "OPTICAL",
+        "sensor_type": "optical",
         "latitude": 32.24,
         "longitude": -106.38,
         "max_range_km": 36000,
@@ -959,82 +987,41 @@ SENSORS = [
 # Helper functions
 async def create_ground_stations_if_missing(ontology_service, tenant_id: str, user_id: Optional[str] = None):
     """Create ground stations in the database if they don't exist."""
-    from app.db.models.ontology import GroundStation
-    from sqlalchemy import select
-    
-    created = 0
-    for gs_data in GROUND_STATIONS:
-        # Check if ground station with this name already exists
-        stmt = select(GroundStation).where(
-            and_(
-                GroundStation.tenant_id == tenant_id,
-                GroundStation.name == gs_data["name"]
-            )
-        )
-        result = await ontology_service.db.execute(stmt)
-        existing = result.scalar_one_or_none()
-        
-        if not existing:
-            await ontology_service.create_ground_station(gs_data, tenant_id, user_id)
-            created += 1
-    
-    if created:
-        logger.info("Created ground stations", count=created)
-    
-    return created
-
-
-async def create_sensors_if_missing(ontology_service, tenant_id: str, user_id: Optional[str] = None):
-    """Create sensors in the database if they don't exist."""
-    from app.db.models.ontology import Sensor
-    from sqlalchemy import select
-    
-    created = 0
-    for sensor_data in SENSORS:
-        # Check if sensor with this name already exists
-        stmt = select(Sensor).where(
-            and_(
-                Sensor.tenant_id == tenant_id,
-                Sensor.name == sensor_data["name"]
-            )
-        )
-        result = await ontology_service.db.execute(stmt)
-        existing = result.scalar_one_or_none()
-        
-        if not existing:
-            await ontology_service.create_sensor(sensor_data, tenant_id, user_id)
-            created += 1
-    
-    if created:
-        logger.info("Created sensors", count=created)
-    
-    return created
-
-async def create_ground_stations_if_missing(ontology_service, tenant_id: str, user_id: Optional[str] = None):
-    """Create ground stations in the database if they don't exist."""
+    from app.schemas.ontology import GroundStationCreate
     created = 0
     for gs_data in GROUND_STATIONS:
         existing = await ontology_service.get_ground_station_by_code(gs_data["code"], tenant_id)
         if not existing:
-            await ontology_service.create_ground_station(gs_data, tenant_id, user_id)
+            await ontology_service.create_ground_station(GroundStationCreate(**gs_data), tenant_id, user_id)
             created += 1
-    
+
     if created:
         logger.info("Created ground stations", count=created)
-    
+
     return created
 
 
 async def create_sensors_if_missing(ontology_service, tenant_id: str, user_id: Optional[str] = None):
     """Create sensors in the database if they don't exist."""
+    from app.schemas.ontology import SensorCreate
+    from app.db.models.ontology import Sensor
     created = 0
     for sensor_data in SENSORS:
-        existing = await ontology_service.get_sensor_by_code(sensor_data["code"], tenant_id)
+        stmt = select(Sensor).where(
+            and_(
+                Sensor.tenant_id == tenant_id,
+                Sensor.name == sensor_data["name"],
+            )
+        )
+        result = await ontology_service.db.execute(stmt)
+        existing = result.scalar_one_or_none()
         if not existing:
-            await ontology_service.create_sensor(sensor_data, tenant_id, user_id)
+            # Remove 'code' key since Sensor model has no code field
+            data = {k: v for k, v in sensor_data.items() if k != "code"}
+            await ontology_service.create_sensor(SensorCreate(**data), tenant_id, user_id)
             created += 1
-    
+
     if created:
         logger.info("Created sensors", count=created)
-    
+
     return created

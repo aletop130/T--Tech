@@ -268,6 +268,144 @@ kbd,
   border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
+/* ═══ Control Bar — Astro UXDS inspired ═══ */
+.control-bar {
+  font-family: inherit;
+}
+
+/* Button group wrapper with label */
+.control-group {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  position: relative;
+  justify-content: center;
+  max-height: 100%;
+}
+.control-group-label {
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: rgba(57, 197, 207, 0.45);
+  line-height: 1;
+  padding-left: 2px;
+}
+
+/* Segmented toggle button */
+.control-seg-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 14px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--sda-text-secondary);
+  background: rgba(255, 255, 255, 0.03);
+  border: none;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s, box-shadow 0.12s;
+  white-space: nowrap;
+}
+.control-seg-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--sda-text-primary);
+}
+.control-seg-btn-active,
+.control-seg-btn-active:hover {
+  background: rgba(47, 129, 247, 0.18);
+  color: var(--sda-accent-blue);
+  box-shadow: inset 0 -2px 0 var(--sda-accent-blue);
+}
+
+/* Small segmented button (vehicle mode etc.) */
+.control-seg-btn-sm {
+  padding: 2px 8px;
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--sda-text-secondary);
+  background: rgba(255, 255, 255, 0.03);
+  border: none;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+.control-seg-btn-sm:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+.control-seg-btn-sm.control-seg-btn-active,
+.control-seg-btn-sm.control-seg-btn-active:hover {
+  background: rgba(47, 129, 247, 0.18);
+  color: var(--sda-accent-blue);
+}
+
+/* Standard action button in toolbar */
+.control-btn.bp5-button.bp5-minimal {
+  font-size: 11px;
+}
+
+/* Control bar checkbox overrides for tighter spacing */
+.control-bar .bp5-control {
+  margin-bottom: 0 !important;
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+  min-height: 0 !important;
+  line-height: 1 !important;
+}
+.control-bar .bp5-control .bp5-control-indicator {
+  margin-top: 0 !important;
+}
+.control-bar .control-group {
+  overflow: hidden;
+}
+
+/* Remove focus ring/border from chat input area */
+[data-slot="prompt-input"],
+[data-slot="prompt-input"] *,
+[data-slot="input-group"] {
+  outline: none !important;
+  box-shadow: none !important;
+}
+[data-slot="prompt-input"]:focus-within,
+[data-slot="input-group"]:focus-within {
+  outline: none !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+  ring: 0 !important;
+}
+
+/* Panel Resize Handles */
+.resize-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  cursor: col-resize;
+  z-index: 10;
+  transition: background-color 0.15s;
+}
+.resize-handle::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 2px;
+  height: 32px;
+  border-radius: 1px;
+  background: rgba(57, 197, 207, 0.2);
+  transition: background-color 0.15s, height 0.15s;
+}
+.resize-handle:hover::after {
+  background: rgba(57, 197, 207, 0.5);
+  height: 48px;
+}
+.resize-handle:active::after {
+  background: rgba(57, 197, 207, 0.8);
+  height: 64px;
+}
+.resize-handle-left { left: 0; }
+.resize-handle-right { right: 0; }
+
 /* Map Overlay Positions */
 .map-overlay-left {
   position: absolute;

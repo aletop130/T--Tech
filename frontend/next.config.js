@@ -87,6 +87,19 @@ const nextConfig = {
       },
     ];
   },
+  async redirects() {
+    return [
+      { source: '/fleet-risk', destination: '/threats?tab=fleet-risk', permanent: true },
+      { source: '/adversary', destination: '/threats?tab=adversary', permanent: true },
+      { source: '/launches', destination: '/events?tab=launches', permanent: true },
+      { source: '/reentry', destination: '/events?tab=reentry', permanent: true },
+      { source: '/maneuvers', destination: '/events?tab=maneuvers', permanent: true },
+      { source: '/space-weather', destination: '/environment?tab=space-weather', permanent: true },
+      { source: '/rf-spectrum', destination: '/environment?tab=rf-spectrum', permanent: true },
+      { source: '/comms', destination: '/operations?tab=comms', permanent: true },
+      { source: '/timeline', destination: '/dashboard', permanent: true },
+    ];
+  },
 };
 
 module.exports = nextConfig;

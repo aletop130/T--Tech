@@ -38,7 +38,8 @@ class Settings(BaseSettings):
     # Regolo AI
     REGOLO_API_KEY: Optional[str] = None
     REGOLO_BASE_URL: str = "https://api.regolo.ai/v1"
-    REGOLO_MODEL: str = "gpt-oss-120b"
+    REGOLO_MODEL: str = "qwen3.5-122b"
+    REGOLO_FALLBACK_MODEL: str = "gpt-oss-120b"
     REGOLO_MAX_TOKENS: int = 4096
     REGOLO_TEMPERATURE: float = 0.7
     DETOUR_REGOLO_TEMPERATURE: float = 0.2

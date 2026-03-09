@@ -12,18 +12,18 @@ interface CollisionHeatmapLayerProps {
 const EARTH_RADIUS_M = 6_371_000;
 
 function riskColor(Cesium: CesiumModule, score: number): InstanceType<CesiumModule['Color']> {
-  if (score >= 70) return Cesium.Color.RED.withAlpha(0.25);
-  if (score >= 50) return Cesium.Color.ORANGE.withAlpha(0.20);
-  if (score >= 30) return Cesium.Color.YELLOW.withAlpha(0.15);
-  if (score >= 10) return Cesium.Color.LIME.withAlpha(0.12);
-  return Cesium.Color.GREEN.withAlpha(0.08);
+  if (score >= 70) return Cesium.Color.RED.withAlpha(0.04);
+  if (score >= 50) return Cesium.Color.ORANGE.withAlpha(0.03);
+  if (score >= 30) return Cesium.Color.YELLOW.withAlpha(0.02);
+  if (score >= 10) return Cesium.Color.LIME.withAlpha(0.015);
+  return Cesium.Color.GREEN.withAlpha(0.01);
 }
 
 function riskOutlineColor(Cesium: CesiumModule, score: number): InstanceType<CesiumModule['Color']> {
-  if (score >= 70) return Cesium.Color.RED.withAlpha(0.6);
-  if (score >= 50) return Cesium.Color.ORANGE.withAlpha(0.5);
-  if (score >= 30) return Cesium.Color.YELLOW.withAlpha(0.4);
-  return Cesium.Color.GREEN.withAlpha(0.3);
+  if (score >= 70) return Cesium.Color.RED.withAlpha(0.15);
+  if (score >= 50) return Cesium.Color.ORANGE.withAlpha(0.12);
+  if (score >= 30) return Cesium.Color.YELLOW.withAlpha(0.10);
+  return Cesium.Color.GREEN.withAlpha(0.08);
 }
 
 function riskLabel(score: number): string {

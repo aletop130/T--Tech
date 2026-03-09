@@ -18,6 +18,14 @@ function hexToColor(Cesium: CesiumModule, hex: string, alpha = 1): InstanceType<
   return new Cesium.Color(r, g, b, alpha);
 }
 
+function inferGroup(sat: Satellite): string {
+  if (sat.tags?.[0]) return sat.tags[0];
+  const n = (sat.name ?? '').toUpperCase();
+  if (n.startsWith('DEBRIS') || n.startsWith('DEB ') || sat.object_type === 'DEBRIS') return 'debris';
+  if (n.startsWith('CONTACT') || n.startsWith('UNKNOWN')) return 'contacts';
+  return 'Uncategorized';
+}
+
 interface SatelliteLayerProps {
   viewer: InstanceType<CesiumModule['Viewer']> | null;
   satellites: Satellite[];
@@ -30,6 +38,8 @@ interface SatelliteLayerProps {
   hiddenOrbitIds?: Set<string>;
   hiddenGroups?: Set<string>;
   hiddenGroupOrbits?: Set<string>;
+  /** IDs of satellites currently selected/pinned by the user */
+  selectedSatelliteIds?: Set<string>;
 }
 
 export function SatelliteLayer({
@@ -41,6 +51,7 @@ export function SatelliteLayer({
   hiddenOrbitIds,
   hiddenGroups,
   hiddenGroupOrbits,
+  selectedSatelliteIds,
 }: SatelliteLayerProps) {
   const cleanupRef = useRef<(() => void) | null>(null);
   const [Cesium, setCesium] = useState<CesiumModule | null>(null);
@@ -92,14 +103,14 @@ export function SatelliteLayer({
     const groupIndexMap = new Map<string, number>();
     let nextIdx = 0;
     satellites.forEach((sat) => {
-      const group = sat.tags?.[0] || 'Uncategorized';
+      const group = inferGroup(sat);
       if (!groupIndexMap.has(group)) {
         groupIndexMap.set(group, nextIdx++);
       }
     });
 
     satellites.forEach((sat) => {
-      const group = sat.tags?.[0] || 'Uncategorized';
+      const group = inferGroup(sat);
 
       // Skip if entire group is hidden
       if (hiddenGroups?.has(group)) return;
@@ -115,8 +126,9 @@ export function SatelliteLayer({
 
         const colorIdx = groupIndexMap.get(group) ?? 0;
         const colorHex = GROUP_COLORS[colorIdx % GROUP_COLORS.length];
+        const isSelected = selectedSatelliteIds?.has(sat.id) ?? false;
         const pointColor = hexToColor(Cesium, colorHex);
-        const orbitColor = hexToColor(Cesium, colorHex, 0.6);
+        const orbitColor = hexToColor(Cesium, colorHex, isSelected ? 0.9 : 0.06);
 
         const satelliteId = `satellite-${sat.id}`;
         const orbitId = `orbit-${sat.id}`;
@@ -127,20 +139,32 @@ export function SatelliteLayer({
           && !hiddenGroupOrbits?.has(group);
 
         if (shouldShowOrbit && positions.length > 1) {
-          const entity = viewer.entities.add({
-            id: orbitId,
-            name: `${sat.name} Orbit`,
-            polyline: {
-              positions: positions,
-              width: 2,
-              material: new Cesium.PolylineGlowMaterialProperty({
-                glowPower: 0.2,
-                color: orbitColor,
-              }),
-              clampToGround: false,
-            },
-          });
-          if (entity) currentEntities.add(orbitId);
+          // Filter near-duplicate positions to avoid Cesium granularity errors
+          const filteredPositions = [positions[0]];
+          for (let pi = 1; pi < positions.length; pi++) {
+            const prev = filteredPositions[filteredPositions.length - 1];
+            const cur = positions[pi];
+            const dx = cur.x - prev.x;
+            const dy = cur.y - prev.y;
+            const dz = cur.z - prev.z;
+            if (dx * dx + dy * dy + dz * dz > 1000) {
+              filteredPositions.push(cur);
+            }
+          }
+          if (filteredPositions.length > 1) {
+            const entity = viewer.entities.add({
+              id: orbitId,
+              name: `${sat.name} Orbit`,
+              polyline: {
+                positions: filteredPositions,
+                width: isSelected ? 2.5 : 1.2,
+                arcType: Cesium.ArcType.NONE,
+                material: orbitColor,
+                clampToGround: false,
+              },
+            });
+            if (entity) currentEntities.add(orbitId);
+          }
         }
 
         const currentPos = positions[0];
@@ -149,22 +173,22 @@ export function SatelliteLayer({
           name: sat.name,
           position: currentPos,
           point: {
-            pixelSize: 8,
+            pixelSize: isSelected ? 12 : 8,
             color: pointColor,
-            outlineColor: Cesium.Color.WHITE,
-            outlineWidth: 2,
+            outlineColor: isSelected ? Cesium.Color.WHITE : Cesium.Color.WHITE,
+            outlineWidth: isSelected ? 3 : 2,
             heightReference: Cesium.HeightReference.NONE,
           },
           label: {
             text: sat.name,
-            font: '12px IBM Plex Sans',
+            font: isSelected ? '13px IBM Plex Sans' : '12px IBM Plex Sans',
             fillColor: Cesium.Color.WHITE,
             outlineColor: Cesium.Color.BLACK,
             outlineWidth: 2,
             style: Cesium.LabelStyle.FILL_AND_OUTLINE,
             verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
             pixelOffset: new Cesium.Cartesian2(0, -20),
-            show: false,
+            show: isSelected,
           },
           description: `
             <div style="font-family: 'IBM Plex Sans', sans-serif;">
@@ -192,7 +216,7 @@ export function SatelliteLayer({
       }
       currentEntities.clear();
     };
-  }, [viewer, satellites, orbits, showOrbits, Cesium, viewerReady, hiddenSatelliteIds, hiddenOrbitIds, hiddenGroups, hiddenGroupOrbits]);
+  }, [viewer, satellites, orbits, showOrbits, Cesium, viewerReady, hiddenSatelliteIds, hiddenOrbitIds, hiddenGroups, hiddenGroupOrbits, selectedSatelliteIds]);
 
   useEffect(() => {
     return () => {

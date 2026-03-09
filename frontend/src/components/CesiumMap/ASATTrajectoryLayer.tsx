@@ -44,6 +44,7 @@ export function ASATTrajectoryLayer({
         polyline: {
           positions: a.trajectoryPoints,
           width: 2,
+          arcType: Cesium.ArcType.NONE,
           material: new Cesium.PolylineGlowMaterialProperty({
             glowPower: 0.15,
             color: (isEvaded || isIntercepted)
@@ -66,6 +67,7 @@ export function ASATTrajectoryLayer({
             polyline: {
               positions: trailPoints,
               width: 4,
+              arcType: Cesium.ArcType.NONE,
               material: new Cesium.PolylineGlowMaterialProperty({
                 glowPower: 0.35,
                 color: Cesium.Color.MAGENTA,

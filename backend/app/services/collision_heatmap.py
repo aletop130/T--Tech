@@ -78,8 +78,9 @@ def _parse_int(val: str) -> Optional[int]:
 async def fetch_socrates_data() -> list[dict]:
     """Fetch and parse the SOCRATES min-range CSV from CelesTrak.
 
-    The CSV has paired header rows.  Odd data rows represent satellite 1,
-    even data rows represent satellite 2, sharing a common conjunction.
+    Current CSV format (single-row per conjunction):
+    NORAD_CAT_ID_1, OBJECT_NAME_1, DSE_1, NORAD_CAT_ID_2, OBJECT_NAME_2,
+    DSE_2, TCA, TCA_RANGE, TCA_RELATIVE_SPEED, MAX_PROB, DILUTION
     """
     now = datetime.utcnow()
     fetched_at = _cache.get("fetched_at")
@@ -93,68 +94,62 @@ async def fetch_socrates_data() -> list[dict]:
             text = resp.text
     except Exception as e:
         logger.error("socrates_fetch_failed", error=str(e))
-        # Return cached data if available, even if stale
         return _cache.get("pairs", [])
 
     pairs: list[dict] = []
     reader = csv.reader(io.StringIO(text))
 
     rows = list(reader)
-    if len(rows) < 3:
+    if len(rows) < 2:
         logger.warning("socrates_csv_too_short", row_count=len(rows))
         return pairs
 
-    # Skip header rows (first two rows)
-    data_rows = rows[2:]
+    # Single header row, data starts at row 1
+    data_rows = rows[1:]
 
-    # Process pairs: each conjunction is represented by 2 consecutive rows
-    i = 0
-    while i + 1 < len(data_rows):
-        row1 = data_rows[i]
-        row2 = data_rows[i + 1]
-        i += 2
-
-        if len(row1) < 8 or len(row2) < 8:
+    for row in data_rows:
+        if len(row) < 11:
             continue
 
-        # SOCRATES CSV columns:
-        # 0: NORAD_CAT_ID_1, 1: OBJECT_NAME_1, 2: DSE_1, 3: TCA, 4: MIN_RNG,
-        # 5: REL_VEL, 6: MAX_PROB, 7: DILUTION, ...
-        # Row2 has the second satellite info but shares TCA/MIN_RNG
+        # Columns: 0=NORAD1, 1=NAME1, 2=DSE1, 3=NORAD2, 4=NAME2,
+        #          5=DSE2, 6=TCA, 7=TCA_RANGE, 8=TCA_REL_SPEED,
+        #          9=MAX_PROB, 10=DILUTION
+        norad1 = _parse_int(row[0])
+        name1 = row[1].strip()
+        norad2 = _parse_int(row[3])
+        name2 = row[4].strip()
 
-        norad1 = _parse_int(row1[0])
-        name1 = row1[1].strip() if len(row1) > 1 else "UNKNOWN"
-        norad2 = _parse_int(row2[0])
-        name2 = row2[1].strip() if len(row2) > 1 else "UNKNOWN"
-
-        tca = _parse_tca(row1[3]) if len(row1) > 3 else None
-        min_range = _parse_float(row1[4]) if len(row1) > 4 else None
-        rel_vel = _parse_float(row1[5]) if len(row1) > 5 else None
-        max_prob = _parse_float(row1[6]) if len(row1) > 6 else None
+        tca = _parse_tca(row[6])
+        min_range = _parse_float(row[7])
+        rel_vel = _parse_float(row[8])
+        max_prob = _parse_float(row[9])
 
         if norad1 is None or norad2 is None or min_range is None:
             continue
 
-        # Estimate altitude from DSE (days since epoch) — not reliable
-        # Instead use object period if available, or approximate from min_range context
-        # The SOCRATES CSV doesn't include altitude directly, so we'll try the
-        # MEAN_MOTION or PERIOD columns if present, otherwise use a heuristic.
-        # Columns beyond index 7 may include orbital period for sat1.
-        period1 = _parse_float(row1[7]) if len(row1) > 7 else None
-        period2 = _parse_float(row2[7]) if len(row2) > 7 else None
+        # Estimate altitude from DSE (days since epoch) using mean motion
+        # DSE columns (2 and 5) are not orbital periods but we can use them
+        # as a rough proxy. For better accuracy, use the TCA_RANGE context.
+        # CelesTrak SOCRATES doesn't include altitude or period directly,
+        # so we estimate from DSE if it looks like a mean-motion value.
+        dse1 = _parse_float(row[2])
+        dse2 = _parse_float(row[5])
 
-        alt1 = _estimate_altitude_from_period(period1)
-        alt2 = _estimate_altitude_from_period(period2)
-
-        # Use average altitude of the two objects
-        if alt1 is not None and alt2 is not None:
-            altitude = (alt1 + alt2) / 2
-        elif alt1 is not None:
-            altitude = alt1
-        elif alt2 is not None:
-            altitude = alt2
-        else:
-            altitude = None
+        # DSE is "days since epoch" — not usable for altitude.
+        # Use a heuristic based on relative velocity to estimate altitude band:
+        # LEO (<2000km): rel_vel typically 7-15 km/s
+        # MEO: rel_vel typically 3-7 km/s
+        # GEO: rel_vel typically <3 km/s
+        altitude = None
+        if rel_vel is not None:
+            if rel_vel > 10:
+                altitude = 400 + (15 - min(rel_vel, 15)) * 100  # ~400-900 km
+            elif rel_vel > 7:
+                altitude = 600 + (10 - rel_vel) * 150  # ~600-1050 km
+            elif rel_vel > 3:
+                altitude = 1000 + (7 - rel_vel) * 250  # ~1000-2000 km
+            else:
+                altitude = 2000  # MEO/GEO range
 
         pairs.append({
             "sat1_name": name1,

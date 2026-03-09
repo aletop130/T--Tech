@@ -8,43 +8,40 @@ import { api, GroundStation, Satellite, ConjunctionEvent, PositionReport } from 
 import { getDebris, getOrbit } from '@/lib/api/debris';
 import { getCesium, type CesiumModule } from '@/lib/cesium/loader';
 import type { DebrisObject, OrbitTrackState } from '@/lib/types/debris';
-import { PLANETS, type CelestialBody } from '@/lib/solarSystem/data';
 import { AgentChat } from '@/components/Chat/AgentChat';
 import { CompactAlertsButton } from '@/components/ProximityAlertPanel/CompactAlertsButton';
 import { cesiumController } from '@/lib/cesium/controller';
 import { useItalyDefenseSimulation } from '@/lib/simulation/useItalyDefenseSimulation';
+import { useResizablePanel } from '@/hooks/useResizablePanel';
 
 // Dynamic imports for heavy CesiumMap components (no SSR)
-const noSSR = { ssr: false };
-const CesiumViewer = dynamic(() => import('@/components/CesiumMap/CesiumViewer').then(m => ({ default: m.CesiumViewer })), noSSR);
-const SatelliteLayer = dynamic(() => import('@/components/CesiumMap/SatelliteLayer').then(m => ({ default: m.SatelliteLayer })), noSSR);
-const GroundStationLayer = dynamic(() => import('@/components/CesiumMap/GroundStationLayer').then(m => ({ default: m.GroundStationLayer })), noSSR);
-const GroundVehicleLayer = dynamic(() => import('@/components/CesiumMap/GroundVehicleLayer').then(m => ({ default: m.GroundVehicleLayer })), noSSR);
-const MilitaryVehicleLayer = dynamic(() => import('@/components/CesiumMap/MilitaryVehicleLayer').then(m => ({ default: m.MilitaryVehicleLayer })), noSSR);
-const ConjunctionLayer = dynamic(() => import('@/components/CesiumMap/ConjunctionLayer').then(m => ({ default: m.ConjunctionLayer })), noSSR);
-const SatelliteInfoCard = dynamic(() => import('@/components/CesiumMap/SatelliteInfoCard').then(m => ({ default: m.SatelliteInfoCard })), noSSR);
-const GroundStationInfoCard = dynamic(() => import('@/components/CesiumMap/GroundStationInfoCard').then(m => ({ default: m.GroundStationInfoCard })), noSSR);
-const GroundVehicleInfoCard = dynamic(() => import('@/components/CesiumMap/GroundVehicleInfoCard').then(m => ({ default: m.GroundVehicleInfoCard })), noSSR);
-const ConjunctionInfoCard = dynamic(() => import('@/components/CesiumMap/ConjunctionInfoCard').then(m => ({ default: m.ConjunctionInfoCard })), noSSR);
-const DebrisInstancedLayer = dynamic(() => import('@/components/CesiumMap/DebrisInstancedLayer').then(m => ({ default: m.DebrisInstancedLayer })), noSSR);
-const DebrisInfoCard = dynamic(() => import('@/components/CesiumMap/DebrisInfoCard').then(m => ({ default: m.DebrisInfoCard })), noSSR);
-const DebrisAddMenu = dynamic(() => import('@/components/CesiumMap/DebrisAddMenu').then(m => ({ default: m.DebrisAddMenu })), noSSR);
-const CelestrakBrowserDialog = dynamic(() => import('@/components/CesiumMap/CelestrakBrowserDialog').then(m => ({ default: m.CelestrakBrowserDialog })), noSSR);
-const OrbitalTrackLayer = dynamic(() => import('@/components/CesiumMap/OrbitalTrackLayer').then(m => ({ default: m.OrbitalTrackLayer })), noSSR);
-const MovingSatelliteMarker = dynamic(() => import('@/components/CesiumMap/MovingSatelliteMarker').then(m => ({ default: m.MovingSatelliteMarker })), noSSR);
-const SolarSystemLayer = dynamic(() => import('@/components/CesiumMap/SolarSystemLayer').then(m => ({ default: m.SolarSystemLayer })), noSSR);
-const PlanetInfoBox = dynamic(() => import('@/components/CesiumMap/PlanetInfoBox').then(m => ({ default: m.PlanetInfoBox })), noSSR);
-const SimulatedSatelliteLayer = dynamic(() => import('@/components/CesiumMap/SimulatedSatelliteLayer').then(m => ({ default: m.SimulatedSatelliteLayer })), noSSR);
-const MilitarySymbolLayer = dynamic(() => import('@/components/CesiumMap/MilitarySymbolLayer').then(m => ({ default: m.MilitarySymbolLayer })), noSSR);
-const DefenseDomeLayer = dynamic(() => import('@/components/CesiumMap/DefenseDomeLayer').then(m => ({ default: m.DefenseDomeLayer })), noSSR);
-const MissileTrajectoryLayer = dynamic(() => import('@/components/CesiumMap/MissileTrajectoryLayer').then(m => ({ default: m.MissileTrajectoryLayer })), noSSR);
-const SatelliteCoverageConeLayer = dynamic(() => import('@/components/CesiumMap/SatelliteCoverageConeLayer').then(m => ({ default: m.SatelliteCoverageConeLayer })), noSSR);
-const ASATTrajectoryLayer = dynamic(() => import('@/components/CesiumMap/ASATTrajectoryLayer').then(m => ({ default: m.ASATTrajectoryLayer })), noSSR);
-const HostileSatelliteLayer = dynamic(() => import('@/components/CesiumMap/HostileSatelliteLayer').then(m => ({ default: m.HostileSatelliteLayer })), noSSR);
-const ItalyDefenseHUD = dynamic(() => import('@/components/Simulation/ItalyDefenseHUD').then(m => ({ default: m.ItalyDefenseHUD })), noSSR);
-const ItalyDefenseNarrative = dynamic(() => import('@/components/Simulation/ItalyDefenseNarrative').then(m => ({ default: m.ItalyDefenseNarrative })), noSSR);
-const GroundTrackLayer = dynamic(() => import('@/components/CesiumMap/GroundTrackLayer').then(m => ({ default: m.GroundTrackLayer })), noSSR);
-const CollisionHeatmapLayer = dynamic(() => import('@/components/CesiumMap/CollisionHeatmapLayer').then(m => ({ default: m.CollisionHeatmapLayer })), noSSR);
+const CesiumViewer = dynamic(() => import('@/components/CesiumMap/CesiumViewer').then(m => ({ default: m.CesiumViewer })), { ssr: false });
+const SatelliteLayer = dynamic(() => import('@/components/CesiumMap/SatelliteLayer').then(m => ({ default: m.SatelliteLayer })), { ssr: false });
+const GroundStationLayer = dynamic(() => import('@/components/CesiumMap/GroundStationLayer').then(m => ({ default: m.GroundStationLayer })), { ssr: false });
+const GroundVehicleLayer = dynamic(() => import('@/components/CesiumMap/GroundVehicleLayer').then(m => ({ default: m.GroundVehicleLayer })), { ssr: false });
+const MilitaryVehicleLayer = dynamic(() => import('@/components/CesiumMap/MilitaryVehicleLayer').then(m => ({ default: m.MilitaryVehicleLayer })), { ssr: false });
+const ConjunctionLayer = dynamic(() => import('@/components/CesiumMap/ConjunctionLayer').then(m => ({ default: m.ConjunctionLayer })), { ssr: false });
+const SatelliteInfoCard = dynamic(() => import('@/components/CesiumMap/SatelliteInfoCard').then(m => ({ default: m.SatelliteInfoCard })), { ssr: false });
+const GroundStationInfoCard = dynamic(() => import('@/components/CesiumMap/GroundStationInfoCard').then(m => ({ default: m.GroundStationInfoCard })), { ssr: false });
+const GroundVehicleInfoCard = dynamic(() => import('@/components/CesiumMap/GroundVehicleInfoCard').then(m => ({ default: m.GroundVehicleInfoCard })), { ssr: false });
+const ConjunctionInfoCard = dynamic(() => import('@/components/CesiumMap/ConjunctionInfoCard').then(m => ({ default: m.ConjunctionInfoCard })), { ssr: false });
+const DebrisInstancedLayer = dynamic(() => import('@/components/CesiumMap/DebrisInstancedLayer').then(m => ({ default: m.DebrisInstancedLayer })), { ssr: false });
+const DebrisInfoCard = dynamic(() => import('@/components/CesiumMap/DebrisInfoCard').then(m => ({ default: m.DebrisInfoCard })), { ssr: false });
+const DebrisAddMenu = dynamic(() => import('@/components/CesiumMap/DebrisAddMenu').then(m => ({ default: m.DebrisAddMenu })), { ssr: false });
+const CelestrakBrowserDialog = dynamic(() => import('@/components/CesiumMap/CelestrakBrowserDialog').then(m => ({ default: m.CelestrakBrowserDialog })), { ssr: false });
+const OrbitalTrackLayer = dynamic(() => import('@/components/CesiumMap/OrbitalTrackLayer').then(m => ({ default: m.OrbitalTrackLayer })), { ssr: false });
+const MovingSatelliteMarker = dynamic(() => import('@/components/CesiumMap/MovingSatelliteMarker').then(m => ({ default: m.MovingSatelliteMarker })), { ssr: false });
+const SimulatedSatelliteLayer = dynamic(() => import('@/components/CesiumMap/SimulatedSatelliteLayer').then(m => ({ default: m.SimulatedSatelliteLayer })), { ssr: false });
+const MilitarySymbolLayer = dynamic(() => import('@/components/CesiumMap/MilitarySymbolLayer').then(m => ({ default: m.MilitarySymbolLayer })), { ssr: false });
+const DefenseDomeLayer = dynamic(() => import('@/components/CesiumMap/DefenseDomeLayer').then(m => ({ default: m.DefenseDomeLayer })), { ssr: false });
+const MissileTrajectoryLayer = dynamic(() => import('@/components/CesiumMap/MissileTrajectoryLayer').then(m => ({ default: m.MissileTrajectoryLayer })), { ssr: false });
+const SatelliteCoverageConeLayer = dynamic(() => import('@/components/CesiumMap/SatelliteCoverageConeLayer').then(m => ({ default: m.SatelliteCoverageConeLayer })), { ssr: false });
+const ASATTrajectoryLayer = dynamic(() => import('@/components/CesiumMap/ASATTrajectoryLayer').then(m => ({ default: m.ASATTrajectoryLayer })), { ssr: false });
+const HostileSatelliteLayer = dynamic(() => import('@/components/CesiumMap/HostileSatelliteLayer').then(m => ({ default: m.HostileSatelliteLayer })), { ssr: false });
+const ItalyDefenseHUD = dynamic(() => import('@/components/Simulation/ItalyDefenseHUD').then(m => ({ default: m.ItalyDefenseHUD })), { ssr: false });
+const ItalyDefenseNarrative = dynamic(() => import('@/components/Simulation/ItalyDefenseNarrative').then(m => ({ default: m.ItalyDefenseNarrative })), { ssr: false });
+const GroundTrackLayer = dynamic(() => import('@/components/CesiumMap/GroundTrackLayer').then(m => ({ default: m.GroundTrackLayer })), { ssr: false });
+const CollisionHeatmapLayer = dynamic(() => import('@/components/CesiumMap/CollisionHeatmapLayer').then(m => ({ default: m.CollisionHeatmapLayer })), { ssr: false });
 
 declare global {
   interface Window {
@@ -125,12 +122,6 @@ const [viewer, setViewer] = useState<InstanceType<CesiumModule['Viewer']> | null
   const [vehicleDisplayMode, setVehicleDisplayMode] = useState<'points' | '3d'>('points');
   const [showTerrain, setShowTerrain] = useState(false);
   const [terrainAvailable, setTerrainAvailable] = useState(false);
-  const [viewMode, setViewMode] = useState<'earth' | 'solar'>('earth');
-  const [focusedBody, setFocusedBody] = useState<string | null>(null);
-  const [managingPlanet, setManagingPlanet] = useState<string | null>(null);
-  const [showSolarLabels, setShowSolarLabels] = useState(true);
-  const [showPlanetInfo, setShowPlanetInfo] = useState(false);
-  const [solarSimulationTime, setSolarSimulationTime] = useState(Date.now());
   const [isSimulationMode, setIsSimulationMode] = useState(false);
   const [showGroundTrack, setShowGroundTrack] = useState(true);
 
@@ -138,7 +129,11 @@ const [viewer, setViewer] = useState<InstanceType<CesiumModule['Viewer']> | null
   const [hiddenSatellites, setHiddenSatellites] = useState<Set<string>>(new Set());
   const [hiddenOrbits, setHiddenOrbits] = useState<Set<string>>(new Set());
   const [hiddenGroups, setHiddenGroups] = useState<Set<string>>(new Set());
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [hiddenGroupOrbits, setHiddenGroupOrbits] = useState<Set<string>>(new Set());
+
+  // Multi-select satellites for chat context
+  const [pinnedSatelliteIds, setPinnedSatelliteIds] = useState<Set<string>>(new Set());
 
   // Debris visualization state
   const [debris, setDebris] = useState<DebrisObject[]>([]);
@@ -150,6 +145,17 @@ const [viewer, setViewer] = useState<InstanceType<CesiumModule['Viewer']> | null
   const speedRef = useRef(1);
 // Timestamp (ms) when a maneuver animation should start
 const [maneuverStartMs, setManeuverStartMs] = useState<number | undefined>(undefined);
+
+  // Resizable panels
+  const elementsPanel = useResizablePanel({ defaultWidth: 288, minWidth: 200, maxWidth: 600, direction: 'right' });
+  const chatPanel = useResizablePanel({ defaultWidth: 384, minWidth: 300, maxWidth: 700, direction: 'left' });
+
+  // Live clock
+  const [clockStr, setClockStr] = useState(() => new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+  useEffect(() => {
+    const t = setInterval(() => setClockStr(new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' })), 1000);
+    return () => clearInterval(t);
+  }, []);
   const [orbitTrack, setOrbitTrack] = useState<OrbitTrackState | null>(null);
   const SPEED_STEPS = [1, 2, 5, 10, 25, 50, 100];
 // Update Cesium simulation speed when `speed` changes
@@ -258,17 +264,6 @@ const DEBRIS_ORBIT_CLASSES = "LEO";
       },
     });
   }, [viewer]);
-
-  // Callback to manage planet (placeholder)
-  const handleManagePlanet = useCallback((planetId: string) => {
-    console.log('Manage planet:', planetId);
-  }, []);
-
-  // Callback to go back to overview (close planet info)
-  const handleBackToOverview = useCallback(() => {
-    setFocusedBody(null);
-    setShowPlanetInfo(false);
-  }, []);
 
   // Handle highlight parameter from explorer
   useEffect(() => {
@@ -671,10 +666,6 @@ const loadDebris = async () => {
     }, []);
 
 
-  const handleClosePlanetInfo = useCallback(() => {
-    setShowPlanetInfo(false);
-  }, []);
-
   return (
     <div className="h-full w-full relative overflow-hidden">
 
@@ -700,7 +691,7 @@ const loadDebris = async () => {
               onViewerReady={handleViewerReady}
             />
 
-            {viewMode === 'earth' ? (
+            {/* Earth Layers */}
               <>
                 {!isSimulationMode && (
                   <SatelliteLayer
@@ -712,6 +703,7 @@ const loadDebris = async () => {
                     hiddenOrbitIds={hiddenOrbits}
                     hiddenGroups={hiddenGroups}
                     hiddenGroupOrbits={hiddenGroupOrbits}
+                    selectedSatelliteIds={pinnedSatelliteIds}
                   />
                 )}
                 {!isSimulationMode && (
@@ -864,29 +856,6 @@ const loadDebris = async () => {
                   </>
                 )}
               </>
-            ) : (
-              <>
-                <SolarSystemLayer
-                  viewer={viewer}
-                  showOrbits={showOrbits}
-                  showLabels={showSolarLabels}
-                  focusedBody={focusedBody}
-                  onBodyClick={(bodyId) => {
-                    setFocusedBody(bodyId);
-                    setShowPlanetInfo(true);
-                  }}
-                  simulationTime={solarSimulationTime}
-                />
-                {showPlanetInfo && focusedBody && (
-                  <PlanetInfoBox
-                    planet={PLANETS.find(p => p.id === focusedBody)!}
-                    onManage={() => handleManagePlanet(focusedBody)}
-                    onClose={handleClosePlanetInfo}
-                    onBackToOverview={handleBackToOverview}
-                  />
-                )}
-              </>
-            )}
           </div>
         )}
       </div>
@@ -910,166 +879,113 @@ const loadDebris = async () => {
         </Button>
       </div>
 
-      {/* Unified Control Bar */}
-      <div className="absolute top-4 left-4 z-20 bg-sda-bg-secondary/60 backdrop-blur-sm rounded-lg border border-sda-border-default px-4 py-2 shadow-lg">
-        {/* Row 1: Title + Counters + View Buttons */}
-        <div className="flex items-center gap-4 mb-2">
-          <h1 className="text-lg font-bold text-sda-text-primary flex items-center gap-2">
-            <Icon icon="globe" className="text-sda-accent-cyan" />
-            3D Globe View
-          </h1>
+      {/* ═══ Global Status & Control Bar (Astro UXDS-inspired) ═══ */}
+      <div className="absolute top-0 left-0 right-0 z-20 control-bar">
+        {/* Row 1 — Global Status Bar */}
+        <div className="flex items-center h-10 px-4 gap-4 bg-sda-bg-secondary border-b border-sda-border-default">
+          {/* App Identity */}
           <div className="flex items-center gap-2">
-            <Tag minimal intent="primary">Satellites: {satellites.length}</Tag>
+            <Icon icon="satellite" className="text-sda-accent-cyan" size={14} />
+            <span className="text-xs font-bold tracking-wider text-sda-text-primary uppercase">Space Ops</span>
+            <span className="text-[10px] px-1.5 py-0.5 rounded bg-sda-accent-green/20 text-sda-accent-green font-semibold uppercase tracking-wide">Live</span>
           </div>
-          <div className="flex items-center gap-2 ml-auto">
-            <Button
-              intent={viewMode === 'earth' ? Intent.PRIMARY : Intent.NONE}
-              onClick={async () => {
-                setViewMode('earth');
-                setFocusedBody('earth');
-                if (viewer) {
-                  const Cesium = await getCesium();
-                  viewer.camera.flyTo({
-                    destination: Cesium.Cartesian3.fromDegrees(12.5674, 41.8719, 8000000),
-                    orientation: {
-                      heading: Cesium.Math.toRadians(0),
-                      pitch: Cesium.Math.toRadians(-90),
-                      roll: 0,
-                    },
-                    duration: 1.5,
-                  });
-                }
-              }}
-              icon="globe"
-              minimal
-              small
-            >
-              Earth
-            </Button>
-            <CompactAlertsButton 
-              onAlertClick={(alert) => {
-                const sat = satellites.find(s => s.name === alert.primary_satellite_name);
-                if (sat) {
-                  flyToSatellite(sat);
-                }
-              }}
-            />
-            <Button
-              intent={Intent.PRIMARY}
-              onClick={() => setCelestrakDialogOpen(true)}
-              icon="satellite"
-              minimal
-              small
-            >
-              CelesTrak
-            </Button>
+
+          <div className="w-px h-5 bg-sda-border-default" />
+
+          {/* Counters */}
+          <div className="flex items-center gap-3 text-xs text-sda-text-secondary">
+            <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-sda-accent-blue" />{satellites.length} Satellites</span>
+            <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-amber-500" />{debris.length} Debris</span>
+            <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-sda-accent-cyan" />{groundStations.length} Stations</span>
+          </div>
+
+          {/* Right side — status + clock */}
+          <div className="ml-auto flex items-center gap-3">
+            <div className="flex items-center gap-1.5 text-xs">
+              <span className="w-2 h-2 rounded-full bg-sda-accent-green animate-pulse" />
+              <span className="text-sda-text-secondary">Systems Nominal</span>
+            </div>
+            <div className="w-px h-5 bg-sda-border-default" />
+            <span className="text-xs text-sda-text-secondary font-mono tabular-nums">{clockStr} UTC</span>
           </div>
         </div>
 
-        {/* Row 2: Toggles */}
-        {!isSimulationMode && (
-          <div className="flex items-center gap-4 text-sm">
-            {viewMode === 'earth' ? (
-              <>
-                <div className="flex items-center gap-1">
-                  <span className="w-2 h-2 rounded-full bg-blue-500"></span>
-                  <span className="text-sda-text-secondary">Satellites</span>
-                </div>
-                <div className="border-l border-sda-border-default pl-4 flex items-center gap-3">
-                <Checkbox
-                  checked={showOrbits}
-                  onChange={(e) => setShowOrbits(e.currentTarget.checked)}
-                  label="Orbits"
-                  labelElement={<span className="text-xs text-sda-text-secondary">Orbits</span>}
-                />
-                <Checkbox
-                  checked={showCoverage}
-                  onChange={(e) => setShowCoverage(e.currentTarget.checked)}
-                  label="Coverage"
-                  labelElement={<span className="text-xs text-sda-text-secondary">Coverage</span>}
-                />
-                <Checkbox
-                  checked={showGroundVehicles}
-                  onChange={(e) => setShowGroundVehicles(e.currentTarget.checked)}
-                  label="Vehicles"
-                  labelElement={<span className="text-xs text-sda-text-secondary">Vehicles</span>}
-                />
-                {showGroundVehicles && (
-                  <div className="flex items-center gap-1 ml-2">
-                    <button
-                      className={`px-2 py-0.5 text-xs rounded ${
-                        vehicleDisplayMode === 'points'
-                          ? 'bg-blue-600 text-white'
-                          : 'bg-sda-bg-tertiary text-sda-text-secondary'
-                      }`}
-                      onClick={() => setVehicleDisplayMode('points')}
-                    >
-                      Points
-                    </button>
-                    <button
-                      className={`px-2 py-0.5 text-xs rounded ${
-                        vehicleDisplayMode === '3d'
-                          ? 'bg-blue-600 text-white'
-                          : 'bg-sda-bg-tertiary text-sda-text-secondary'
-                      }`}
-                      onClick={() => setVehicleDisplayMode('3d')}
-                    >
-                      3D
-                    </button>
-                  </div>
-                )}
-                <Checkbox
-                  checked={showConjunctions}
-                  onChange={(e) => setShowConjunctions(e.currentTarget.checked)}
-                  label="Conj"
-                  labelElement={<span className="text-xs text-sda-text-secondary">Conj</span>}
-                />
-                {/* Debris toggle and counter with dropdown */}
-                <Checkbox
-                  checked={showDebris}
-                  onChange={(e) => setShowDebris(e.currentTarget.checked)}
-                  label="Debris"
-                  labelElement={<span className="text-xs text-sda-text-secondary">Debris</span>}
-                />
-                <Checkbox
-                  checked={showGroundTrack}
-                  onChange={(e) => setShowGroundTrack(e.currentTarget.checked)}
-                  label="Track"
-                  labelElement={<span className="text-xs text-sda-text-secondary">Track</span>}
-                />
-                <Checkbox
-                  checked={showCollisionHeatmap}
-                  onChange={(e) => setShowCollisionHeatmap(e.currentTarget.checked)}
-                  label="Collision"
-                  labelElement={<span className="text-xs text-sda-text-secondary">Collision</span>}
-                />
-                <DebrisAddMenu debrisCount={debris.length} />
-              </div>
-            </>
-          ) : (
+        {/* Row 2 — Command Controls */}
+        <div className="flex items-center h-12 px-4 gap-3 bg-sda-bg-secondary/80 backdrop-blur-sm border-b border-sda-border-default/60">
+
+          {/* ── Group: Actions ── */}
+          <div className="control-group" role="group" aria-label="Actions">
+            <span className="control-group-label">Actions</span>
+            <div className="flex items-center gap-2">
+              <CompactAlertsButton
+                onAlertClick={(alert) => {
+                  const sat = satellites.find(s => s.name === alert.primary_satellite_name);
+                  if (sat) {
+                    flyToSatellite(sat);
+                  }
+                }}
+              />
+              <Button
+                onClick={() => setCelestrakDialogOpen(true)}
+                icon="satellite"
+                minimal
+                small
+                className="control-btn"
+              >
+                CelesTrak
+              </Button>
+            </div>
+          </div>
+
+          {!isSimulationMode && (
             <>
-              <div className="flex items-center gap-1">
-                <span className="w-2 h-2 rounded-full bg-blue-500"></span>
-                <span className="text-sda-text-secondary">Satellites</span>
+              <div className="w-px h-6 bg-sda-border-default" />
+
+              {/* ── Group: Layers ── */}
+              <div className="control-group" role="group" aria-label="Map layers">
+                <span className="control-group-label">Layers</span>
+                <div className="flex items-center gap-2">
+                  <Checkbox checked={showOrbits} onChange={(e) => setShowOrbits(e.currentTarget.checked)}
+                    labelElement={<span className="text-xs text-sda-text-secondary">Orbits</span>} />
+                  <Checkbox checked={showCoverage} onChange={(e) => setShowCoverage(e.currentTarget.checked)}
+                    labelElement={<span className="text-xs text-sda-text-secondary">Coverage</span>} />
+                  <Checkbox checked={showGroundVehicles} onChange={(e) => setShowGroundVehicles(e.currentTarget.checked)}
+                    labelElement={<span className="text-xs text-sda-text-secondary">Vehicles</span>} />
+                  {showGroundVehicles && (
+                    <div className="flex items-center rounded overflow-hidden border border-sda-border-default ml-1">
+                      <button
+                        className={`control-seg-btn-sm ${vehicleDisplayMode === 'points' ? 'control-seg-btn-active' : ''}`}
+                        onClick={() => setVehicleDisplayMode('points')}
+                      >Points</button>
+                      <button
+                        className={`control-seg-btn-sm ${vehicleDisplayMode === '3d' ? 'control-seg-btn-active' : ''}`}
+                        onClick={() => setVehicleDisplayMode('3d')}
+                      >3D</button>
+                    </div>
+                  )}
+                  <Checkbox checked={showConjunctions} onChange={(e) => setShowConjunctions(e.currentTarget.checked)}
+                    labelElement={<span className="text-xs text-sda-text-secondary">Conj.</span>} />
+                </div>
               </div>
-              <div className="border-l border-sda-border-default pl-4 flex items-center gap-3">
-                <Checkbox
-                  checked={showOrbits}
-                  onChange={(e) => setShowOrbits(e.currentTarget.checked)}
-                  label="Orbits"
-                  labelElement={<span className="text-xs text-sda-text-secondary">Orbits</span>}
-                />
-                <Checkbox
-                  checked={showSolarLabels}
-                  onChange={(e) => setShowSolarLabels(e.currentTarget.checked)}
-                  label="Labels"
-                  labelElement={<span className="text-xs text-sda-text-secondary">Labels</span>}
-                />
+
+              <div className="w-px h-6 bg-sda-border-default" />
+
+              {/* ── Group: Data Overlays ── */}
+              <div className="control-group" role="group" aria-label="Data overlays">
+                <span className="control-group-label">Overlays</span>
+                <div className="flex items-center gap-2">
+                  <Checkbox checked={showDebris} onChange={(e) => setShowDebris(e.currentTarget.checked)}
+                    labelElement={<span className="text-xs text-sda-text-secondary">Debris</span>} />
+                  <Checkbox checked={showGroundTrack} onChange={(e) => setShowGroundTrack(e.currentTarget.checked)}
+                    labelElement={<span className="text-xs text-sda-text-secondary">Track</span>} />
+                  <Checkbox checked={showCollisionHeatmap} onChange={(e) => setShowCollisionHeatmap(e.currentTarget.checked)}
+                    labelElement={<span className="text-xs text-sda-text-secondary">Collision</span>} />
+                  <DebrisAddMenu debrisCount={debris.length} />
+                </div>
               </div>
             </>
           )}
         </div>
-        )}
       </div>
 
       {/* Speed Control Overlay */}
@@ -1098,9 +1014,10 @@ const loadDebris = async () => {
       <div className="absolute inset-0 z-10 pointer-events-none">
         {/* Left Panel - Elements */}
         {!isSimulationMode && (
-          <div className="absolute left-4 top-32 bottom-4 w-72 pointer-events-auto bg-sda-bg-secondary/60 backdrop-blur-sm rounded-lg border border-sda-border-default px-4 py-2 shadow-lg flex flex-col overflow-hidden">
+          <div className="absolute left-4 top-[88px] bottom-4 pointer-events-auto bg-sda-bg-secondary/60 backdrop-blur-sm rounded-lg border border-sda-border-default px-4 py-2 shadow-lg flex flex-col overflow-hidden" style={{ width: elementsPanel.width }}>
+            {/* Resize handle - right edge */}
+            <div className="resize-handle resize-handle-right" onMouseDown={elementsPanel.onMouseDown} />
             <div className="flex flex-col h-full">
-              {viewMode === 'earth' ? (
               <>
                 <div className="p-3 border-b border-sda-border-default">
                   <span className="text-sm font-semibold text-sda-text-primary flex items-center gap-2">
@@ -1112,7 +1029,16 @@ const loadDebris = async () => {
                   {/* Satellites grouped by CelesTrak tag */}
                   {(() => {
                     const grouped = satellites.reduce((acc, sat) => {
-                      const group = sat.tags?.[0] || 'Uncategorized';
+                      let group = sat.tags?.[0] || '';
+                      if (!group) {
+                        const n = sat.name?.toUpperCase() || '';
+                        if (n.startsWith('DEBRIS') || n.startsWith('DEB ') || sat.object_type === 'DEBRIS')
+                          group = 'debris';
+                        else if (n.startsWith('CONTACT') || n.startsWith('UNKNOWN'))
+                          group = 'contacts';
+                        else
+                          group = 'Uncategorized';
+                      }
                       (acc[group] = acc[group] || []).push(sat);
                       return acc;
                     }, {} as Record<string, Satellite[]>);
@@ -1164,19 +1090,36 @@ const loadDebris = async () => {
                           </div>
                           {!isGroupHidden && (
                             <div className="space-y-1 ml-4 pl-2" style={{ borderLeft: `2px solid ${color}` }}>
-                              {groupSats.slice(0, 10).map((sat) => {
+                              {(expandedGroups.has(group) ? groupSats : groupSats.slice(0, 10)).map((sat) => {
                                 const isSatHidden = hiddenSatellites.has(sat.id);
                                 const isSatOrbitHidden = hiddenOrbits.has(sat.id);
+                                const isSatPinned = pinnedSatelliteIds.has(sat.id);
                                 return (
                                   <div
                                     key={sat.id}
                                     className={`p-2 text-sm hover:bg-sda-bg-tertiary rounded cursor-pointer ${
                                       selectedSatellite?.id === sat.id ? 'bg-sda-bg-tertiary' : ''
-                                    }`}
+                                    } ${isSatPinned ? 'ring-1 ring-sda-accent-cyan/40 bg-sda-accent-cyan/5' : ''}`}
                                     onClick={() => flyToSatellite(sat)}
                                   >
                                     <div className="flex items-center justify-between">
-                                      <span className="font-medium truncate max-w-[100px]">{sat.name}</span>
+                                      <div className="flex items-center gap-1.5 min-w-0">
+                                        <input
+                                          type="checkbox"
+                                          checked={isSatPinned}
+                                          title="Pin to chat context"
+                                          className="w-3 h-3 rounded accent-cyan-500 cursor-pointer flex-shrink-0"
+                                          onClick={(e) => e.stopPropagation()}
+                                          onChange={() => {
+                                            setPinnedSatelliteIds(prev => {
+                                              const next = new Set(prev);
+                                              if (next.has(sat.id)) next.delete(sat.id); else next.add(sat.id);
+                                              return next;
+                                            });
+                                          }}
+                                        />
+                                        <span className="font-medium truncate max-w-[90px]">{sat.name}</span>
+                                      </div>
                                       <div className="flex items-center gap-1">
                                         <button
                                           title={isSatHidden ? 'Show satellite' : 'Hide satellite'}
@@ -1217,9 +1160,18 @@ const loadDebris = async () => {
                                 );
                               })}
                               {groupSats.length > 10 && (
-                                <div className="p-2 text-xs text-sda-text-muted">
-                                  +{groupSats.length - 10} more
-                                </div>
+                                <button
+                                  className="p-2 text-xs text-sda-accent-blue hover:text-sda-text-primary hover:bg-sda-bg-tertiary rounded w-full text-left cursor-pointer"
+                                  onClick={() => setExpandedGroups(prev => {
+                                    const next = new Set(prev);
+                                    if (next.has(group)) next.delete(group); else next.add(group);
+                                    return next;
+                                  })}
+                                >
+                                  {expandedGroups.has(group)
+                                    ? 'Show less'
+                                    : `+${groupSats.length - 10} more`}
+                                </button>
                               )}
                             </div>
                           )}
@@ -1238,10 +1190,10 @@ const loadDebris = async () => {
                        </span>
                        <Tag minimal intent="warning" className="ml-auto">{debris.length}</Tag>
                      </div>
-                     <div className="space-y-1 ml-4 border-l-2 border-amber-500 pl-2 max-h-40 overflow-auto">
+                     <div className="space-y-1 ml-4 border-l-2 border-amber-500 pl-2 max-h-60 overflow-auto">
                        {[...debris]
                          .sort((a, b) => a.altKm - b.altKm)
-                         .slice(0, 10)
+                         .slice(0, expandedGroups.has('__debris__') ? debris.length : 10)
                          .map((d) => (
                            <div
                              key={d.noradId}
@@ -1254,6 +1206,20 @@ const loadDebris = async () => {
                              </div>
                            </div>
                          ))}
+                       {debris.length > 10 && (
+                         <button
+                           className="p-2 text-xs text-sda-accent-blue hover:text-sda-text-primary hover:bg-sda-bg-tertiary rounded w-full text-left cursor-pointer"
+                           onClick={() => setExpandedGroups(prev => {
+                             const next = new Set(prev);
+                             if (next.has('__debris__')) next.delete('__debris__'); else next.add('__debris__');
+                             return next;
+                           })}
+                         >
+                           {expandedGroups.has('__debris__')
+                             ? 'Show less'
+                             : `+${debris.length - 10} more`}
+                         </button>
+                       )}
                      </div>
                    </div>
 
@@ -1369,106 +1335,16 @@ const loadDebris = async () => {
                   )}
                 </div>
               </>
-            ) : (
-              <>
-                <div className="p-3 border-b border-sda-border-default bg-sda-bg-secondary">
-                  <span className="text-sm font-semibold text-sda-text-primary flex items-center gap-2">
-                    <Icon icon="globe-network" className="text-sda-accent-cyan" />
-                    Solar System
-                  </span>
-                  <div className="text-xs text-sda-text-muted mt-1">
-                    Click a planet to focus view
-                  </div>
-                  {focusedBody && (
-                    <div className="mt-2 flex items-center gap-2">
-                      <span className="text-xs text-sda-text-secondary">
-                        Focused: <span className="font-semibold capitalize">{focusedBody}</span>
-                      </span>
-                      <Button
-                        small
-                        minimal
-                        intent={Intent.PRIMARY}
-                        onClick={handleBackToOverview}
-                        icon="zoom-out"
-                        className="ml-auto"
-                      >
-                        Reset
-                      </Button>
-                    </div>
-                  )}
-                </div>
-                <div className="flex-1 overflow-auto p-3">
-                  <div className="mb-4">
-                    <div
-                      className={`flex items-center gap-2 p-2 rounded cursor-pointer ${
-                        focusedBody === 'sun' ? 'bg-sda-bg-tertiary' : 'hover:bg-sda-bg-tertiary'
-                      }`}
-                      onClick={() => {
-                        setFocusedBody('sun');
-                        setShowPlanetInfo(true);
-                      }}
-                    >
-                      <span className="w-4 h-4 rounded-full" style={{ backgroundColor: '#FDB813' }}></span>
-                      <span className="font-medium">Sun</span>
-                    </div>
-                  </div>
-                  <div className="mb-4">
-                    <h4 className="text-xs font-semibold text-sda-text-muted mb-2 uppercase">Inner Planets</h4>
-                    {PLANETS.filter(p => ['mercury', 'venus', 'earth', 'mars'].includes(p.id)).map(planet => (
-                      <div
-                        key={planet.id}
-                        className={`flex items-center gap-2 p-2 rounded cursor-pointer ${
-                          focusedBody === planet.id ? 'bg-sda-bg-tertiary' : 'hover:bg-sda-bg-tertiary'
-                        }`}
-                        onClick={() => {
-                          setFocusedBody(planet.id);
-                          setShowPlanetInfo(true);
-                        }}
-                      >
-                        <span className="w-3 h-3 rounded-full" style={{ backgroundColor: planet.color }}></span>
-                        <span className="text-sm">{planet.name}</span>
-                        <span className="text-xs text-sda-text-muted ml-auto">{planet.distanceAU?.toFixed(2) || 0} AU</span>
-                      </div>
-                    ))}
-                  </div>
-                  <div className="mb-4">
-                    <h4 className="text-xs font-semibold text-sda-text-muted mb-2 uppercase">Outer Planets</h4>
-                    {PLANETS.filter(p => ['jupiter', 'saturn', 'uranus', 'neptune'].includes(p.id)).map(planet => (
-                      <div
-                        key={planet.id}
-                        className={`flex items-center gap-2 p-2 rounded cursor-pointer ${
-                          focusedBody === planet.id ? 'bg-sda-bg-tertiary' : 'hover:bg-sda-bg-tertiary'
-                        }`}
-                        onClick={() => {
-                          setFocusedBody(planet.id);
-                          setShowPlanetInfo(true);
-                        }}
-                      >
-                        <span className="w-3 h-3 rounded-full" style={{ backgroundColor: planet.color }}></span>
-                        <span className="text-sm">{planet.name}</span>
-                        <span className="text-xs text-sda-text-muted ml-auto">{planet.distanceAU?.toFixed(2) || 0} AU</span>
-                      </div>
-                    ))}
-                  </div>
-                  {showPlanetInfo && focusedBody && focusedBody !== 'sun' && (
-                    <PlanetInfoBox
-                      planet={PLANETS.find(p => p.id === focusedBody)!}
-                      onManage={() => handleManagePlanet(focusedBody)}
-                      onClose={handleClosePlanetInfo}
-                      onBackToOverview={handleBackToOverview}
-                    />
-                  )}
-                </div>
-              </>
-            )}
           </div>
         </div>
         )}
 
         {/* Right Panel - AI Chat */}
-        <div className="absolute right-4 top-16 bottom-4 w-96 pointer-events-auto flex flex-col gap-4">
+        <div className="absolute right-4 top-[88px] bottom-4 pointer-events-auto flex flex-col gap-4" style={{ width: chatPanel.width }}>
           {/* AI Chat Panel */}
-          <div className="flex-[2] bg-sda-bg-secondary/90 backdrop-blur-md rounded-lg border border-sda-border-default px-4 py-2 shadow-lg flex flex-col overflow-hidden min-h-0">
+          <div className="relative flex-[2] bg-sda-bg-secondary/90 backdrop-blur-md rounded-lg border border-sda-border-default px-4 py-2 shadow-lg flex flex-col overflow-hidden min-h-0">
+            {/* Resize handle - left edge */}
+            <div className="resize-handle resize-handle-left" onMouseDown={chatPanel.onMouseDown} />
             <div className="flex items-center justify-between p-2 border-b border-sda-border-default">
               <span className="text-sm font-semibold text-sda-text-primary flex items-center gap-2">
                 <Icon icon="chat" className="text-sda-accent-cyan" />
@@ -1479,6 +1355,10 @@ const loadDebris = async () => {
               <AgentChat
                 useStreaming={true}
                 onSimulationControl={handleChatSimulationControl}
+                contextSatellites={satellites
+                  .filter(s => pinnedSatelliteIds.has(s.id))
+                  .map(s => ({ id: s.id, name: s.name, norad_id: s.norad_id, object_type: s.object_type, country: s.country, operator: s.operator, tags: s.tags }))}
+                onRemoveContextSatellite={(id) => setPinnedSatelliteIds(prev => { const next = new Set(prev); next.delete(id); return next; })}
               />
             </div>
           </div>

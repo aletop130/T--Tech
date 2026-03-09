@@ -66,12 +66,23 @@ class CesiumAction(BaseModel):
         'cesium.showConjunctionLine',
         'cesium.showRiskHeatmap',
         'cesium.showThreatRadius',
+        # SDA operator command action types
+        'cesium.showGroundTrack',
+        'cesium.showDebrisCloud',
+        'cesium.showReentryFootprint',
+        'cesium.showCoverageGaps',
         'simulation.addSatellite',
         'simulation.addGroundStation',
         'simulation.addVehicle',
         'simulation.showCoverage',
         'simulation.analyzeCoverage',
         'simulation.removeEntity',
+        # AEGIS agent action types
+        'cesium.clearAllOverlays',
+        'cesium.setSceneMood',
+        'cesium.annotatePoint',
+        'cesium.drawRegionHighlight',
+        'cesium.showTcaCountdown',
     ]
     payload: dict[str, Any]
 

@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import {
   Card,
+  Collapse,
   Elevation,
   Icon,
   Tag,
@@ -34,7 +35,9 @@ export default function DashboardPage() {
   });
   const [loading, setLoading] = useState(true);
 const [refreshingDebris, setRefreshingDebris] = useState(false);
-  
+  const [timelineEvents, setTimelineEvents] = useState<Array<{id: string; type: string; title: string; time: string; severity?: string}>>([]);
+  const [timelineOpen, setTimelineOpen] = useState(true);
+
   // Dialog states
   const [conjunctionDialogOpen, setConjunctionDialogOpen] = useState(false);
   const [weatherDialogOpen, setWeatherDialogOpen] = useState(false);
@@ -43,11 +46,12 @@ const [refreshingDebris, setRefreshingDebris] = useState(false);
 
   const loadData = async () => {
     try {
-      const [stats, conjunctions, weather, satellites] = await Promise.all([
+      const [stats, conjunctions, weather, satellites, timeline] = await Promise.all([
         api.getIncidentStats(),
         api.getConjunctions({ page_size: 5, is_actionable: true }),
         api.getSpaceWeatherEvents({ page_size: 5 }),
         api.getSatellites({ page_size: 1 }),
+        api.getTimelineEvents({ date: format(new Date(), 'yyyy-MM-dd') }),
       ]);
 
       setData({
@@ -56,6 +60,7 @@ const [refreshingDebris, setRefreshingDebris] = useState(false);
         weatherEvents: weather.items,
         satelliteCount: satellites.total,
       });
+      setTimelineEvents(timeline.events);
     } catch (error) {
       console.warn('Failed to load dashboard:', error);
     } finally {
@@ -352,6 +357,48 @@ const [refreshingDebris, setRefreshingDebris] = useState(false);
           </div>
         </Card>
       </div>
+
+      {/* Recent Events Timeline */}
+      <Card elevation={Elevation.TWO} className="p-4 bg-sda-bg-secondary">
+        <div
+          className="flex items-center justify-between mb-2 cursor-pointer"
+          onClick={() => setTimelineOpen(!timelineOpen)}
+        >
+          <h2 className="text-lg font-semibold flex items-center gap-2">
+            <Icon icon="timeline-events" className="text-sda-accent-cyan" />
+            Recent Events
+          </h2>
+          <Icon icon={timelineOpen ? 'chevron-up' : 'chevron-down'} />
+        </div>
+        <Collapse isOpen={timelineOpen}>
+          <div className="space-y-2 max-h-64 overflow-y-auto">
+            {timelineEvents.length === 0 ? (
+              <div className="text-sda-text-secondary text-center py-4">
+                No events today
+              </div>
+            ) : (
+              timelineEvents.slice(0, 10).map((event) => (
+                <div key={event.id} className="flex items-center gap-3 p-2 bg-sda-bg-tertiary rounded">
+                  <Icon
+                    icon={event.type === 'conjunction' ? 'intersection' : event.type === 'incident' ? 'warning-sign' : event.type === 'space_weather' ? 'flash' : 'dot'}
+                    size={14}
+                    className="text-sda-text-secondary"
+                  />
+                  <div className="flex-1 min-w-0">
+                    <span className="text-sm truncate block">{event.title}</span>
+                    <span className="text-xs text-sda-text-secondary">{event.time}</span>
+                  </div>
+                  {event.severity && (
+                    <Tag minimal intent={event.severity === 'critical' ? 'danger' : event.severity === 'warning' ? 'warning' : 'none'} className="text-xs">
+                      {event.severity}
+                    </Tag>
+                  )}
+                </div>
+              ))
+            )}
+          </div>
+        </Collapse>
+      </Card>
 
       {/* Dialogs */}
       <ConjunctionAnalysisDialog

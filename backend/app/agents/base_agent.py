@@ -64,7 +64,15 @@ class BaseAgent:
             kwargs["tools"] = tools
             kwargs["tool_choice"] = "auto"
 
-        return await self.client.chat.completions.create(**kwargs)
+        try:
+            return await self.client.chat.completions.create(**kwargs)
+        except Exception as primary_err:
+            fallback = settings.REGOLO_FALLBACK_MODEL
+            if fallback and fallback != kwargs.get("model"):
+                logger.warning("Primary model failed, falling back to %s: %s", fallback, primary_err)
+                kwargs["model"] = fallback
+                return await self.client.chat.completions.create(**kwargs)
+            raise
 
     async def _run_with_tools(
         self,

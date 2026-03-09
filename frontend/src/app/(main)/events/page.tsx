@@ -3,18 +3,18 @@
 import { useState, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Tabs, Tab, Icon, Card, Spinner } from '@blueprintjs/core';
-import { ThreatPanel } from '@/components/Threats/ThreatPanel';
-import { FleetRiskPanel } from '@/components/Threats/FleetRiskPanel';
-import { AdversaryPanel } from '@/components/Adversary/AdversaryPanel';
+import { LaunchCorrelationPanel } from '@/components/Launch/LaunchCorrelationPanel';
+import { ReentryDashboard } from '@/components/Reentry/ReentryDashboard';
+import { ManeuverDetectionPanel } from '@/components/ManeuverAlertPanel/ManeuverDetectionPanel';
 
-const VALID_TABS = ['detection', 'fleet-risk', 'adversary'] as const;
+const VALID_TABS = ['launches', 'reentry', 'maneuvers'] as const;
 type TabId = (typeof VALID_TABS)[number];
 
-function ThreatsPageInner() {
+function EventsPageInner() {
   const searchParams = useSearchParams();
   const initialTab = VALID_TABS.includes(searchParams.get('tab') as TabId)
     ? (searchParams.get('tab') as TabId)
-    : 'detection';
+    : 'launches';
   const [selectedTab, setSelectedTab] = useState<TabId>(initialTab);
 
   const handleTabChange = (newTab: string) => {
@@ -23,40 +23,40 @@ function ThreatsPageInner() {
   };
 
   return (
-    <div className="h-full flex flex-col" data-testid="threats-page">
+    <div className="h-full flex flex-col" data-testid="events-page">
       <div className="flex items-center gap-2 px-4 py-3">
-        <Icon icon="shield" size={20} style={{ color: '#e74c3c' }} />
-        <h1 className="text-xl font-bold m-0" style={{ color: '#e74c3c' }}>
-          Threats &amp; Intelligence
+        <Icon icon="rocket-slant" size={20} style={{ color: '#2ecc71' }} />
+        <h1 className="text-xl font-bold m-0" style={{ color: '#2ecc71' }}>
+          Events
         </h1>
       </div>
 
       <Card className="flex-1 flex flex-col overflow-hidden mx-4 mb-4">
         <Tabs
-          id="threats-tabs"
+          id="events-tabs"
           selectedTabId={selectedTab}
           onChange={handleTabChange}
           large
         >
-          <Tab id="detection" title="Detection" />
-          <Tab id="fleet-risk" title="Fleet Risk" />
-          <Tab id="adversary" title="Adversary" />
+          <Tab id="launches" title="Launches" />
+          <Tab id="reentry" title="Reentry" />
+          <Tab id="maneuvers" title="Maneuvers" />
         </Tabs>
 
         <div className="flex-1 overflow-auto">
-          {selectedTab === 'detection' && <ThreatPanel />}
-          {selectedTab === 'fleet-risk' && <FleetRiskPanel />}
-          {selectedTab === 'adversary' && <AdversaryPanel />}
+          {selectedTab === 'launches' && <LaunchCorrelationPanel />}
+          {selectedTab === 'reentry' && <ReentryDashboard />}
+          {selectedTab === 'maneuvers' && <ManeuverDetectionPanel />}
         </div>
       </Card>
     </div>
   );
 }
 
-export default function ThreatsPage() {
+export default function EventsPage() {
   return (
     <Suspense fallback={<Spinner />}>
-      <ThreatsPageInner />
+      <EventsPageInner />
     </Suspense>
   );
 }

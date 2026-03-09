@@ -53,14 +53,12 @@ export function ConjunctionLayer({
           name: `Conjunction: ${conj.id}`,
           polyline: {
             positions: [pos1, pos2],
-            width: 3,
-            material: new Cesium.PolylineGlowMaterialProperty({
-              glowPower: 0.5,
-              color:
-                conj.risk_level === 'high' || conj.risk_level === 'critical'
-                  ? Cesium.Color.RED
-                  : Cesium.Color.ORANGE,
-            }),
+            width: 2,
+            arcType: Cesium.ArcType.NONE,
+            material:
+              conj.risk_level === 'high' || conj.risk_level === 'critical'
+                ? Cesium.Color.RED.withAlpha(0.7)
+                : Cesium.Color.ORANGE.withAlpha(0.6),
             clampToGround: false,
           },
           description: `

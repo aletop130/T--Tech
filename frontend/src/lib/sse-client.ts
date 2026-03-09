@@ -44,6 +44,10 @@ export interface SSEChatClientConfig {
   onMemoryError?: (error: string, details?: string) => void;
   onError?: (error: string, details?: string) => void;
   onDone?: (finalMessage: string, actionsCount: number) => void;
+  onAgentPause?: (seconds: number, reason: string) => void;
+  onNarration?: (text: string, style: string) => void;
+  onSceneMood?: (mood: string) => void;
+  onAgentThinking?: (step: number) => void;
 }
 
 export class SSEChatClient {
@@ -135,36 +139,116 @@ export class SSEChatClient {
     }
   }
 
+  async streamAgentChat(
+    messages: Array<{ role: string; content: string }>,
+    sceneState: Record<string, unknown>,
+    sessionId?: string
+  ): Promise<void> {
+    this.messageBuffer = '';
+    this.isComplete = false;
+    this.actionsCount = 0;
+
+    // Construct URL - use URL constructor for absolute URLs, string concatenation for relative
+    const url = this.baseUrl
+      ? new URL(`${this.baseUrl}/api/v1/ai/chat/agent`).toString()
+      : '/api/v1/ai/chat/agent';
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Tenant-ID': this.tenantId,
+      },
+      body: JSON.stringify({
+        messages,
+        sceneState,
+        session_id: sessionId,
+      }),
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      this.config.onError?.(error.detail || `HTTP error: ${response.status}`);
+      return;
+    }
+
+    const reader = response.body?.getReader();
+    if (!reader) {
+      this.config.onError?.('No response body');
+      return;
+    }
+
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          const data = line.slice(6).trim();
+          if (data === '[DONE]') {
+            this.isComplete = true;
+            this.config.onMessageChunk?.('', true);
+            this.config.onDone?.(this.messageBuffer, this.actionsCount);
+            return;
+          }
+
+          try {
+            const event = JSON.parse(data);
+            this.handleEvent(event);
+          } catch (e) {
+            // Ignore parse errors for incomplete lines
+          }
+        }
+      }
+    }
+  }
+
   private handleEvent(event: Record<string, unknown>): void {
     switch (event.type) {
       case 'content':
-        const chunk = event.chunk as string;
-        if (chunk) {
-          this.messageBuffer += chunk;
-          this.config.onMessageChunk?.(chunk, false);
+        {
+          const chunk = event.chunk as string;
+          if (chunk) {
+            this.messageBuffer += chunk;
+            this.config.onMessageChunk?.(chunk, false);
+          }
         }
         break;
 
       case 'tool_call':
-        this.actionsCount++;
-        const toolName = event.tool_name as string;
-        const args = event.arguments as Record<string, unknown>;
-        this.config.onToolCall?.(toolName, args);
+        {
+          this.actionsCount++;
+          // Also handle iteration field from agent loop
+          const toolName = event.tool_name as string;
+          const args = event.arguments as Record<string, unknown>;
+          this.config.onToolCall?.(toolName, args);
+        }
         break;
 
       case 'tool_result':
-        const toolCallId = event.tool_call_id as string;
-        const result = event.result;
-        const error = event.error as string | undefined;
-        const toolNameResult = event.tool_name as string;
-        this.config.onToolResult?.(toolCallId, toolNameResult, result, error);
+        {
+          const toolCallId = event.tool_call_id as string;
+          const result = event.result;
+          const error = event.error as string | undefined;
+          const toolNameResult = event.tool_name as string;
+          this.config.onToolResult?.(toolCallId, toolNameResult, result, error);
+        }
         break;
 
       case 'action':
-        this.actionsCount++;
-        const actionType = event.action_type as string;
-        const payload = event.payload as Record<string, unknown>;
-        this.config.onAction?.({ type: actionType, payload });
+        {
+          this.actionsCount++;
+          const actionType = event.action_type as string;
+          const payload = event.payload as Record<string, unknown>;
+          this.config.onAction?.({ type: actionType, payload });
+        }
         break;
 
       case 'session':
@@ -192,9 +276,37 @@ export class SSEChatClient {
         break;
 
       case 'error':
-        const errorMsg = event.error as string;
-        const details = event.details as string | undefined;
-        this.config.onError?.(errorMsg, details);
+        {
+          const errorMsg = event.error as string;
+          const details = event.details as string | undefined;
+          this.config.onError?.(errorMsg, details);
+        }
+        break;
+
+      case 'agent_pause':
+        this.config.onAgentPause?.(
+          event.seconds as number,
+          event.reason as string || ''
+        );
+        break;
+
+      case 'narration':
+        this.config.onNarration?.(
+          event.text as string,
+          event.style as string || 'info'
+        );
+        break;
+
+      case 'scene_mood':
+        this.config.onSceneMood?.(event.mood as string);
+        break;
+
+      case 'agent_thinking':
+        this.config.onAgentThinking?.(event.step as number);
+        break;
+
+      case 'heartbeat':
+        // Reset idle timeout - no action needed, the read loop continues
         break;
     }
   }

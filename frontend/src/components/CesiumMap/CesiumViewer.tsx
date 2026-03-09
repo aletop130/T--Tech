@@ -89,6 +89,13 @@ const ViewerConfig = memo(function ViewerConfig({
         }
       });
 
+      // Suppress non-critical Cesium rendering errors (e.g. granularity DeveloperErrors)
+      // so they don't block the entire scene
+      (viewer.cesiumWidget as any).showRenderLoopErrors = false;
+      viewer.scene.renderError.addEventListener((_scene: any, error: any) => {
+        console.warn('Cesium render warning (non-fatal):', error?.message || error);
+      });
+
       isConfiguredRef.current = true;
 
       if (onViewerReady) {

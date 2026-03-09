@@ -35,6 +35,8 @@ class CesiumControllerClass {
   private eventListeners: Map<string, Set<(action: CesiumAction) => void>> = new Map();
   private isFlying: boolean = false;
   private Cesium: CesiumModule | null = null;
+  private cachedSceneState: CesiumSceneState | null = null;
+  private sceneStateCaptureInterval: ReturnType<typeof setInterval> | null = null;
 
   async initialize(viewer: InstanceType<CesiumModule['Viewer']>): Promise<void> {
     this.viewer = viewer;
@@ -58,6 +60,11 @@ class CesiumControllerClass {
     this.registerHandler('simulation.showCoverage', this.handleSimulationShowCoverage.bind(this));
     this.registerHandler('simulation.analyzeCoverage', this.handleSimulationAnalyzeCoverage.bind(this));
     this.registerHandler('simulation.removeEntity', this.handleSimulationRemoveEntity.bind(this));
+    this.registerHandler('cesium.clearAllOverlays', this.handleClearAllOverlays.bind(this));
+    this.registerHandler('cesium.setSceneMood', this.handleSetSceneMood.bind(this));
+    this.registerHandler('cesium.annotatePoint', this.handleAnnotatePoint.bind(this));
+    this.registerHandler('cesium.drawRegionHighlight', this.handleDrawRegionHighlight.bind(this));
+    this.registerHandler('cesium.showTcaCountdown', this.handleShowTcaCountdown.bind(this));
   }
 
   // Country coordinates lookup table
@@ -158,6 +165,24 @@ class CesiumControllerClass {
         other: this.viewer.entities.values.length,
       },
     };
+  }
+
+  startSceneStateCapture(intervalMs = 2000): void {
+    this.stopSceneStateCapture();
+    this.sceneStateCaptureInterval = setInterval(() => {
+      this.cachedSceneState = this.getSceneState();
+    }, intervalMs);
+  }
+
+  stopSceneStateCapture(): void {
+    if (this.sceneStateCaptureInterval) {
+      clearInterval(this.sceneStateCaptureInterval);
+      this.sceneStateCaptureInterval = null;
+    }
+  }
+
+  getCachedSceneState(): CesiumSceneState {
+    return this.cachedSceneState || this.getSceneState();
   }
 
   private handleSetClock(payload: Record<string, unknown>, Cesium: CesiumModule): void {
@@ -429,7 +454,7 @@ this.viewer.camera.flyTo({
         destination: Cesium.Cartesian3.fromDegrees(lon, lat, altitude),
         orientation: {
           heading: Cesium.Math.toRadians(0),
-          pitch: Cesium.Math.toRadians(-45),
+          pitch: Cesium.Math.toRadians(-90),
           roll: 0,
         },
         duration,
@@ -522,6 +547,166 @@ this.viewer.camera.flyTo({
     }
   }
 
+  private handleClearAllOverlays(payload: Record<string, unknown>, Cesium: CesiumModule): void {
+    if (!this.viewer) return;
+
+    const patterns = [
+      'threat-radius-', 'risk-heatmap-', 'conjunction-line-', 'conjunction-',
+      'tca-countdown-', 'maneuver-option-', 'fuel-gauge-',
+      'approval-badge-', 'success-animation-', 'mission-summary-',
+      'warning-overlay-', 'agent-annotation-', 'region-highlight-',
+    ];
+
+    const toRemove: string[] = [];
+    this.viewer.entities.values.forEach(entity => {
+      if (entity.id && patterns.some(p => entity.id!.startsWith(p))) {
+        toRemove.push(entity.id!);
+      }
+    });
+
+    toRemove.forEach(id => {
+      const entity = this.viewer!.entities.getById(id);
+      if (entity) this.viewer!.entities.remove(entity);
+    });
+  }
+
+  private handleSetSceneMood(payload: Record<string, unknown>, Cesium: CesiumModule): void {
+    if (!this.viewer) return;
+
+    const mood = payload.mood as string;
+    const scene = this.viewer.scene;
+    const globe = scene.globe;
+    const atmo = scene.skyAtmosphere;
+
+    switch (mood) {
+      case 'normal':
+        globe.baseColor = Cesium.Color.fromCssColorString('#000011');
+        if (atmo) { atmo.brightnessShift = 0; atmo.saturationShift = 0; }
+        break;
+      case 'alert':
+        globe.baseColor = Cesium.Color.fromCssColorString('#1a0000');
+        if (atmo) { atmo.brightnessShift = -0.2; atmo.saturationShift = 0.3; }
+        break;
+      case 'dramatic':
+        globe.baseColor = Cesium.Color.fromCssColorString('#0a0015');
+        if (atmo) { atmo.brightnessShift = -0.3; atmo.saturationShift = 0.5; }
+        break;
+      case 'briefing':
+        globe.baseColor = Cesium.Color.fromCssColorString('#001a0a');
+        if (atmo) { atmo.brightnessShift = -0.1; atmo.saturationShift = 0.1; }
+        break;
+    }
+  }
+
+  private handleAnnotatePoint(payload: Record<string, unknown>, Cesium: CesiumModule): void {
+    if (!this.viewer) return;
+
+    const longitude = payload.longitude as number;
+    const latitude = payload.latitude as number;
+    const altitude = (payload.altitude as number) || 0;
+    const text = payload.text as string || 'Annotation';
+    const color = payload.color as string || '#00FFFF';
+    const id = payload.id as string || `agent-annotation-${Date.now()}`;
+
+    const cesiumColor = Cesium.Color.fromCssColorString(color);
+
+    this.viewer.entities.add({
+      id,
+      position: Cesium.Cartesian3.fromDegrees(longitude, latitude, altitude),
+      billboard: {
+        image: this.createAnnotationCanvas(text, color),
+        verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+        scale: 0.5,
+      },
+      label: {
+        text: text,
+        font: '14px monospace',
+        fillColor: cesiumColor,
+        outlineColor: Cesium.Color.BLACK,
+        outlineWidth: 2,
+        style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+        verticalOrigin: Cesium.VerticalOrigin.TOP,
+        pixelOffset: new Cesium.Cartesian2(0, 10),
+      },
+    });
+  }
+
+  private createAnnotationCanvas(text: string, color: string): HTMLCanvasElement {
+    const canvas = document.createElement('canvas');
+    canvas.width = 32;
+    canvas.height = 32;
+    const ctx = canvas.getContext('2d')!;
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.arc(16, 16, 12, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#000';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    return canvas;
+  }
+
+  private handleDrawRegionHighlight(payload: Record<string, unknown>, Cesium: CesiumModule): void {
+    if (!this.viewer) return;
+
+    const positions = payload.positions as Array<{ longitude: number; latitude: number }>;
+    const color = payload.color as string || '#00FF00';
+    const id = payload.id as string || `region-highlight-${Date.now()}`;
+
+    if (!positions || positions.length < 3) return;
+
+    const cesiumColor = Cesium.Color.fromCssColorString(color);
+    const cartesianPositions = positions.map(p =>
+      Cesium.Cartesian3.fromDegrees(p.longitude, p.latitude)
+    );
+
+    this.viewer.entities.add({
+      id,
+      polygon: {
+        hierarchy: new Cesium.PolygonHierarchy(cartesianPositions),
+        material: cesiumColor.withAlpha(0.2),
+        outline: true,
+        outlineColor: cesiumColor,
+        outlineWidth: 2,
+      },
+    });
+  }
+
+  private handleShowTcaCountdown(payload: Record<string, unknown>, Cesium: CesiumModule): void {
+    if (!this.viewer) return;
+
+    const satelliteId = payload.satellite_id as string;
+    const tca = payload.tca as string;
+    const missDistanceKm = payload.miss_distance_km as number;
+
+    if (!satelliteId) return;
+
+    const entity = this.viewer.entities.getById(`satellite-${satelliteId}`);
+    if (!entity || !entity.position) return;
+
+    const tcaDate = new Date(tca);
+    const timeStr = tcaDate.toISOString().substring(0, 19).replace('T', ' ');
+    const labelText = `TCA: ${timeStr}\nMiss: ${missDistanceKm?.toFixed(2) || '?'} km`;
+
+    this.viewer.entities.add({
+      id: `tca-countdown-${satelliteId}`,
+      position: entity.position,
+      label: {
+        text: labelText,
+        font: 'bold 14px monospace',
+        fillColor: Cesium.Color.RED,
+        outlineColor: Cesium.Color.BLACK,
+        outlineWidth: 3,
+        style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+        verticalOrigin: Cesium.VerticalOrigin.TOP,
+        pixelOffset: new Cesium.Cartesian2(0, 25),
+        backgroundColor: Cesium.Color.fromCssColorString('#000000').withAlpha(0.7),
+        showBackground: true,
+        backgroundPadding: new Cesium.Cartesian2(8, 4),
+      },
+    });
+  }
+
   // Execute custom action from agent pipeline
   executeAction(action: { type: string; [key: string]: unknown }): void {
     if (!this.viewer || !this.Cesium) {
@@ -550,6 +735,9 @@ this.viewer.camera.flyTo({
         break;
       case 'show_tca_countdown':
         this.showTcaCountdown(action as { satellite_id?: string; tca?: string; miss_distance_km?: number });
+        break;
+      case 'cesium.showTcaCountdown':
+        this.handleShowTcaCountdown(action as unknown as Record<string, unknown>, Cesium);
         break;
       case 'show_maneuver_options':
         this.showManeuverOptions(action as { satellite_id?: string; maneuvers?: Array<{ maneuver_id: string; type: string; delta_v_m_s: number }>; recommended_id?: string });
@@ -595,6 +783,18 @@ this.viewer.camera.flyTo({
         break;
       case 'showThreatRadius':
         this.showThreatRadius(action as { satellite_id?: string; radius_km?: number; color?: string });
+        break;
+      case 'showGroundTrack':
+        this.showGroundTrack(action as { satellite_id?: string; points?: Array<{ latitude: number; longitude: number; altitude_km?: number }>; color?: string; scenario?: string });
+        break;
+      case 'showDebrisCloud':
+        this.showDebrisCloud(action as { center_altitude_km?: number; fragment_count?: number; spread_km?: number; color?: string });
+        break;
+      case 'showReentryFootprint':
+        this.showReentryFootprint(action as { latitude?: number; longitude?: number; swath_length_km?: number; swath_width_km?: number; color?: string });
+        break;
+      case 'showCoverageGaps':
+        this.showCoverageGaps(action as { scenario?: string; lost_station?: string; latitude?: number; longitude?: number; affected_count?: number; kp?: number });
         break;
       default:
         console.warn('Unknown action type:', action.type);
@@ -1002,6 +1202,197 @@ this.viewer.camera.flyTo({
     setTimeout(() => {
       this.viewer!.entities.removeById(`mission-summary-${action.satellite_id}`);
     }, 10000);
+  }
+
+  // ── SDA Operator Command Visualizations ─────────────────────
+
+  private showGroundTrack(action: { satellite_id?: string; points?: Array<{ latitude: number; longitude: number; altitude_km?: number }>; color?: string; scenario?: string }): void {
+    if (!this.viewer || !this.Cesium) return;
+
+    const Cesium = this.Cesium;
+    const color = Cesium.Color.fromCssColorString(action.color || '#00E5FF');
+    const id = `ground-track-${action.satellite_id || action.scenario || 'default'}`;
+
+    // Remove existing ground track if present
+    this.viewer.entities.removeById(id);
+
+    if (action.points && action.points.length > 1) {
+      const positions = action.points.map(p =>
+        Cesium.Cartesian3.fromDegrees(p.longitude, p.latitude, (p.altitude_km || 0) * 1000)
+      );
+
+      this.viewer.entities.add({
+        id,
+        polyline: {
+          positions,
+          width: 2,
+          material: new Cesium.PolylineDashMaterialProperty({
+            color,
+            dashLength: 16,
+          }),
+          clampToGround: true,
+        },
+      });
+    } else {
+      // Placeholder label for scenario-based ground tracks
+      this.viewer.entities.add({
+        id,
+        position: Cesium.Cartesian3.fromDegrees(0, 0, 400000),
+        label: {
+          text: `Ground Track: ${action.scenario || action.satellite_id || '?'}`,
+          font: '12px monospace',
+          fillColor: color,
+          outlineColor: Cesium.Color.BLACK,
+          outlineWidth: 2,
+          style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+          showBackground: true,
+          backgroundColor: Cesium.Color.BLACK.withAlpha(0.6),
+        },
+      });
+    }
+  }
+
+  private showDebrisCloud(action: { center_altitude_km?: number; fragment_count?: number; spread_km?: number; color?: string }): void {
+    if (!this.viewer || !this.Cesium) return;
+
+    const Cesium = this.Cesium;
+    const altitude = (action.center_altitude_km || 800) * 1000;
+    const spread = (action.spread_km || 50) * 1000;
+    const color = Cesium.Color.fromCssColorString(action.color || '#FF6D00');
+    const count = Math.min(action.fragment_count || 100, 200); // Cap visual fragments
+
+    // Remove previous debris cloud
+    for (let i = 0; i < 200; i++) {
+      this.viewer.entities.removeById(`debris-cloud-${i}`);
+    }
+    this.viewer.entities.removeById('debris-cloud-label');
+
+    // Generate random debris points around the globe at the given altitude
+    for (let i = 0; i < count; i++) {
+      const lon = Math.random() * 360 - 180;
+      const lat = (Math.random() * 140 - 70); // Avoid polar extremes
+      const alt = altitude + (Math.random() - 0.5) * spread * 2;
+
+      this.viewer.entities.add({
+        id: `debris-cloud-${i}`,
+        position: Cesium.Cartesian3.fromDegrees(lon, lat, alt),
+        point: {
+          pixelSize: 3,
+          color: color.withAlpha(0.6 + Math.random() * 0.4),
+          outlineWidth: 0,
+        },
+      });
+    }
+
+    // Label
+    this.viewer.entities.add({
+      id: 'debris-cloud-label',
+      position: Cesium.Cartesian3.fromDegrees(0, 0, altitude + spread),
+      label: {
+        text: `Debris Cloud: ${action.fragment_count || count} fragments @ ${action.center_altitude_km || 800} km`,
+        font: 'bold 14px monospace',
+        fillColor: color,
+        outlineColor: Cesium.Color.BLACK,
+        outlineWidth: 2,
+        style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+        showBackground: true,
+        backgroundColor: Cesium.Color.BLACK.withAlpha(0.7),
+        backgroundPadding: new Cesium.Cartesian2(10, 6),
+      },
+    });
+  }
+
+  private showReentryFootprint(action: { latitude?: number; longitude?: number; swath_length_km?: number; swath_width_km?: number; color?: string }): void {
+    if (!this.viewer || !this.Cesium) return;
+
+    const Cesium = this.Cesium;
+    const lat = action.latitude || 0;
+    const lon = action.longitude || 0;
+    const length = (action.swath_length_km || 500) * 1000;
+    const width = (action.swath_width_km || 50) * 1000;
+    const color = Cesium.Color.fromCssColorString(action.color || '#FF1744');
+
+    this.viewer.entities.removeById('reentry-footprint');
+
+    this.viewer.entities.add({
+      id: 'reentry-footprint',
+      position: Cesium.Cartesian3.fromDegrees(lon, lat),
+      ellipse: {
+        semiMajorAxis: length / 2,
+        semiMinorAxis: width / 2,
+        material: color.withAlpha(0.25),
+        outline: true,
+        outlineColor: color,
+        outlineWidth: 2,
+        height: 0,
+      },
+      label: {
+        text: `Reentry Footprint\n${(action.swath_length_km || 500)} × ${(action.swath_width_km || 50)} km`,
+        font: '12px monospace',
+        fillColor: color,
+        outlineColor: Cesium.Color.BLACK,
+        outlineWidth: 2,
+        style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+        verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+        pixelOffset: new Cesium.Cartesian2(0, -10),
+      },
+    });
+  }
+
+  private showCoverageGaps(action: { scenario?: string; lost_station?: string; latitude?: number; longitude?: number; affected_count?: number; kp?: number }): void {
+    if (!this.viewer || !this.Cesium) return;
+
+    const Cesium = this.Cesium;
+    this.viewer.entities.removeById('coverage-gap-indicator');
+
+    if (action.scenario === 'ground_station_loss' && action.latitude != null && action.longitude != null) {
+      // Show a red circle around the lost station with an X marker
+      const color = Cesium.Color.RED;
+      this.viewer.entities.add({
+        id: 'coverage-gap-indicator',
+        position: Cesium.Cartesian3.fromDegrees(action.longitude, action.latitude),
+        ellipse: {
+          semiMajorAxis: 2000000, // ~2000 km coverage radius
+          semiMinorAxis: 2000000,
+          material: color.withAlpha(0.15),
+          outline: true,
+          outlineColor: color,
+          outlineWidth: 3,
+          height: 0,
+        },
+        label: {
+          text: `✕ ${action.lost_station || 'Station'} — OFFLINE\nCoverage gap active`,
+          font: 'bold 14px monospace',
+          fillColor: color,
+          outlineColor: Cesium.Color.BLACK,
+          outlineWidth: 2,
+          style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+          verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+          pixelOffset: new Cesium.Cartesian2(0, -20),
+          showBackground: true,
+          backgroundColor: Cesium.Color.BLACK.withAlpha(0.7),
+          backgroundPadding: new Cesium.Cartesian2(10, 6),
+        },
+      });
+    } else if (action.scenario === 'solar_storm') {
+      // Show a global indicator for solar storm impact
+      const color = Cesium.Color.ORANGE;
+      this.viewer.entities.add({
+        id: 'coverage-gap-indicator',
+        position: Cesium.Cartesian3.fromDegrees(0, 0, 600000),
+        label: {
+          text: `⚡ Solar Storm Kp=${action.kp || '?'}\n${action.affected_count || 0} LEO satellites at risk`,
+          font: 'bold 16px monospace',
+          fillColor: color,
+          outlineColor: Cesium.Color.BLACK,
+          outlineWidth: 3,
+          style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+          showBackground: true,
+          backgroundColor: Cesium.Color.BLACK.withAlpha(0.8),
+          backgroundPadding: new Cesium.Cartesian2(15, 10),
+        },
+      });
+    }
   }
 
   destroy(): void {

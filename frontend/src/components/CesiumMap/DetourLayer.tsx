@@ -128,6 +128,7 @@ export function DetourLayer({
         polyline: {
           positions: [posPrimary, posSecondary],
           width: 3,
+          arcType: Cesium.ArcType.NONE,
           material: new Cesium.PolylineGlowMaterialProperty({
             glowPower: 0.5,
             color: riskColor(conj.risk_level),

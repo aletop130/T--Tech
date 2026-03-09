@@ -29,6 +29,7 @@ from app.schemas.ai import (
     MitigationOption,
 )
 from app.schemas.cesium import CESIUM_FUNCTION_DEFINITIONS, CesiumAction
+from app.schemas.agent_tools import ALL_AGENT_TOOLS
 from app.schemas.ontology import SatelliteCreate, GroundStationCreate
 from app.schemas.operations import PositionReportCreate, OperationCreate
 from app.services.ontology import OntologyService
@@ -106,6 +107,26 @@ When technical data IS requested and available, provide structured, actionable i
         else:
             self.client = None
             logger.warning("REGOLO_API_KEY not configured")
+
+    async def _create_completion(self, **kwargs) -> Any:
+        """Create a chat completion with automatic fallback to REGOLO_FALLBACK_MODEL."""
+        if not self.client:
+            raise AIServiceError("AI service not configured")
+        try:
+            return await self.client.chat.completions.create(**kwargs)
+        except Exception as primary_err:
+            fallback = settings.REGOLO_FALLBACK_MODEL
+            primary_model = kwargs.get("model", settings.REGOLO_MODEL)
+            if fallback and fallback != primary_model:
+                logger.warning(
+                    "primary_model_failed_falling_back",
+                    primary_model=primary_model,
+                    fallback_model=fallback,
+                    error=str(primary_err),
+                )
+                kwargs["model"] = fallback
+                return await self.client.chat.completions.create(**kwargs)
+            raise
     
     async def chat(
         self,
@@ -150,7 +171,7 @@ When technical data IS requested and available, provide structured, actionable i
                 request_params["tools"] = CESIUM_FUNCTION_DEFINITIONS
                 request_params["tool_choice"] = "auto"
 
-            response = await self.client.chat.completions.create(**request_params)
+            response = await self._create_completion(**request_params)
             
             assistant_message = response.choices[0].message
             
@@ -214,7 +235,7 @@ When technical data IS requested and available, provide structured, actionable i
             if not self.client:
                 return "AI service not configured. Please configure REGOLO_API_KEY.", actions
             
-            response = await self.client.chat.completions.create(
+            response = await self._create_completion(
                 model=settings.REGOLO_MODEL,
                 messages=messages,
                 max_tokens=request.max_tokens,
@@ -241,7 +262,7 @@ When technical data IS requested and available, provide structured, actionable i
                         "content": json.dumps(function_args),
                     })
                 
-                second_response = await self.client.chat.completions.create(
+                second_response = await self._create_completion(
                     model=settings.REGOLO_MODEL,
                     messages=messages,
                     max_tokens=request.max_tokens,
@@ -391,7 +412,7 @@ When technical data IS requested and available, provide structured, actionable i
         full_messages = [{"role": "system", "content": system_content}] + messages
         
         try:
-            response = await self.client.chat.completions.create(
+            response = await self._create_completion(
                 model=settings.REGOLO_MODEL,
                 messages=full_messages,
                 max_tokens=2048,
@@ -608,7 +629,7 @@ RULES FOR FLY-TO COMMANDS:
         
         try:
             # Step 1: First call with tools (non-streaming) to get tool calls
-            response = await self.client.chat.completions.create(
+            response = await self._create_completion(
                 model=settings.REGOLO_MODEL,
                 messages=full_messages,
                 max_tokens=2048,
@@ -651,7 +672,7 @@ RULES FOR FLY-TO COMMANDS:
                     })
                 
                 # Step 3: Second call for final response (streaming)
-                final_response = await self.client.chat.completions.create(
+                final_response = await self._create_completion(
                     model=settings.REGOLO_MODEL,
                     messages=full_messages,
                     max_tokens=2048,
@@ -666,7 +687,7 @@ RULES FOR FLY-TO COMMANDS:
                         yield f"data: {json.dumps({'type': 'content', 'chunk': chunk_text})}\n\n"
             else:
                 # No tool calls, stream the first response
-                final_response = await self.client.chat.completions.create(
+                final_response = await self._create_completion(
                     model=settings.REGOLO_MODEL,
                     messages=full_messages,
                     max_tokens=2048,
@@ -705,6 +726,335 @@ RULES FOR FLY-TO COMMANDS:
             logger.error(f"Stream chat with functions error: {e}")
             yield f"data: {json.dumps({'type': 'error', 'error': str(e)})}\n\n"
     
+    # ── AEGIS Agent System ──────────────────────────────────────────────
+
+    AGENT_SYSTEM_PROMPT = """Sei AEGIS, il controllore AI della mappa per Space Domain Awareness.
+
+Hai il controllo diretto di un globo Cesium 3D. Puoi comandare la camera,
+visualizzare dati, interrogare il database, eseguire calcoli fisici, e
+presentare briefing all'operatore.
+
+CAPACITA':
+- Camera: vola verso satelliti, paesi, coordinate; imposta heading/pitch
+- Visualizzazione: evidenzia satelliti, threat radius, conjunction lines,
+  risk heatmaps, TCA countdown, maneuver options, coverage
+- Dati: query satelliti, congiunzioni, debris, minacce, incidenti, meteo spaziale
+- Fisica: propaga orbite, calcola rischio congiunzione, analisi copertura
+- Timing: pausa tra azioni per effetto drammatico, narra l'analisi
+
+REGOLE COMPORTAMENTALI:
+1. Quando ti chiedono di "mostrare" qualcosa, SEMPRE combina camera + visualizzazione.
+   Vola all'oggetto PRIMA, poi aggiungi overlay.
+2. Usa agent_wait(2-3 secondi) tra cambi visuali importanti.
+3. Per analisi minacce:
+   a) Query i dati rilevanti
+   b) Vola all'oggetto primario
+   c) Mostra la visualizzazione della minaccia
+   d) Narra i findings
+   e) Mostra azioni raccomandate
+4. NON indovinare entity IDs. Query PRIMA con query_satellites, usa gli ID restituiti.
+   Entity ID format per satelliti: 'satellite-<uuid>'
+5. Per tour/demo: overview -> zoom in -> analizza -> zoom out -> riassumi.
+6. Rispondi nella lingua dell'utente (italiano se parlano italiano, inglese se inglese).
+7. Quando usi cesium_fly_to per un satellite, usa entityId='satellite-<id>'.
+   Per locations/paesi usa cesium_fly_to_country o cesium_search_location.
+8. Prima di mostrare qualsiasi visualizzazione, FAI SEMPRE una query per ottenere dati reali.
+   Non inventare mai dati o ID.
+"""
+
+    # Scenario templates that the run_scenario tool can return
+    SCENARIO_TEMPLATES = {
+        "threat_landscape": {
+            "name": "Threat Landscape Overview",
+            "steps": [
+                "1. Query all proximity alerts and active conjunctions using query_proximity_alerts and query_conjunctions",
+                "2. Fly to global view (cesium_fly_to longitude=0, latitude=0, altitude=20000000, pitch=-90)",
+                "3. For the highest-risk satellite, show risk heatmap (cesium_show_risk_heatmap)",
+                "4. Use agent_narrate to report: threat count and severity summary",
+                "5. Fly to the most critical conjunction (cesium_fly_to the primary satellite)",
+                "6. Show conjunction line + TCA countdown between the two objects",
+                "7. Use agent_narrate to report risk level and recommended action",
+                "8. Fly back to global view",
+                "9. Provide final text summary of overall threat posture",
+            ],
+        },
+        "constellation_tour": {
+            "name": "Constellation Tour",
+            "steps": [
+                "1. Query all allied satellites using query_satellites(is_active=true)",
+                "2. Fly to global view showing all satellites",
+                "3. For each key satellite: fly to it, highlight it, show coverage, narrate its role",
+                "4. Use agent_wait(2) between each satellite for dramatic effect",
+                "5. Show coverage gaps if any",
+                "6. Summarize constellation status",
+            ],
+        },
+        "critical_conjunction": {
+            "name": "Critical Conjunction Analysis",
+            "steps": [
+                "1. Query the highest-risk conjunction using query_conjunctions(risk_level='critical', limit=1)",
+                "2. Fly to the primary satellite",
+                "3. Highlight it + show threat radius",
+                "4. Show conjunction line to the secondary object",
+                "5. Show risk heatmap",
+                "6. Show TCA countdown",
+                "7. Estimate maneuver cost with estimate_maneuver_cost",
+                "8. Show maneuver options on the map",
+                "9. Narrate recommendation",
+            ],
+        },
+        "defense_demo": {
+            "name": "Defense Demonstration",
+            "steps": [
+                "1. Fly to Italy (cesium_fly_to_country country='Italy')",
+                "2. Query ground stations near Italy",
+                "3. Highlight allied ground stations",
+                "4. Query threats of type 'proximity'",
+                "5. Show threat visualizations for nearby hostile objects",
+                "6. Narrate the defense posture",
+            ],
+        },
+        "full_briefing": {
+            "name": "Full Operational Briefing",
+            "steps": [
+                "1. Start with threat_landscape scenario steps",
+                "2. Then do constellation_tour steps",
+                "3. Then analyze the most critical conjunction",
+                "4. End with overall situation summary and recommendations",
+            ],
+        },
+    }
+
+    async def stream_agentic_chat(
+        self,
+        messages: list[dict[str, Any]],
+        scene_state: Optional[dict[str, Any]] = None,
+        tenant_id: Optional[str] = None,
+        session_id: Optional[str] = None,
+        user_id: Optional[str] = None,
+    ) -> AsyncGenerator[str, None]:
+        """AEGIS agentic loop: multi-turn tool calling with SSE streaming.
+
+        Key differences from stream_chat_with_functions:
+        - Loop up to 8 iterations (multi-turn) instead of 2 fixed calls
+        - Data is NOT stuffed in system prompt - agent queries on-demand
+        - agent_wait pauses the stream with asyncio.sleep
+        - Emits new SSE event types: agent_thinking, agent_pause, narration, scene_mood, heartbeat
+        - Tool results are fed back into context for the next iteration
+        """
+        if not self.client:
+            yield f"data: {json.dumps({'type': 'error', 'error': 'AI service not configured'})}\n\n"
+            return
+
+        # Initialize memory
+        client_session_id, chat_session_id, memory, memory_call, pop_memory_error_event = (
+            self._init_memory_runtime(
+                tenant_id=tenant_id,
+                user_id=user_id,
+                session_id=session_id,
+                source="agent_chat",
+                enabled=True,
+            )
+        )
+
+        yield f"data: {json.dumps({'type': 'session', 'session_id': client_session_id})}\n\n"
+
+        # Build lean system prompt (no data dump)
+        system_content = self.AGENT_SYSTEM_PROMPT
+        if scene_state:
+            system_content += f"\n\nCurrent scene state:\n{json.dumps(scene_state)}"
+
+        # Get memory context
+        memory_context_messages: list[dict[str, Any]] = []
+        if memory:
+            memory_context_messages = await memory_call(
+                "get_context_agent",
+                lambda: memory.get_context_as_messages(limit=20),
+                [],
+            )
+
+        # Save user message to memory
+        last_user_message = ""
+        for msg in reversed(messages):
+            if msg.get("role") == "user":
+                last_user_message = msg.get("content", "")
+                break
+        if last_user_message and memory:
+            await memory_call(
+                "add_user_message_agent",
+                lambda: memory.add_message(last_user_message, role="user"),
+            )
+
+        # Emit memory usage
+        if memory:
+            usage = await memory_call(
+                "get_window_usage_agent",
+                lambda: memory.get_window_usage(),
+                {"percentage": 0.0},
+            )
+            yield f"data: {json.dumps({'type': 'memory_usage', 'percentage': usage.get('percentage', 0.0)})}\n\n"
+
+        # Build full messages
+        full_messages: list[dict[str, Any]] = [{"role": "system", "content": system_content}]
+        full_messages.extend(memory_context_messages)
+        full_messages.extend(messages)
+
+        # All tools: Cesium + data + physics + control
+        all_tools = CESIUM_FUNCTION_DEFINITIONS + ALL_AGENT_TOOLS
+
+        # Import tool executor
+        from app.services.agent_tool_executor import AgentToolExecutor
+        tool_executor = AgentToolExecutor(self.db, self.ontology)
+
+        max_iterations = 8
+        final_text = ""
+
+        try:
+            for iteration in range(max_iterations):
+                # Emit thinking event
+                yield f"data: {json.dumps({'type': 'agent_thinking', 'step': iteration + 1})}\n\n"
+
+                # Heartbeat before LLM call
+                yield f"data: {json.dumps({'type': 'heartbeat'})}\n\n"
+
+                response = await self._create_completion(
+                    model=settings.REGOLO_MODEL,
+                    messages=full_messages,
+                    max_tokens=2048,
+                    temperature=0.7,
+                    tools=all_tools,
+                )
+
+                message = response.choices[0].message
+
+                # No tool calls -> stream final response
+                if not message.tool_calls:
+                    # Stream the final response text
+                    final_response = await self._create_completion(
+                        model=settings.REGOLO_MODEL,
+                        messages=full_messages,
+                        max_tokens=2048,
+                        temperature=0.7,
+                        stream=True,
+                    )
+
+                    async for chunk in final_response:
+                        if chunk.choices and chunk.choices[0].delta.content:
+                            chunk_text = chunk.choices[0].delta.content
+                            final_text += chunk_text
+                            yield f"data: {json.dumps({'type': 'content', 'chunk': chunk_text})}\n\n"
+                    break
+
+                # Process tool calls
+                # Build the assistant message with tool_calls for context
+                assistant_msg: dict[str, Any] = {
+                    "role": "assistant",
+                    "content": message.content or None,
+                    "tool_calls": [
+                        {
+                            "id": tc.id,
+                            "type": "function",
+                            "function": {
+                                "name": tc.function.name,
+                                "arguments": tc.function.arguments,
+                            },
+                        }
+                        for tc in message.tool_calls
+                    ],
+                }
+                full_messages.append(assistant_msg)
+
+                for tool_call in message.tool_calls:
+                    name = tool_call.function.name
+                    try:
+                        args = json.loads(tool_call.function.arguments or "{}")
+                    except json.JSONDecodeError:
+                        args = {}
+
+                    # Emit tool call event
+                    yield f"data: {json.dumps({'type': 'tool_call', 'tool_name': name, 'arguments': args, 'iteration': iteration})}\n\n"
+
+                    result: dict[str, Any]
+
+                    # ── Cesium/Simulation actions ──
+                    if name.startswith("cesium_") or name.startswith("simulation_"):
+                        action = self._create_cesium_action(name, args)
+                        if action:
+                            yield f"data: {json.dumps({'type': 'action', 'action_type': action.type, 'payload': action.payload})}\n\n"
+                            result = {"status": "dispatched", "action": action.type}
+                        else:
+                            result = {"status": "error", "error": f"Unknown cesium action: {name}"}
+
+                    # ── Data query / Physics / Scene tools ──
+                    elif name.startswith("query_") or name.startswith("compute_") or name.startswith("get_") or name.startswith("propagate_") or name.startswith("estimate_"):
+                        result = await tool_executor.execute(name, args, tenant_id or "default")
+
+                    # ── Agent control tools ──
+                    elif name == "agent_wait":
+                        seconds = min(float(args.get("seconds", 2)), 10)  # Cap at 10s
+                        reason = args.get("reason", "")
+                        yield f"data: {json.dumps({'type': 'agent_pause', 'seconds': seconds, 'reason': reason})}\n\n"
+                        await asyncio.sleep(seconds)
+                        # Heartbeat after wait
+                        yield f"data: {json.dumps({'type': 'heartbeat'})}\n\n"
+                        result = {"status": "resumed", "waited_seconds": seconds}
+
+                    elif name == "agent_narrate":
+                        text = args.get("text", "")
+                        style = args.get("style", "info")
+                        yield f"data: {json.dumps({'type': 'narration', 'text': text, 'style': style})}\n\n"
+                        result = {"status": "narrated"}
+
+                    elif name == "clear_all_overlays":
+                        yield f"data: {json.dumps({'type': 'action', 'action_type': 'cesium.clearAllOverlays', 'payload': {}})}\n\n"
+                        result = {"status": "cleared"}
+
+                    elif name == "set_scene_mood":
+                        mood = args.get("mood", "normal")
+                        yield f"data: {json.dumps({'type': 'action', 'action_type': 'cesium.setSceneMood', 'payload': {'mood': mood}})}\n\n"
+                        yield f"data: {json.dumps({'type': 'scene_mood', 'mood': mood})}\n\n"
+                        result = {"status": "mood_set", "mood": mood}
+
+                    elif name == "run_scenario":
+                        scenario_id = args.get("scenario_id", "")
+                        template = self.SCENARIO_TEMPLATES.get(scenario_id)
+                        if template:
+                            result = {"scenario": template["name"], "steps": template["steps"]}
+                        else:
+                            available = list(self.SCENARIO_TEMPLATES.keys())
+                            result = {"error": f"Unknown scenario: {scenario_id}", "available": available}
+
+                    else:
+                        result = {"error": f"Unknown tool: {name}"}
+
+                    # Emit tool result
+                    yield f"data: {json.dumps({'type': 'tool_result', 'tool_call_id': tool_call.id, 'tool_name': name, 'result': result})}\n\n"
+
+                    # Add tool result to context for next iteration
+                    result_str = json.dumps(result, default=str)
+                    if len(result_str) > 4000:
+                        result_str = result_str[:4000] + "... [truncated]"
+
+                    full_messages.append({
+                        "role": "tool",
+                        "tool_call_id": tool_call.id,
+                        "content": result_str,
+                    })
+
+            # Save assistant response to memory
+            if final_text and memory:
+                await memory_call(
+                    "add_assistant_message_agent",
+                    lambda: memory.add_message(final_text, role="assistant"),
+                )
+
+            yield "data: [DONE]\n\n"
+
+        except Exception as e:
+            logger.error(f"Agentic chat error: {e}")
+            yield f"data: {json.dumps({'type': 'error', 'error': str(e)})}\n\n"
+            yield "data: [DONE]\n\n"
+
     async def _get_satellites_context(self, tenant_id: str) -> list[dict]:
         """Get list of satellites for context."""
         satellites = []
@@ -977,7 +1327,7 @@ Provide your analysis in the following JSON format:
             if not self.client:
                 raise AIServiceError("Servizio AI non configurato. Contatta l'amministratore.")
             
-            response = await self.client.chat.completions.create(
+            response = await self._create_completion(
                 model=settings.REGOLO_MODEL,
                 messages=[
                     {"role": "system", "content": self.SYSTEM_PROMPT},
@@ -1096,7 +1446,7 @@ Provide your analysis in the following JSON format:
             if not self.client:
                 raise AIServiceError("Servizio AI non configurato. Contatta l'amministratore.")
             
-            response = await self.client.chat.completions.create(
+            response = await self._create_completion(
                 model=settings.REGOLO_MODEL,
                 messages=[
                     {"role": "system", "content": self.SYSTEM_PROMPT},
@@ -1194,7 +1544,7 @@ Fornisci 2-3 opzioni realistiche in formato JSON:
 }}"""
         
         try:
-            response = await self.client.chat.completions.create(
+            response = await self._create_completion(
                 model=settings.REGOLO_MODEL,
                 messages=[
                     {"role": "system", "content": self.SYSTEM_PROMPT},
@@ -1384,6 +1734,101 @@ Fornisci 2-3 opzioni realistiche in formato JSON:
             intent=intent,
             session_id=session_id,
         )
+
+        # ── SDA Operator Commands ──────────────────────────────────
+        if intent in ("shift_brief", "fleet_threat_scan", "what_if_scenario"):
+            from app.services.chat_commands import ChatCommandService
+            from app.services.chat_prompts import (
+                shift_brief_prompt,
+                fleet_threat_scan_prompt,
+                what_if_scenario_prompt,
+            )
+
+            cmd_svc = ChatCommandService(self.db, tenant_id)
+
+            try:
+                # Notify frontend that we're starting the command
+                cmd_label = {
+                    "shift_brief": "Shift Brief",
+                    "fleet_threat_scan": "Fleet Threat Scan",
+                    "what_if_scenario": "What-If Scenario",
+                }[intent]
+                yield f"data: {json.dumps({'type': 'agent_start', 'agent': intent, 'message': f'Executing {cmd_label}...'})}\n\n"
+
+                # Execute the command
+                if intent == "shift_brief":
+                    cmd_data = await cmd_svc.shift_brief()
+                    llm_prompt = shift_brief_prompt(cmd_data)
+                elif intent == "fleet_threat_scan":
+                    cmd_data = await cmd_svc.fleet_threat_scan()
+                    llm_prompt = fleet_threat_scan_prompt(cmd_data)
+                else:
+                    cmd_data = await cmd_svc.what_if_scenario(message)
+                    llm_prompt = what_if_scenario_prompt(cmd_data)
+
+                # Emit Cesium actions
+                for action in cmd_data.get("cesium_actions", []):
+                    yield f"data: {json.dumps({'type': 'cesium_action', 'action': action})}\n\n"
+
+                # Stream LLM response using the structured prompt
+                context_messages = await memory_call(
+                    "get_context_for_sda_command",
+                    lambda: memory.get_context_as_messages(limit=5),
+                    [],
+                )
+                messages_for_llm = context_messages + [{"role": "user", "content": llm_prompt}]
+
+                assistant_chunks: list[str] = []
+                async for line in self.stream_chat_with_functions(
+                    messages=messages_for_llm,
+                    scene_state=None,
+                    tenant_id=tenant_id,
+                    include_satellites=False,
+                    use_memory=False,
+                ):
+                    if not line.startswith("data: "):
+                        continue
+                    payload = line[6:].strip()
+                    if payload == "[DONE]":
+                        continue
+                    try:
+                        event = json.loads(payload)
+                    except json.JSONDecodeError:
+                        continue
+                    if event.get("type") == "content":
+                        chunk = event.get("chunk", "")
+                        assistant_chunks.append(chunk)
+                        yield f"data: {json.dumps({'type': 'content', 'chunk': chunk})}\n\n"
+
+                final_text = "".join(assistant_chunks)
+                if final_text:
+                    await memory_call(
+                        "add_sda_command_response",
+                        lambda: memory.add_message(final_text, role="assistant"),
+                    )
+
+                yield f"data: {json.dumps({'type': 'agent_complete', 'agent': intent, 'message': f'{cmd_label} complete'})}\n\n"
+
+            except Exception as exc:
+                logger.exception("sda_command_failed", intent=intent, error=str(exc))
+                try:
+                    await self.db.rollback()
+                except Exception:
+                    pass
+                yield f"data: {json.dumps({'type': 'error', 'error': f'Errore durante {intent}: {str(exc)}'})}\n\n"
+
+            usage = await memory_call(
+                "get_window_usage_after_sda_command",
+                lambda: memory.get_window_usage(),
+                {"percentage": 0.0},
+            )
+            if error_line := flush_memory_error_event_line():
+                yield error_line
+            yield f"data: {json.dumps({'type': 'memory_usage', 'percentage': usage.get('percentage', 0.0)})}\n\n"
+            if error_line := flush_memory_error_event_line():
+                yield error_line
+            yield "data: [DONE]\n\n"
+            return
 
         if intent == "conjunction_analysis":
             from app.services.detour.upstream_agent_service import UpstreamDetourAgentService
@@ -1785,6 +2230,31 @@ INSTRUCTIONS: Use cesium_fly_to with longitude/latitude from the list""")
         """Classify user intent to determine which workflow to run."""
         message_lower = message.lower().strip()
 
+        # ── SDA Operator Commands (checked first — high-value, specific) ──
+        shift_brief_patterns = (
+            "briefing turno", "shift brief", "briefing di turno",
+            "briefing operativo", "stato del mondo", "situazione generale",
+            "morning brief", "handover brief",
+        )
+        if any(p in message_lower for p in shift_brief_patterns):
+            return "shift_brief"
+
+        fleet_threat_patterns = (
+            "scansione minacce", "fleet threat", "threat scan",
+            "any threats", "minacce attive", "ci sono minacce",
+            "asset sicur", "are my assets safe", "scansione flotta",
+        )
+        if any(p in message_lower for p in fleet_threat_patterns):
+            return "fleet_threat_scan"
+
+        if re.search(
+            r"\b(cosa succede|what if|what-if|simula|scenario|se\s+.+\s+esplod|se\s+.+\s+fragment|"
+            r"se perdo|if i lose|se approvo|if i approve|se la manovra)\b",
+            message_lower,
+        ):
+            return "what_if_scenario"
+
+        # ── Existing intents ──
         conjunction_keywords = (
             "congiunzione", "conjunction", "collisione", "collision",
             "rischio", "risk", "manovra evasiva", "avoidance", "detour",
@@ -2679,7 +3149,7 @@ INSTRUCTIONS: Use cesium_fly_to with longitude/latitude from the list""")
         ]
         
         try:
-            response = await self.client.chat.completions.create(
+            response = await self._create_completion(
                 model=settings.REGOLO_MODEL,
                 messages=messages,
                 max_tokens=2048,

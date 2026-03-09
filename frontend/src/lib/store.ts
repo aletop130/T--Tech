@@ -5,11 +5,13 @@ interface AppState {
   currentTenant: string;
   selectedObjectId: string | null;
   selectedObjectType: string | null;
-  
+  collapsedSections: Record<string, boolean>;
+
   toggleSidebar: () => void;
   setTenant: (tenant: string) => void;
   selectObject: (type: string, id: string) => void;
   clearSelection: () => void;
+  toggleSection: (section: string) => void;
 }
 
 export const useAppStore = create<AppState>((set) => ({
@@ -17,21 +19,29 @@ export const useAppStore = create<AppState>((set) => ({
   currentTenant: 'default',
   selectedObjectId: null,
   selectedObjectType: null,
-  
-  toggleSidebar: () => set((state) => ({ 
-    sidebarCollapsed: !state.sidebarCollapsed 
+  collapsedSections: {},
+
+  toggleSidebar: () => set((state) => ({
+    sidebarCollapsed: !state.sidebarCollapsed
   })),
-  
+
   setTenant: (tenant) => set({ currentTenant: tenant }),
-  
-  selectObject: (type, id) => set({ 
-    selectedObjectType: type, 
-    selectedObjectId: id 
+
+  selectObject: (type, id) => set({
+    selectedObjectType: type,
+    selectedObjectId: id
   }),
-  
-  clearSelection: () => set({ 
-    selectedObjectType: null, 
-    selectedObjectId: null 
+
+  clearSelection: () => set({
+    selectedObjectType: null,
+    selectedObjectId: null
   }),
+
+  toggleSection: (section) => set((state) => ({
+    collapsedSections: {
+      ...state.collapsedSections,
+      [section]: !state.collapsedSections[section],
+    },
+  })),
 }));
 

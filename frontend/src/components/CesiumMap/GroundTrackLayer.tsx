@@ -95,11 +95,13 @@ export function GroundTrackLayer({
               polyline: {
                 positions: pastPositions,
                 width: 2,
+                arcType: Cesium.ArcType.GEODESIC,
                 material: new Cesium.PolylineGlowMaterialProperty({
                   glowPower: 0.1,
                   color: Cesium.Color.fromCssColorString('#06b6d4').withAlpha(0.35),
                 }),
                 clampToGround: true,
+                granularity: 0.02,
               },
             });
             entityIds.push(pastId);
@@ -118,11 +120,13 @@ export function GroundTrackLayer({
               polyline: {
                 positions: futurePositions,
                 width: 3,
+                arcType: Cesium.ArcType.GEODESIC,
                 material: new Cesium.PolylineGlowMaterialProperty({
                   glowPower: 0.25,
                   color: Cesium.Color.fromCssColorString('#22d3ee'),
                 }),
                 clampToGround: true,
+                granularity: 0.02,
               },
             });
             entityIds.push(futureId);

@@ -42,8 +42,9 @@ function EventTypeTag({ type }: { type: string }) {
 }
 
 function FragmentTable({ detail }: { detail: FragmentationEventDetail }) {
-  const fragments = detail.fragments.slice(0, 100);
-  const remaining = detail.fragments.length - fragments.length;
+  const [expanded, setExpanded] = useState(false);
+  const fragments = expanded ? detail.fragments : detail.fragments.slice(0, 100);
+  const remaining = detail.fragments.length - 100;
 
   return (
     <div className="mt-2">
@@ -68,7 +69,7 @@ function FragmentTable({ detail }: { detail: FragmentationEventDetail }) {
                 <td className="px-2 py-1 text-sda-text-secondary font-mono">{f.intdes}</td>
                 <td className="px-2 py-1">
                   {f.rcs_size && (
-                    <Tag minimal small intent={f.rcs_size === 'LARGE' ? 'danger' : f.rcs_size === 'MEDIUM' ? 'warning' : 'none'}>
+                    <Tag minimal intent={f.rcs_size === 'LARGE' ? 'danger' : f.rcs_size === 'MEDIUM' ? 'warning' : 'none'}>
                       {f.rcs_size}
                     </Tag>
                   )}
@@ -78,9 +79,12 @@ function FragmentTable({ detail }: { detail: FragmentationEventDetail }) {
           </tbody>
         </table>
         {remaining > 0 && (
-          <div className="text-center text-xs text-sda-text-secondary py-1 border-t border-sda-border-default">
-            +{remaining} more fragments
-          </div>
+          <button
+            className="w-full text-center text-xs py-1 border-t border-sda-border-default cursor-pointer hover:bg-sda-bg-tertiary text-sda-accent-blue"
+            onClick={() => setExpanded(!expanded)}
+          >
+            {expanded ? 'Show less' : `+${remaining} more fragments`}
+          </button>
         )}
       </div>
     </div>
@@ -158,7 +162,7 @@ function EventCard({
             </div>
             <div>
               <span className="text-sda-text-secondary">Orbit: </span>
-              <Tag minimal small>{event.orbit_regime}</Tag>
+              <Tag minimal>{event.orbit_regime}</Tag>
             </div>
           </div>
 

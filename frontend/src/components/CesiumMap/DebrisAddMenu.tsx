@@ -70,19 +70,20 @@ export const DebrisAddMenu: React.FC<DebrisAddMenuProps> = ({
       <Button
         ref={buttonRef}
         minimal
+        small
         intent={Intent.WARNING}
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-1 whitespace-nowrap"
+        className="flex items-center gap-1.5 whitespace-nowrap !px-4 !py-1"
       >
-        <span className="w-2 h-2 rounded-full" style={{ backgroundColor: '#f59e0b' }}></span>
-        <span>Debris: {debrisCount ?? 0}</span>
+        <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: '#f59e0b' }}></span>
+        <span className="text-xs">Debris: {debrisCount ?? 0}</span>
         <svg
-          className={`w-3 h-3 transition-transform ${isOpen ? 'rotate-180' : ''}`}
+          className={`w-2.5 h-2.5 transition-transform ${isOpen ? 'rotate-180' : ''}`}
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
         >
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 9l-7 7-7-7" />
         </svg>
       </Button>
 
