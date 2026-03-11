@@ -6,6 +6,17 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 /**
+ * Return the API base URL.
+ * Browser: empty string (uses Next.js rewrites).
+ * Server: reads NEXT_PUBLIC_API_URL or falls back to the Docker service name.
+ */
+export function getApiBase(): string {
+  return typeof window !== 'undefined'
+    ? ''
+    : (process.env.NEXT_PUBLIC_API_URL || 'http://backend:8000');
+}
+
+/**
  * Format a date as a relative time string (e.g., "2 minutes ago", "just now")
  */
 export function formatDistanceToNow(date: Date | string | number): string {

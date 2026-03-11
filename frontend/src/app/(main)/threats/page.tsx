@@ -1,62 +1,23 @@
 'use client';
 
-import { useState, Suspense } from 'react';
-import { useSearchParams } from 'next/navigation';
-import { Tabs, Tab, Icon, Card, Spinner } from '@blueprintjs/core';
+import TabbedPage from '@/components/Layout/TabbedPage';
 import { ThreatPanel } from '@/components/Threats/ThreatPanel';
 import { FleetRiskPanel } from '@/components/Threats/FleetRiskPanel';
 import { AdversaryPanel } from '@/components/Adversary/AdversaryPanel';
 
-const VALID_TABS = ['detection', 'fleet-risk', 'adversary'] as const;
-type TabId = (typeof VALID_TABS)[number];
-
-function ThreatsPageInner() {
-  const searchParams = useSearchParams();
-  const initialTab = VALID_TABS.includes(searchParams.get('tab') as TabId)
-    ? (searchParams.get('tab') as TabId)
-    : 'detection';
-  const [selectedTab, setSelectedTab] = useState<TabId>(initialTab);
-
-  const handleTabChange = (newTab: string) => {
-    setSelectedTab(newTab as TabId);
-    window.history.replaceState(null, '', `?tab=${newTab}`);
-  };
-
-  return (
-    <div className="h-full flex flex-col" data-testid="threats-page">
-      <div className="flex items-center gap-2 px-4 py-3">
-        <Icon icon="shield" size={20} style={{ color: '#e74c3c' }} />
-        <h1 className="text-xl font-bold m-0" style={{ color: '#e74c3c' }}>
-          Threats &amp; Intelligence
-        </h1>
-      </div>
-
-      <Card className="flex-1 flex flex-col overflow-hidden mx-4 mb-4">
-        <Tabs
-          id="threats-tabs"
-          selectedTabId={selectedTab}
-          onChange={handleTabChange}
-          large
-        >
-          <Tab id="detection" title="Detection" />
-          <Tab id="fleet-risk" title="Fleet Risk" />
-          <Tab id="adversary" title="Adversary" />
-        </Tabs>
-
-        <div className="flex-1 overflow-auto">
-          {selectedTab === 'detection' && <ThreatPanel />}
-          {selectedTab === 'fleet-risk' && <FleetRiskPanel />}
-          {selectedTab === 'adversary' && <AdversaryPanel />}
-        </div>
-      </Card>
-    </div>
-  );
-}
-
 export default function ThreatsPage() {
   return (
-    <Suspense fallback={<Spinner />}>
-      <ThreatsPageInner />
-    </Suspense>
+    <TabbedPage
+      tabsId="threats-tabs"
+      icon="shield"
+      title="Threats & Intelligence"
+      color="#e74c3c"
+      testId="threats-page"
+      tabs={[
+        { id: 'detection', title: 'Detection', component: <ThreatPanel /> },
+        { id: 'fleet-risk', title: 'Fleet Risk', component: <FleetRiskPanel /> },
+        { id: 'adversary', title: 'Adversary', component: <AdversaryPanel /> },
+      ]}
+    />
   );
 }

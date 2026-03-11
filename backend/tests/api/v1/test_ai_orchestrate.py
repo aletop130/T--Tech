@@ -136,6 +136,32 @@ async def test_orchestrate_start_sar_simulation_without_confirmation(client):
 
 
 @pytest.mark.asyncio
+async def test_orchestrate_open_sandbox_for_custom_workspace_requests(client):
+    """Sandbox workspace requests should navigate into the dedicated sandbox page."""
+    response = await client.post(
+        "/api/v1/ai/chat/orchestrate",
+        json={
+            "message": "Open a sandbox for a custom simulation around the selected satellites",
+            "session_id": "orchestrate-sandbox-session",
+        },
+    )
+    assert response.status_code == 200
+    events = _parse_sse_events(response.text)
+
+    assert any(
+        e.get("type") == "simulation_control"
+        and e.get("action") == "open_sandbox"
+        and e.get("prompt") == "Open a sandbox for a custom simulation around the selected satellites"
+        for e in events
+    )
+    assert any(
+        e.get("type") == "content" and "Opening Sandbox" in e.get("chunk", "")
+        for e in events
+    )
+    assert any(e.get("type") == "done" for e in events)
+
+
+@pytest.mark.asyncio
 async def test_orchestrate_conjunction_routes_to_upstream_pipeline(client, monkeypatch):
     """Conjunction prompts must call upstream 5-agent stream without local context gate."""
 
@@ -161,6 +187,7 @@ async def test_orchestrate_conjunction_routes_to_upstream_pipeline(client, monke
         UpstreamDetourAgentService,
         "_ensure_demo_data",
         classmethod(fake_ensure_demo_data),
+        raising=False,
     )
     monkeypatch.setattr(
         UpstreamDetourAgentService,

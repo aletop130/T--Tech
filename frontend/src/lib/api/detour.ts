@@ -3,10 +3,10 @@
    Mirrors the backend endpoints defined in backend/app/api/v1/detour.py.
 */
 
+import { getApiBase } from '@/lib/utils';
+
 // Base API URL – matches the logic used in src/lib/api.ts
-const API_BASE: string = typeof window !== 'undefined'
-  ? '' // Browser: relative URLs go through Next.js rewrites
-  : (process.env.NEXT_PUBLIC_API_URL || '');
+const API_BASE: string = getApiBase();
 
 // Default tenant – in a real app this would be dynamic based on auth context.
 const DEFAULT_TENANT_ID = 'default';
@@ -40,7 +40,16 @@ export interface DetourAnalysisStatus {
   status: string;
   started_at?: string;
   completed_at?: string;
-  events?: unknown[];
+  events?: DetourAnalysisEvent[];
+}
+
+export interface DetourAnalysisEvent {
+  type?: string;
+  agent?: string;
+  message?: string;
+  content?: string;
+  timestamp?: number;
+  [key: string]: unknown;
 }
 
 export interface DetourAnalysisResults {
@@ -74,6 +83,8 @@ export interface ManeuverPlan {
 export interface ScreeningCandidate {
   candidate_id: string;
   satellite_id: string;
+  satellite_name?: string;
+  satellite_norad_id?: number;
   tca: string;
   miss_distance_km: number;
   collision_probability?: number;
@@ -83,6 +94,15 @@ export interface ScreeningCandidate {
 export interface ScreeningResult {
   candidates: ScreeningCandidate[];
   generated_at: string;
+  metadata?: {
+    source?: string;
+    requested_satellite_id?: string;
+    screened_satellite_name?: string;
+    screened_satellite_norad_id?: number;
+    screened_with_requested_satellite?: boolean;
+    screened_orbit_id?: string | null;
+    [key: string]: unknown;
+  };
 }
 
 /** Trigger a Detour analysis for a specific conjunction event.

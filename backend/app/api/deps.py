@@ -21,6 +21,7 @@ from app.services.debris import DebrisService
 from app.services.incidents import IncidentService
 from app.services.analytics import ConjunctionAnalyzer, SpaceWeatherAnalyzer
 from app.services.ingestion import IngestionService
+from app.services.sandbox import SandboxService
 try:
     from app.services.ai import AIService
 except ImportError:  # pragma: no cover
@@ -148,6 +149,13 @@ async def get_ai_service(
     return AIService(db, ontology)
 
 
+async def get_sandbox_service(
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> SandboxService:
+    """Get sandbox service instance."""
+    return SandboxService(db)
+
+
 async def get_operations_service(
     db: Annotated[AsyncSession, Depends(get_db)],
     audit: Annotated[AuditService, Depends(get_audit_service)],
@@ -213,4 +221,3 @@ async def get_communication_service(
     """Get communication service instance."""
     from app.services.operations import CommunicationService
     return CommunicationService(db, audit)
-

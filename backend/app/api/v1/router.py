@@ -31,6 +31,7 @@ from app.api.v1 import (
     maneuver_detection,
     ground_track,
     debris_genealogy,
+    sandbox,
 )
 
 api_router = APIRouter()
@@ -117,6 +118,12 @@ api_router.include_router(
     simulation.router,
     prefix="/simulation",
     tags=["Simulation"],
+)
+
+api_router.include_router(
+    sandbox.router,
+    prefix="/sandbox",
+    tags=["Sandbox"],
 )
 
 api_router.include_router(
@@ -208,4 +215,3 @@ api_router.include_router(
     prefix="/debris-genealogy",
     tags=["Debris Genealogy"],
 )
-

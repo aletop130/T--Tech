@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logging import get_logger
 from app.db.models.ontology import Satellite, Orbit
+from app.services.intelligence_support import derive_orbit_metrics
 
 logger = get_logger(__name__)
 
@@ -78,6 +79,40 @@ def _classify_orbit_from_params(
         elif 1400 < period_minutes < 1500:
             return "GEO"
     return None
+
+
+def _coerce_orbit_type(value: object) -> Optional[str]:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        return value.upper()
+    return getattr(value, "value", None)
+
+
+def _build_sat_orbit_index(orbits: list[Orbit]) -> dict[str, dict]:
+    sat_orbits: dict[str, dict] = {}
+    for orbit in orbits:
+        metrics = derive_orbit_metrics(orbit)
+        current = sat_orbits.get(orbit.satellite_id)
+        next_epoch = metrics.get("epoch")
+        current_epoch = current.get("epoch") if current else None
+        if current and current_epoch and next_epoch and next_epoch <= current_epoch:
+            continue
+
+        orbit_type = _classify_orbit_from_params(
+            metrics.get("inclination_deg"),
+            metrics.get("period_minutes"),
+            metrics.get("mean_motion_rev_day"),
+        ) or _coerce_orbit_type(orbit.orbit_type)
+
+        sat_orbits[orbit.satellite_id] = {
+            "epoch": next_epoch,
+            "orbit_type": orbit_type,
+            "inclination_deg": metrics.get("inclination_deg"),
+            "mean_motion": metrics.get("mean_motion_rev_day"),
+            "period_minutes": metrics.get("period_minutes"),
+        }
+    return sat_orbits
 
 
 def _compute_correlation_confidence(
@@ -196,11 +231,11 @@ class LaunchCorrelationService:
 
     async def get_recent_launches_correlated(self, tenant_id: str) -> dict:
         """Get recent launches with correlated catalog objects."""
-        url = f"{SPACE_DEVS_BASE}/launches/?mode=list&limit=20&ordering=-net"
+        url = f"{SPACE_DEVS_BASE}/launches/previous/?mode=list&limit=20"
         launches = await _fetch_launches(url, "recent_launches")
 
         # Get recent satellites from DB (last 30 days)
-        cutoff = datetime.now(timezone.utc) - timedelta(days=30)
+        cutoff = datetime.utcnow() - timedelta(days=30)
         stmt = (
             select(Satellite)
             .where(Satellite.tenant_id == tenant_id)
@@ -221,21 +256,7 @@ class LaunchCorrelationService:
                 .order_by(desc(Orbit.epoch))
             )
             orbit_result = await self.db.execute(orbit_stmt)
-            orbits = orbit_result.scalars().all()
-            for o in orbits:
-                if o.satellite_id not in sat_orbits:
-                    orbit_type = _classify_orbit_from_params(
-                        getattr(o, "inclination_deg", None),
-                        getattr(o, "period_minutes", None),
-                        getattr(o, "mean_motion_rev_day", None),
-                    )
-                    sat_orbits[o.satellite_id] = {
-                        "epoch": o.epoch,
-                        "orbit_type": orbit_type or (o.orbit_type.value if o.orbit_type else None),
-                        "inclination_deg": getattr(o, "inclination_deg", None),
-                        "mean_motion": getattr(o, "mean_motion_rev_day", None),
-                        "period_minutes": getattr(o, "period_minutes", None),
-                    }
+            sat_orbits = _build_sat_orbit_index(orbit_result.scalars().all())
 
         # Correlate
         launch_correlations = []
@@ -281,10 +302,10 @@ class LaunchCorrelationService:
 
     async def get_uncorrelated_objects(self, tenant_id: str) -> dict:
         """Get catalog objects that don't match any recent launch."""
-        url = f"{SPACE_DEVS_BASE}/launches/?mode=list&limit=20&ordering=-net"
+        url = f"{SPACE_DEVS_BASE}/launches/previous/?mode=list&limit=20"
         launches = await _fetch_launches(url, "recent_launches")
 
-        cutoff = datetime.now(timezone.utc) - timedelta(days=30)
+        cutoff = datetime.utcnow() - timedelta(days=30)
         stmt = (
             select(Satellite)
             .where(Satellite.tenant_id == tenant_id)
@@ -305,21 +326,7 @@ class LaunchCorrelationService:
                 .order_by(desc(Orbit.epoch))
             )
             orbit_result = await self.db.execute(orbit_stmt)
-            orbits = orbit_result.scalars().all()
-            for o in orbits:
-                if o.satellite_id not in sat_orbits:
-                    orbit_type = _classify_orbit_from_params(
-                        getattr(o, "inclination_deg", None),
-                        getattr(o, "period_minutes", None),
-                        getattr(o, "mean_motion_rev_day", None),
-                    )
-                    sat_orbits[o.satellite_id] = {
-                        "epoch": o.epoch,
-                        "orbit_type": orbit_type or (o.orbit_type.value if o.orbit_type else None),
-                        "inclination_deg": getattr(o, "inclination_deg", None),
-                        "mean_motion": getattr(o, "mean_motion_rev_day", None),
-                        "period_minutes": getattr(o, "period_minutes", None),
-                    }
+            sat_orbits = _build_sat_orbit_index(orbit_result.scalars().all())
 
         uncorrelated = []
         for sat in satellites:
@@ -362,7 +369,7 @@ class LaunchCorrelationService:
 
     async def get_launch_detail(self, tenant_id: str, launch_id: str) -> dict:
         """Get details of a specific launch with all correlated objects."""
-        url = f"{SPACE_DEVS_BASE}/launches/?mode=list&limit=20&ordering=-net"
+        url = f"{SPACE_DEVS_BASE}/launches/previous/?mode=list&limit=20"
         launches = await _fetch_launches(url, "recent_launches")
 
         # Also check upcoming
@@ -379,7 +386,7 @@ class LaunchCorrelationService:
             return {"launch": None, "correlated_objects": [], "total_correlated": 0}
 
         # Correlate with DB satellites
-        cutoff = datetime.now(timezone.utc) - timedelta(days=30)
+        cutoff = datetime.utcnow() - timedelta(days=30)
         stmt = (
             select(Satellite)
             .where(Satellite.tenant_id == tenant_id)
@@ -399,21 +406,7 @@ class LaunchCorrelationService:
                 .order_by(desc(Orbit.epoch))
             )
             orbit_result = await self.db.execute(orbit_stmt)
-            orbits = orbit_result.scalars().all()
-            for o in orbits:
-                if o.satellite_id not in sat_orbits:
-                    orbit_type = _classify_orbit_from_params(
-                        getattr(o, "inclination_deg", None),
-                        getattr(o, "period_minutes", None),
-                        getattr(o, "mean_motion_rev_day", None),
-                    )
-                    sat_orbits[o.satellite_id] = {
-                        "epoch": o.epoch,
-                        "orbit_type": orbit_type or (o.orbit_type.value if o.orbit_type else None),
-                        "inclination_deg": getattr(o, "inclination_deg", None),
-                        "mean_motion": getattr(o, "mean_motion_rev_day", None),
-                        "period_minutes": getattr(o, "period_minutes", None),
-                    }
+            sat_orbits = _build_sat_orbit_index(orbit_result.scalars().all())
 
         correlated = []
         for sat in satellites:

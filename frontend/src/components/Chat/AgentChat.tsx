@@ -47,6 +47,7 @@ export interface SimulationControlCommand {
   action: string;
   mode?: string;
   source?: string;
+  prompt?: string;
 }
 
 /** Minimal satellite info passed as chat context */
@@ -77,43 +78,12 @@ interface AgentState {
   message?: string;
 }
 
-// ── Constants ──
-
-const CHAT_CONNECT_TIMEOUT_MS = 30000;
-const CHAT_STREAM_IDLE_TIMEOUT_MS = 120000; // 120s for agent mode (multi-turn can take 30-60s)
+interface PendingOperation {
+  operation_type?: string;
+  summary?: string;
+}
 
 // ── Helpers ──
-
-function describeMapUpdate(actionType: string | undefined): string {
-  if (!actionType) return 'aggiornamento visuale';
-  const normalized = actionType.startsWith('cesium.') ? actionType.replace('cesium.', '') : actionType;
-  const labels: Record<string, string> = {
-    flyTo: 'focus camera',
-    flyToCountry: 'focus paese',
-    searchLocation: 'ricerca luogo',
-    addEntity: 'nuovo oggetto',
-    toggle: 'layer aggiornati',
-    setSelected: 'selezione oggetto',
-    setClock: 'tempo simulazione',
-    loadCzml: 'traiettorie caricate',
-    removeLayer: 'layer rimosso',
-    showGroundTrack: 'ground track',
-    showDebrisCloud: 'debris cloud',
-    showReentryFootprint: 'reentry footprint',
-    showCoverageGaps: 'coverage gaps',
-    showThreatRadius: 'threat radius',
-    showConjunctionLine: 'conjunction line',
-    showRiskHeatmap: 'risk heatmap',
-    showTcaCountdown: 'TCA countdown',
-    showManeuverOptions: 'opzioni manovra',
-    highlightManeuver: 'manovra evidenziata',
-    clearAllOverlays: 'overlay puliti',
-    setSceneMood: 'atmosfera cambiata',
-    annotatePoint: 'annotazione aggiunta',
-    drawRegionHighlight: 'regione evidenziata',
-  };
-  return labels[normalized] || 'aggiornamento visuale';
-}
 
 function formatAction(action: CesiumAction): string {
   switch (action.type) {
@@ -183,6 +153,65 @@ const quickPrompts = [
   'Analizza le congiunzioni attive',
 ];
 
+const DETOUR_TIMELINE_AGENTS = new Set(['scout', 'analyst', 'planner', 'safety', 'ops_brief']);
+
+function buildContextPrefixedMessage(
+  text: string,
+  contextSatellites: ChatSatelliteContext[]
+): string {
+  if (contextSatellites.length === 0) {
+    return text;
+  }
+
+  const context = contextSatellites.map((satellite) =>
+    `[${satellite.name} | NORAD:${satellite.norad_id} | Type:${satellite.object_type}${satellite.country ? ` | Country:${satellite.country}` : ''}${satellite.operator ? ` | Op:${satellite.operator}` : ''}${satellite.tags.length ? ` | Tags:${satellite.tags.join(',')}` : ''}]`
+  ).join(' ');
+
+  return `[Contesto satelliti selezionati: ${context}]\n\n${text}`;
+}
+
+function shouldUseOrchestration(message: string): boolean {
+  const normalized = message.toLowerCase().trim();
+
+  const phrasePatterns = [
+    'briefing turno',
+    'shift brief',
+    'briefing di turno',
+    'briefing operativo',
+    'stato del mondo',
+    'situazione generale',
+    'morning brief',
+    'handover brief',
+    'scansione minacce',
+    'fleet threat',
+    'threat scan',
+    'minacce attive',
+    'ci sono minacce',
+    'any threats',
+  ];
+
+  if (phrasePatterns.some((pattern) => normalized.includes(pattern))) {
+    return true;
+  }
+
+  if (/^(conferma|confirm|yes|ok|procedi|esegui|vai|approve|approved)\b/.test(normalized)) {
+    return true;
+  }
+
+  const orchestrationPatterns = [
+    /\b(sandbox|custom simulation|custom scenario|simulation workspace)\b/,
+    /\b(what if|what-if|simula|scenario)\b/,
+    /\b(congiunzione|conjunction|collisione|collision|rischio|risk|manovra evasiva|avoidance|detour)\b/,
+    /\b(crea|create|add)\b.*\b(satellite|satellit)\b/,
+    /\b(crea|create|add)\b.*\b(base|ground station|stazione)\b/,
+    /\b(crea|create|add|spawn)\b.*\b(vehicle|veicolo|ground vehicle)\b/,
+    /\b(start|avvia|avviare|inizia|iniziare|lancia|launch)\b.*\b(sar|simulation|simulazione|missione|mission)\b/,
+    /\b(crea|create|start|avvia)\b.*\b(operation|operazione)\b/,
+  ];
+
+  return orchestrationPatterns.some((pattern) => pattern.test(normalized));
+}
+
 // ── Component ──
 
 export function AgentChat({
@@ -199,7 +228,7 @@ export function AgentChat({
   const [streamingText, setStreamingText] = useState('');
   const [expandedActions, setExpandedActions] = useState<Set<string>>(new Set());
   const [expandedTools, setExpandedTools] = useState<Set<string>>(new Set());
-  const [currentToolCalls, setCurrentToolCalls] = useState<{ tool_name: string; arguments: Record<string, unknown> }[]>([]);
+  const [, setCurrentToolCalls] = useState<{ tool_name: string; arguments: Record<string, unknown> }[]>([]);
   const sseClientRef = useRef<SSEChatClient | null>(null);
 
   // Agent-specific state
@@ -218,11 +247,34 @@ export function AgentChat({
   const [activeAgents, setActiveAgents] = useState<AgentState[]>([]);
   const [memoryUsage, setMemoryUsage] = useState(0);
   const [memoryWarning, setMemoryWarning] = useState<string | null>(null);
+  const [pendingOperation, setPendingOperation] = useState<PendingOperation | null>(null);
   const [showAgentTimeline, setShowAgentTimeline] = useState(false);
 
   const {
     isStepByStepMode,
   } = useDetourStore();
+
+  const updateAgentState = useCallback(
+    (name: string, status: AgentState['status'], message?: string) => {
+      setActiveAgents((prev) => {
+        const existingIndex = prev.findIndex((agent) => agent.name === name);
+        const nextState = { name, status, message };
+
+        if (existingIndex === -1) {
+          return [...prev, nextState];
+        }
+
+        const nextAgents = [...prev];
+        nextAgents[existingIndex] = {
+          ...nextAgents[existingIndex],
+          status,
+          message: message ?? nextAgents[existingIndex].message,
+        };
+        return nextAgents;
+      });
+    },
+    []
+  );
 
   useEffect(() => {
     return () => {
@@ -230,15 +282,16 @@ export function AgentChat({
     };
   }, []);
 
-  // ── Main send handler: ALL messages go to /chat/agent ──
+  // ── Main send handler: route platform ops to orchestrator, exploration to AEGIS ──
 
   const handleSendText = useCallback(async (text: string) => {
-    if (!text.trim() || isLoading) return;
+    const trimmedText = text.trim();
+    if (!trimmedText || isLoading) return;
 
     const userMessage: ChatDisplayMessage = {
       id: Date.now().toString(),
       role: 'user',
-      content: text.trim(),
+      content: trimmedText,
       timestamp: new Date().toISOString(),
     };
 
@@ -248,8 +301,11 @@ export function AgentChat({
     setStreamingText('');
     setCurrentToolCalls([]);
     setMemoryWarning(null);
+    setPendingOperation(null);
     setAgentStep(0);
     setAgentPause(null);
+    setActiveAgents([]);
+    setShowAgentTimeline(false);
 
     const assistantMessageId = (Date.now() + 1).toString();
 
@@ -268,8 +324,8 @@ export function AgentChat({
       const sceneState = cesiumController.getSceneState();
 
       if (useStreaming) {
+        sseClientRef.current?.close();
         sseClientRef.current = new SSEChatClient({
-          onThinking: () => {},
           onMessageChunk: (chunk: string, isComplete: boolean) => {
             setStreamingText((prev) => {
               const newText = prev + chunk;
@@ -301,6 +357,26 @@ export function AgentChat({
                 : msg
             ));
           },
+          onSimulationControl: (command) => {
+            onSimulationControl?.(command);
+          },
+          onConfirmationRequired: (operation) => {
+            setPendingOperation({
+              operation_type: typeof operation.operation_type === 'string' ? operation.operation_type : undefined,
+              summary: typeof operation.summary === 'string' ? operation.summary : undefined,
+            });
+          },
+          onAgentStart: (agent: string, message?: string) => {
+            updateAgentState(agent, 'running', message);
+            if (DETOUR_TIMELINE_AGENTS.has(agent)) {
+              setShowAgentTimeline(true);
+            }
+          },
+          onAgentComplete: (agent: string, message?: string) => {
+            if (agent !== 'all') {
+              updateAgentState(agent, 'complete', message);
+            }
+          },
           onSession: (sessionId: string) => {
             if (sessionId) sessionRef.current = sessionId;
           },
@@ -317,8 +393,14 @@ export function AgentChat({
                 ? { ...msg, content: msg.content + `\n\nError: ${error}`, isStreaming: false }
                 : msg
             ));
+            setActiveAgents((agents) => agents.map((agent) =>
+              agent.status === 'running' ? { ...agent, status: 'error' } : agent
+            ));
+            setIsLoading(false);
+            setAgentStep(0);
+            setAgentPause(null);
           },
-          onDone: (finalMessage: string, actionsCount: number) => {
+          onDone: (finalMessage: string) => {
             setMessages((msgs) => msgs.map((msg) =>
               msg.id === assistantMessageId
                 ? { ...msg, content: finalMessage || msg.content, isStreaming: false }
@@ -344,23 +426,18 @@ export function AgentChat({
                 : msg
             ));
           },
-          onSceneMood: (mood: string) => {
-            // Scene mood is handled by the action dispatch (cesium.setSceneMood)
-            // This callback is for UI state if needed
-          },
+          onSceneMood: () => {},
         });
 
-        // Build message content — prepend satellite context if any are pinned
-        let messageContent = userMessage.content;
-        if (contextSatellites.length > 0) {
-          const ctx = contextSatellites.map(s =>
-            `[${s.name} | NORAD:${s.norad_id} | Type:${s.object_type}${s.country ? ` | Country:${s.country}` : ''}${s.operator ? ` | Op:${s.operator}` : ''}${s.tags.length ? ` | Tags:${s.tags.join(',')}` : ''}]`
-          ).join(' ');
-          messageContent = `[Contesto satelliti selezionati: ${ctx}]\n\n${messageContent}`;
-        }
+        const messageContent = buildContextPrefixedMessage(userMessage.content, contextSatellites);
 
-        // Use streamAgentChat (new agent endpoint) if available, fallback to streamChat
-        if (typeof sseClientRef.current.streamAgentChat === 'function') {
+        if (shouldUseOrchestration(userMessage.content)) {
+          await sseClientRef.current.streamOrchestratedChat(
+            messageContent,
+            sessionRef.current,
+            mapSessionRef.current,
+          );
+        } else if (typeof sseClientRef.current.streamAgentChat === 'function') {
           await sseClientRef.current.streamAgentChat(
             [{ role: 'user', content: messageContent }],
             sceneState as unknown as Record<string, unknown>,
@@ -396,7 +473,14 @@ export function AgentChat({
       ));
       setIsLoading(false);
     }
-  }, [isLoading, onSendMessage, useStreaming, contextSatellites]);
+  }, [
+    contextSatellites,
+    isLoading,
+    onSendMessage,
+    onSimulationControl,
+    updateAgentState,
+    useStreaming,
+  ]);
 
   const handlePromptSubmit = useCallback((message: PromptInputMessage) => {
     if (!message.text?.trim()) return;
@@ -422,10 +506,10 @@ export function AgentChat({
   };
 
   const handleNewSession = useCallback(() => {
-    if (isLoading) return;
     sseClientRef.current?.close();
     sessionRef.current = generateSessionId();
     mapSessionRef.current = generateSessionId();
+    setIsLoading(false);
     setMessages([]);
     setInput('');
     setStreamingText('');
@@ -435,10 +519,11 @@ export function AgentChat({
     setActiveAgents([]);
     setMemoryUsage(0);
     setMemoryWarning(null);
+    setPendingOperation(null);
     setShowAgentTimeline(false);
     setAgentStep(0);
     setAgentPause(null);
-  }, [isLoading]);
+  }, []);
 
   const chatStatus = isLoading ? (streamingText ? 'streaming' as const : 'submitted' as const) : ('ready' as const);
 
@@ -457,18 +542,30 @@ export function AgentChat({
                 <Icon icon="warning-sign" size={8} className="mr-0.5" /> Mem
               </Tag>
             )}
+            {pendingOperation && (
+              <Tag minimal intent="warning" className="!text-[10px] !px-1.5 !py-0 !min-h-0">
+                <Icon icon="warning-sign" size={8} className="mr-0.5" /> Confirm
+              </Tag>
+            )}
           </div>
           <button
             onClick={handleNewSession}
-            disabled={isLoading}
-            className="p-1 rounded hover:bg-sda-bg-tertiary text-sda-text-muted hover:text-sda-text-primary transition-colors disabled:opacity-30"
-            title="New Session"
+            className="p-1 rounded hover:bg-sda-bg-tertiary text-sda-text-muted hover:text-sda-text-primary transition-colors"
+            title={isLoading ? 'Stop and reset' : 'New Session'}
           >
             <RotateCcwIcon size={14} />
           </button>
         </div>
         {memoryWarning && (
           <p className="text-[10px] text-orange-300 px-3 py-1">{memoryWarning}</p>
+        )}
+        {pendingOperation && (
+          <div className="px-3 py-2 border-b border-amber-700/20 bg-amber-950/20">
+            <p className="text-[11px] font-medium text-amber-300">Confirmation required</p>
+            <p className="text-[11px] text-sda-text-secondary">
+              {pendingOperation.summary || pendingOperation.operation_type || 'Operazione pronta'}
+            </p>
+          </div>
         )}
 
         {/* Messages area */}
@@ -668,7 +765,7 @@ export function AgentChat({
                 <span className="text-[10px] text-sda-text-muted">Enter to send</span>
               </PromptInputTools>
               <PromptInputSubmit
-                disabled={!input.trim() && !isLoading}
+                disabled={!input.trim() || isLoading}
                 status={chatStatus}
                 className="!h-7 !w-7 !bg-sda-accent-cyan hover:!bg-sda-accent-cyan/80 !text-black !rounded-md"
               />

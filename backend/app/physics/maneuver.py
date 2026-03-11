@@ -116,7 +116,7 @@ def _estimate_fuel(delta_v_km_s: float, mass_kg: float, isp: float = 300.0) -> f
 # ---------------------------------------------------------------------------
 
 def calculate_raan_precession_rate(orbit: OrbitElements) -> float:
-    """Calculate the secular RAAN precession rate due to Earth's J₂ term.
+    r"""Calculate the secular RAAN precession rate due to Earth's J₂ term.
 
     The formula (see Vallado, *Fundamentals of Astrodynamics*):
 

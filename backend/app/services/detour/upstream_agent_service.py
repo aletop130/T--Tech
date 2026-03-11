@@ -10,19 +10,32 @@ import asyncio
 from datetime import datetime, timedelta
 from typing import Any, AsyncGenerator, Dict, Optional
 
+from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.core.exceptions import NotFoundError, SDAException
 from app.core.logging import get_logger
 from app.db.base import async_session_factory, generate_uuid
 from app.db.models.detour import DetourAgentSession, DetourAgentSessionStatus
-from app.db.models.ontology import ConjunctionEvent, Satellite
+from app.db.models.ontology import ConjunctionEvent, Orbit, Satellite
 from app.monitoring import DETOUR_ANALYSES_TOTAL
+from app.physics.propagator import tle_to_state_vector
 from app.vendors.detour_upstream.agents.config import LLMConfig
 from app.vendors.detour_upstream.agents.config_adapter import build_sda_default_config
 from app.vendors.detour_upstream.agents.graph import stream_avoidance_pipeline
 from app.vendors.detour_upstream.api.demo_data import load_demo_data
-from app.vendors.detour_upstream.api.state import get_catalog, get_satellite
+from app.vendors.detour_upstream.api.state import (
+    OrbitalObject,
+    get_catalog,
+    get_cdm_inbox,
+    get_satellite,
+    reset_state,
+    set_satellite,
+)
+from app.vendors.detour_upstream.engine.models.active_satellite import (
+    Satellite as UpstreamSatellite,
+    SatelliteConfig,
+)
 from app.vendors.detour_upstream.tools.screening import screen_conjunctions
 
 logger = get_logger(__name__)
@@ -31,7 +44,6 @@ logger = get_logger(__name__)
 class UpstreamDetourAgentService:
     """Run and track vendored upstream Detour agent sessions."""
 
-    _demo_loaded: bool = False
     _demo_lock = asyncio.Lock()
     _active_tasks: set[asyncio.Task[Any]] = set()
 
@@ -42,18 +54,6 @@ class UpstreamDetourAgentService:
     def _status_value(session: DetourAgentSession) -> str:
         status = session.status
         return status.value if hasattr(status, "value") else str(status)
-
-    @classmethod
-    async def _ensure_demo_data(cls) -> None:
-        if cls._demo_loaded:
-            return
-        async with cls._demo_lock:
-            if cls._demo_loaded:
-                return
-            loop = asyncio.get_running_loop()
-            await loop.run_in_executor(None, load_demo_data)
-            cls._demo_loaded = True
-            logger.info("detour_upstream_demo_data_loaded")
 
     @staticmethod
     def _build_llm_config() -> LLMConfig:
@@ -67,17 +67,20 @@ class UpstreamDetourAgentService:
     ) -> str:
         primary_name = primary.name if primary else conjunction.primary_object_id
         secondary_name = secondary.name if secondary else conjunction.secondary_object_id
+        primary_norad = primary.norad_id if primary else "unknown"
+        secondary_norad = secondary.norad_id if secondary else "unknown"
         tca = conjunction.tca.isoformat() if conjunction.tca else "unknown"
         miss = conjunction.miss_distance_km
         risk = conjunction.risk_level
         return (
             "Analyze conjunction risk and provide an operator brief.\n"
             f"Conjunction ID: {conjunction.id}\n"
-            f"Primary object: {primary_name} ({conjunction.primary_object_id})\n"
-            f"Secondary object: {secondary_name} ({conjunction.secondary_object_id})\n"
+            f"Primary object: {primary_name} (SDA ID {conjunction.primary_object_id}, NORAD {primary_norad})\n"
+            f"Secondary object: {secondary_name} (SDA ID {conjunction.secondary_object_id}, NORAD {secondary_norad})\n"
             f"TCA: {tca}\n"
             f"Miss distance (km): {miss}\n"
             f"Risk level: {risk}\n"
+            "When a tool requires object identifiers, use the integer NORAD IDs above and not the SDA UUIDs.\n"
             "Use the available tools to assess threats and suggest avoidance actions.\n"
             "Be concise and operational."
         )
@@ -97,6 +100,89 @@ class UpstreamDetourAgentService:
         if agent in {"scout", "analyst", "planner", "safety"}:
             output_data[f"{agent}_output"] = content
 
+    @staticmethod
+    def _build_upstream_satellite(runtime_state: Dict[str, Any]) -> UpstreamSatellite:
+        return UpstreamSatellite(
+            position=runtime_state["position_m"],
+            velocity=runtime_state["velocity_m_s"],
+            config=SatelliteConfig(
+                name=runtime_state["name"],
+                norad_id=int(runtime_state["norad_id"]),
+            ),
+        )
+
+    @staticmethod
+    def _upsert_catalog_object(runtime_state: Dict[str, Any]) -> None:
+        catalog = get_catalog()
+        catalog.add(
+            OrbitalObject(
+                norad_id=int(runtime_state["norad_id"]),
+                name=str(runtime_state["name"]),
+                position=runtime_state["position_m"],
+                velocity=runtime_state["velocity_m_s"],
+                object_type=str(runtime_state.get("object_type") or "satellite"),
+            )
+        )
+
+    async def _prepare_runtime_context(
+        self,
+        primary_satellite_id: str,
+        secondary_satellite_id: str | None = None,
+        conjunction: ConjunctionEvent | None = None,
+    ) -> Dict[str, Any]:
+        primary_runtime = await self._resolve_requested_satellite_state(primary_satellite_id)
+        secondary_runtime = (
+            await self._resolve_requested_satellite_state(secondary_satellite_id)
+            if secondary_satellite_id
+            else None
+        )
+
+        async with self._demo_lock:
+            reset_state()
+            if primary_runtime:
+                set_satellite(self._build_upstream_satellite(primary_runtime))
+
+            loop = asyncio.get_running_loop()
+            await loop.run_in_executor(None, load_demo_data)
+            logger.info(
+                "detour_upstream_demo_data_loaded",
+                primary_satellite_id=primary_satellite_id,
+                secondary_satellite_id=secondary_satellite_id,
+            )
+
+            if primary_runtime:
+                self._upsert_catalog_object(primary_runtime)
+            if secondary_runtime:
+                self._upsert_catalog_object(secondary_runtime)
+
+            inbox = get_cdm_inbox()
+            inbox.clear()
+            if conjunction and primary_runtime and secondary_runtime:
+                inbox.add(
+                    {
+                        "cdm_id": f"SDA-CDM-{conjunction.id}",
+                        "primary_id": int(primary_runtime["norad_id"]),
+                        "primary_name": primary_runtime["name"],
+                        "secondary_id": int(secondary_runtime["norad_id"]),
+                        "secondary_name": secondary_runtime["name"],
+                        "tca_offset_sec": (
+                            max(0.0, (conjunction.tca - datetime.utcnow()).total_seconds())
+                            if conjunction.tca
+                            else 0.0
+                        ),
+                        "miss_distance_m": round(float(conjunction.miss_distance_km) * 1000.0, 1),
+                        "risk_level": conjunction.risk_level,
+                        "collision_probability": conjunction.collision_probability,
+                        "processed": False,
+                        "timestamp": datetime.utcnow().timestamp(),
+                    }
+                )
+
+        return {
+            "primary_runtime": primary_runtime,
+            "secondary_runtime": secondary_runtime,
+        }
+
     async def trigger_conjunction_analysis(self, conjunction_event_id: str, tenant_id: str) -> str:
         conjunction = await self.db.get(ConjunctionEvent, conjunction_event_id)
         if not conjunction or conjunction.tenant_id != tenant_id:
@@ -109,6 +195,11 @@ class UpstreamDetourAgentService:
         primary = await self.db.get(Satellite, conjunction.primary_object_id)
         secondary = await self.db.get(Satellite, conjunction.secondary_object_id)
         prompt = self._build_prompt(conjunction, primary, secondary)
+        runtime_context = await self._prepare_runtime_context(
+            conjunction.primary_object_id,
+            conjunction.secondary_object_id,
+            conjunction=conjunction,
+        )
 
         session_id = generate_uuid()
         session = DetourAgentSession(
@@ -120,6 +211,22 @@ class UpstreamDetourAgentService:
                 "conjunction_event_id": conjunction_event_id,
                 "prompt": prompt,
                 "provider": "detour_upstream",
+                "primary_norad_id": primary.norad_id if primary else None,
+                "secondary_norad_id": secondary.norad_id if secondary else None,
+                "runtime_context": {
+                    "primary_ready": bool(runtime_context.get("primary_runtime")),
+                    "secondary_ready": bool(runtime_context.get("secondary_runtime")),
+                    "primary_orbit_id": (
+                        runtime_context["primary_runtime"]["orbit_id"]
+                        if runtime_context.get("primary_runtime")
+                        else None
+                    ),
+                    "secondary_orbit_id": (
+                        runtime_context["secondary_runtime"]["orbit_id"]
+                        if runtime_context.get("secondary_runtime")
+                        else None
+                    ),
+                },
             },
             output_data={},
             events=[],
@@ -144,7 +251,6 @@ class UpstreamDetourAgentService:
             await self.db.commit()
             return session_id
 
-        await self._ensure_demo_data()
         session_factory = self._session_factory()
         task = asyncio.create_task(self._run_pipeline_session(session_factory, session_id, prompt))
         self._active_tasks.add(task)
@@ -286,19 +392,67 @@ class UpstreamDetourAgentService:
                     return
             await asyncio.sleep(0.8)
 
+    async def _resolve_requested_satellite_state(self, satellite_id: str) -> Optional[Dict[str, Any]]:
+        satellite = await self.db.get(Satellite, satellite_id)
+        if not satellite:
+            return None
+
+        stmt = (
+            select(Orbit)
+            .where(Orbit.satellite_id == satellite_id)
+            .order_by(desc(Orbit.epoch))
+            .limit(1)
+        )
+        result = await self.db.execute(stmt)
+        orbit = result.scalar_one_or_none()
+        if not orbit or not orbit.tle_line1 or not orbit.tle_line2:
+            return None
+
+        try:
+            state = tle_to_state_vector(
+                orbit.tle_line1,
+                orbit.tle_line2,
+                datetime.utcnow(),
+            )
+        except Exception:
+            logger.warning(
+                "detour_screening_tle_resolution_failed",
+                satellite_id=satellite_id,
+                orbit_id=getattr(orbit, "id", None),
+            )
+            return None
+
+        return {
+            "satellite_id": satellite.id,
+            "position_m": state.position * 1000.0,
+            "velocity_m_s": state.velocity * 1000.0,
+            "name": satellite.name,
+            "norad_id": satellite.norad_id,
+            "orbit_id": orbit.id,
+            "object_type": satellite.object_type,
+        }
+
     async def run_manual_screening(
         self,
         satellite_id: str,
         time_window_hours: float = 72,
         threshold_km: float = 5.0,
     ) -> Dict[str, Any]:
-        await self._ensure_demo_data()
+        await self._prepare_runtime_context(satellite_id)
         sat = get_satellite()
         catalog = get_catalog()
         debris = [obj.to_dict() for obj in catalog.list_debris()]
+        requested_satellite = await self._resolve_requested_satellite_state(satellite_id)
+        primary_position = (
+            requested_satellite["position_m"] if requested_satellite else sat.position
+        )
+        primary_velocity = (
+            requested_satellite["velocity_m_s"] if requested_satellite else sat.velocity
+        )
+
         events = screen_conjunctions(
-            primary_pos=sat.position,
-            primary_vel=sat.velocity,
+            primary_pos=primary_position,
+            primary_vel=primary_velocity,
             debris_list=debris,
             lookahead_sec=float(time_window_hours) * 3600,
             threshold_km=float(threshold_km),
@@ -311,6 +465,8 @@ class UpstreamDetourAgentService:
                 {
                     "candidate_id": f"{satellite_id}:{event.get('secondary_id', 'unknown')}:{idx}",
                     "satellite_id": str(event.get("secondary_id", "")),
+                    "satellite_name": str(event.get("secondary_name", "Unknown object")),
+                    "satellite_norad_id": event.get("secondary_id"),
                     "tca": tca.isoformat(),
                     "miss_distance_km": float(event.get("miss_distance_m", 0.0)) / 1000.0,
                     "collision_probability": event.get("probability_estimate"),
@@ -323,6 +479,16 @@ class UpstreamDetourAgentService:
             "metadata": {
                 "source": "detour_upstream",
                 "requested_satellite_id": satellite_id,
+                "screened_satellite_name": (
+                    requested_satellite["name"] if requested_satellite else sat.name
+                ),
+                "screened_satellite_norad_id": (
+                    requested_satellite["norad_id"] if requested_satellite else sat.norad_id
+                ),
+                "screened_with_requested_satellite": bool(requested_satellite),
+                "screened_orbit_id": (
+                    requested_satellite["orbit_id"] if requested_satellite else None
+                ),
             },
         }
     def _session_factory(self) -> async_sessionmaker[AsyncSession]:

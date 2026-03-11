@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef, useCallback, Suspense } from 'react';
 import dynamic from 'next/dynamic';
-import { useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Spinner, Tag, Icon, Button, Checkbox, Intent } from '@blueprintjs/core';
 import { api, GroundStation, Satellite, ConjunctionEvent, PositionReport } from '@/lib/api';
 import { getDebris, getOrbit } from '@/lib/api/debris';
@@ -99,9 +99,9 @@ const getGroupColor = (groupIndex: number): string =>
 
 
 function MapPageContent() {
+  const router = useRouter();
   const searchParams = useSearchParams();
-  // @ts-ignore
-const [viewer, setViewer] = useState<InstanceType<CesiumModule['Viewer']> | null>(null);
+  const [viewer, setViewer] = useState<InstanceType<CesiumModule['Viewer']> | null>(null);
   const [groundStations, setGroundStations] = useState<GroundStation[]>([]);
   const [satellites, setSatellites] = useState<Satellite[]>([]);
   const [groundVehicles, setGroundVehicles] = useState<PositionReport[]>([]);
@@ -202,17 +202,32 @@ const DEBRIS_ORBIT_CLASSES = "LEO";
   } = useItalyDefenseSimulation(viewer, isSimulationMode);
 
   const handleChatSimulationControl = useCallback(
-    (command: { action: string; mode?: string }) => {
+    (command: { action: string; mode?: string; prompt?: string }) => {
+      if (command.action === 'open_sandbox') {
+        const sandboxParams = new URLSearchParams();
+        if (command.prompt) {
+          sandboxParams.set('prompt', command.prompt);
+        }
+        if (pinnedSatelliteIds.size > 0) {
+          sandboxParams.set('satelliteIds', Array.from(pinnedSatelliteIds).join(','));
+        }
+        router.push(`/sandbox${sandboxParams.toString() ? `?${sandboxParams.toString()}` : ''}`);
+        return;
+      }
+
       if (command.action !== 'start_italy_defense' && command.action !== 'start_sar_simulation') {
         return;
       }
 
-      const shouldEnterSimulation = !command.mode || command.mode === 'enter_simulation_mode';
+      const shouldEnterSimulation =
+        !command.mode
+        || command.mode === 'enter_simulation_mode'
+        || command.mode === 'enter_and_start';
       if (shouldEnterSimulation && !isSimulationMode) {
         setIsSimulationMode(true);
       }
     },
-    [isSimulationMode]
+    [isSimulationMode, pinnedSatelliteIds, router]
   );
   
   const satellitePositionsRef = useRef<Map<string, InstanceType<CesiumModule['Cartesian3']>>>(new Map());

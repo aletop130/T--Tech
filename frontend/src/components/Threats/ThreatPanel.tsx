@@ -11,6 +11,16 @@ import type {
 } from '@/types/threats';
 import { api } from '@/lib/api';
 
+type ThreatFeedKey = 'proximity' | 'signal' | 'anomaly' | 'orbital' | 'geoloiter';
+
+const FEED_LABELS: Record<ThreatFeedKey, string> = {
+  proximity: 'Proximity',
+  signal: 'Signal',
+  anomaly: 'Anomaly',
+  orbital: 'Orbital similarity',
+  geoloiter: 'GEO loiter',
+};
+
 function severityColor(severity: string): string {
   switch (severity) {
     case 'threatened': return '#ff6b6b';
@@ -38,23 +48,49 @@ export function ThreatPanel() {
   const [geoLoiter, setGeoLoiter] = useState<GeoLoiterThreat[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [feedErrors, setFeedErrors] = useState<Partial<Record<ThreatFeedKey, string>>>({});
   const [activeTab, setActiveTab] = useState('proximity');
 
   const fetchThreats = useCallback(async () => {
     try {
       setError(null);
-      const [p, s, a, o, g] = await Promise.all([
+      const results = await Promise.allSettled([
         api.getProximityThreats(),
         api.getSignalThreats(),
         api.getAnomalyThreats(),
         api.getOrbitalSimilarityThreats(),
         api.getGeoLoiterThreats(),
       ]);
-      setProximity(p);
-      setSignal(s);
-      setAnomaly(a);
-      setOrbital(o);
-      setGeoLoiter(g);
+
+      const nextErrors: Partial<Record<ThreatFeedKey, string>> = {};
+      let successCount = 0;
+
+      const keys: ThreatFeedKey[] = ['proximity', 'signal', 'anomaly', 'orbital', 'geoloiter'];
+      const setters = [
+        setProximity,
+        setSignal,
+        setAnomaly,
+        setOrbital,
+        setGeoLoiter,
+      ] as const;
+
+      results.forEach((result, index) => {
+        if (result.status === 'fulfilled') {
+          setters[index](result.value as never);
+          successCount += 1;
+          return;
+        }
+
+        setters[index]([] as never);
+        nextErrors[keys[index]] =
+          result.reason instanceof Error ? result.reason.message : 'Feed unavailable';
+      });
+
+      setFeedErrors(nextErrors);
+
+      if (successCount === 0) {
+        throw new Error('All threat feeds are currently unavailable');
+      }
     } catch (e) {
       console.error('Failed to fetch threats:', e);
       setError(e instanceof Error ? e.message : 'Failed to load threat data');
@@ -82,11 +118,32 @@ export function ThreatPanel() {
     </div>
   );
 
+  const hasFeedWarnings = Object.keys(feedErrors).length > 0;
+  const renderFeedFallback = (feedKey: ThreatFeedKey, emptyMessage: string) => {
+    if (feedErrors[feedKey]) {
+      return (
+        <Callout intent="warning" className="mt-2">
+          {FEED_LABELS[feedKey]} feed unavailable: {feedErrors[feedKey]}
+        </Callout>
+      );
+    }
+    return (
+      <div className="text-sm" style={{ color: 'var(--sda-text-secondary)' }}>
+        {emptyMessage}
+      </div>
+    );
+  };
+
   return (
     <div className="p-4">
       <h2 className="text-lg font-semibold mb-3" style={{ color: 'var(--sda-text-primary)' }}>
         Multi-Modal Threat Detection
       </h2>
+      {hasFeedWarnings && (
+        <Callout intent="warning" className="mb-3">
+          Some threat feeds are degraded. Available feeds are still shown.
+        </Callout>
+      )}
       <Tabs selectedTabId={activeTab} onChange={(id) => setActiveTab(id as string)}>
         <Tab id="proximity" title={`Proximity (${proximity.length})`} panel={
           <div className="space-y-2 mt-2">
@@ -110,7 +167,7 @@ export function ThreatPanel() {
                 </div>
               </Card>
             ))}
-            {proximity.length === 0 && <div className="text-sm" style={{ color: 'var(--sda-text-secondary)' }}>No proximity threats detected</div>}
+            {proximity.length === 0 && renderFeedFallback('proximity', 'No proximity threats detected')}
           </div>
         } />
         <Tab id="signal" title={`Signal (${signal.length})`} panel={
@@ -130,7 +187,7 @@ export function ThreatPanel() {
                 </div>
               </Card>
             ))}
-            {signal.length === 0 && <div className="text-sm" style={{ color: 'var(--sda-text-secondary)' }}>No signal threats detected</div>}
+            {signal.length === 0 && renderFeedFallback('signal', 'No signal threats detected')}
           </div>
         } />
         <Tab id="anomaly" title={`Anomaly (${anomaly.length})`} panel={
@@ -150,7 +207,7 @@ export function ThreatPanel() {
                 </div>
               </Card>
             ))}
-            {anomaly.length === 0 && <div className="text-sm" style={{ color: 'var(--sda-text-secondary)' }}>No anomalies detected</div>}
+            {anomaly.length === 0 && renderFeedFallback('anomaly', 'No anomalies detected')}
           </div>
         } />
         <Tab id="orbital" title={`Orbital (${orbital.length})`} panel={
@@ -170,7 +227,7 @@ export function ThreatPanel() {
                 </div>
               </Card>
             ))}
-            {orbital.length === 0 && <div className="text-sm" style={{ color: 'var(--sda-text-secondary)' }}>No orbital similarity threats</div>}
+            {orbital.length === 0 && renderFeedFallback('orbital', 'No orbital similarity threats')}
           </div>
         } />
         <Tab id="geoloiter" title={`GEO Loiter (${geoLoiter.length})`} panel={
@@ -190,7 +247,7 @@ export function ThreatPanel() {
                 </div>
               </Card>
             ))}
-            {geoLoiter.length === 0 && <div className="text-sm" style={{ color: 'var(--sda-text-secondary)' }}>No GEO loiter threats</div>}
+            {geoLoiter.length === 0 && renderFeedFallback('geoloiter', 'No GEO loiter threats')}
           </div>
         } />
       </Tabs>

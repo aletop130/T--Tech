@@ -14,6 +14,8 @@ import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { getDebris } from '@/lib/api/debris';
 
+const pushMock = vi.fn();
+
 // --- Mock external modules -------------------------------------------------
 const mockComponent = (testId: string) => (props: any) => <div data-testid={testId} {...props} />;
 
@@ -91,6 +93,9 @@ vi.mock('next/navigation', () => ({
   useSearchParams: vi.fn(() => ({
     get: vi.fn(() => null),
   })),
+  useRouter: vi.fn(() => ({
+    push: pushMock,
+  })),
 }));
 vi.mock('@/components/CesiumMap/SatelliteInfoCard', () => ({ SatelliteInfoCard: (props: any) => <div data-testid="satellite-info-card" {...props} /> }));
 vi.mock('@/components/CesiumMap/GroundStationInfoCard', () => ({ GroundStationInfoCard: (props: any) => <div data-testid="ground-station-info-card" {...props} /> }));
@@ -115,6 +120,19 @@ vi.mock('@/components/Chat/AgentChat', () => ({
         }
       >
         Trigger simulation
+      </button>
+      <button
+        data-testid="agent-chat-sandbox-open"
+        onClick={() =>
+          props.onSimulationControl?.({
+            action: 'open_sandbox',
+            prompt: 'Open sandbox for a custom simulation',
+            mode: 'navigate',
+            source: 'test',
+          })
+        }
+      >
+        Open sandbox
       </button>
     </div>
   ),
@@ -144,6 +162,7 @@ describe('Map page integration – debris features', () => {
     vi.useFakeTimers();
     // Reset mock implementations before each test.
     vi.resetAllMocks();
+    pushMock.mockReset();
   });
 
   afterEach(() => {
@@ -246,5 +265,21 @@ describe('Map page integration – debris features', () => {
 
     await waitFor(() => expect(screen.getByText('Exit Simulation')).toBeInTheDocument());
     await waitFor(() => expect(screen.getByText('START MISSION')).toBeInTheDocument());
+  });
+
+  it('navigates to sandbox when chat emits open_sandbox control', async () => {
+    const mockData = {
+      timeUtc: '2026-01-01T00:00:00Z',
+      objects: [],
+    };
+    getDebris.mockResolvedValueOnce(mockData);
+
+    await renderPageAndWait();
+
+    fireEvent.click(screen.getByTestId('agent-chat-sandbox-open'));
+
+    await waitFor(() => {
+      expect(pushMock).toHaveBeenCalledWith('/sandbox?prompt=Open+sandbox+for+a+custom+simulation');
+    });
   });
 });

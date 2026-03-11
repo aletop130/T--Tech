@@ -728,38 +728,38 @@ RULES FOR FLY-TO COMMANDS:
     
     # ── AEGIS Agent System ──────────────────────────────────────────────
 
-    AGENT_SYSTEM_PROMPT = """Sei AEGIS, il controllore AI della mappa per Space Domain Awareness.
+    AGENT_SYSTEM_PROMPT = """You are AEGIS, the AI map controller for Space Domain Awareness.
 
-Hai il controllo diretto di un globo Cesium 3D. Puoi comandare la camera,
-visualizzare dati, interrogare il database, eseguire calcoli fisici, e
-presentare briefing all'operatore.
+You have direct control of a Cesium 3D globe. You can command the camera,
+visualize data, query the database, run physics calculations, and
+present briefings to the operator.
 
-CAPACITA':
-- Camera: vola verso satelliti, paesi, coordinate; imposta heading/pitch
-- Visualizzazione: evidenzia satelliti, threat radius, conjunction lines,
+CAPABILITIES:
+- Camera: fly to satellites, countries, coordinates; set heading/pitch
+- Visualization: highlight satellites, threat radius, conjunction lines,
   risk heatmaps, TCA countdown, maneuver options, coverage
-- Dati: query satelliti, congiunzioni, debris, minacce, incidenti, meteo spaziale
-- Fisica: propaga orbite, calcola rischio congiunzione, analisi copertura
-- Timing: pausa tra azioni per effetto drammatico, narra l'analisi
+- Data: query satellites, conjunctions, debris, threats, incidents, space weather
+- Physics: propagate orbits, compute conjunction risk, coverage analysis
+- Timing: pause between actions for dramatic effect, narrate the analysis
 
-REGOLE COMPORTAMENTALI:
-1. Quando ti chiedono di "mostrare" qualcosa, SEMPRE combina camera + visualizzazione.
-   Vola all'oggetto PRIMA, poi aggiungi overlay.
-2. Usa agent_wait(2-3 secondi) tra cambi visuali importanti.
-3. Per analisi minacce:
-   a) Query i dati rilevanti
-   b) Vola all'oggetto primario
-   c) Mostra la visualizzazione della minaccia
-   d) Narra i findings
-   e) Mostra azioni raccomandate
-4. NON indovinare entity IDs. Query PRIMA con query_satellites, usa gli ID restituiti.
-   Entity ID format per satelliti: 'satellite-<uuid>'
-5. Per tour/demo: overview -> zoom in -> analizza -> zoom out -> riassumi.
-6. Rispondi nella lingua dell'utente (italiano se parlano italiano, inglese se inglese).
-7. Quando usi cesium_fly_to per un satellite, usa entityId='satellite-<id>'.
-   Per locations/paesi usa cesium_fly_to_country o cesium_search_location.
-8. Prima di mostrare qualsiasi visualizzazione, FAI SEMPRE una query per ottenere dati reali.
-   Non inventare mai dati o ID.
+BEHAVIORAL RULES:
+1. When asked to "show" something, ALWAYS combine camera + visualization.
+   Fly to the object FIRST, then add overlay.
+2. Use agent_wait(2-3 seconds) between important visual changes.
+3. For threat analysis:
+   a) Query the relevant data
+   b) Fly to the primary object
+   c) Show the threat visualization
+   d) Narrate the findings
+   e) Show recommended actions
+4. Do NOT guess entity IDs. Query FIRST with query_satellites, use the returned IDs.
+   Entity ID format for satellites: 'satellite-<uuid>'
+5. For tours/demos: overview -> zoom in -> analyze -> zoom out -> summarize.
+6. Respond in the user's language (Italian if they speak Italian, English if English).
+7. When using cesium_fly_to for a satellite, use entityId='satellite-<id>'.
+   For locations/countries use cesium_fly_to_country or cesium_search_location.
+8. Before showing any visualization, ALWAYS query to obtain real data.
+   Never invent data or IDs.
 """
 
     # Scenario templates that the run_scenario tool can return
@@ -2037,6 +2037,38 @@ Fornisci 2-3 opzioni realistiche in formato JSON:
             yield "data: [DONE]\n\n"
             return
 
+        if intent == "open_sandbox":
+            command = {
+                "action": "open_sandbox",
+                "mode": "navigate",
+                "source": "chat_orchestrator",
+                "prompt": message,
+            }
+            yield f"data: {json.dumps({'type': 'simulation_control', **command})}\n\n"
+
+            assistant_text = (
+                "Opening Sandbox for a custom scenario. "
+                "Continue authoring the session there."
+            )
+            await memory_call(
+                "add_open_sandbox_message",
+                lambda: memory.add_message(assistant_text, role="assistant"),
+            )
+            yield f"data: {json.dumps({'type': 'content', 'chunk': assistant_text})}\n\n"
+
+            usage = await memory_call(
+                "get_window_usage_after_open_sandbox",
+                lambda: memory.get_window_usage(),  # type: ignore[union-attr]
+                {"percentage": 0.0},
+            )
+            if error_line := flush_memory_error_event_line():
+                yield error_line
+            yield f"data: {json.dumps({'type': 'memory_usage', 'percentage': usage.get('percentage', 0.0)})}\n\n"
+            if error_line := flush_memory_error_event_line():
+                yield error_line
+            yield "data: [DONE]\n\n"
+            return
+
         if intent in {
             "create_satellite",
             "create_ground_station",
@@ -2246,6 +2278,12 @@ INSTRUCTIONS: Use cesium_fly_to with longitude/latitude from the list""")
         )
         if any(p in message_lower for p in fleet_threat_patterns):
             return "fleet_threat_scan"
+
+        if re.search(
+            r"\b(sandbox|custom simulation|custom scenario|simulation workspace|what-if workspace)\b",
+            message_lower,
+        ):
+            return "open_sandbox"
 
         if re.search(
             r"\b(cosa succede|what if|what-if|simula|scenario|se\s+.+\s+esplod|se\s+.+\s+fragment|"

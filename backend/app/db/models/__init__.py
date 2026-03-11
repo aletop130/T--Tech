@@ -15,6 +15,12 @@ from app.db.models.audit import AuditEvent
 from app.db.models.users import User, Tenant
 from app.db.models.detour import DetourSatelliteState, DetourConjunctionAnalysis, DetourManeuverPlan, DetourAgentSession
 from app.db.models.chat_memory import ChatMemoryEntry, ChatMemorySummary, ChatSession
+from app.db.models.sandbox import (
+    SandboxActor,
+    SandboxCommand,
+    SandboxScenarioItem,
+    SandboxSession,
+)
 from app.db.models.threats import (
     ThreatEvent,
     SignalThreat,
@@ -73,6 +79,10 @@ __all__ = [
     "ChatMemoryEntry",
     "ChatMemorySummary",
     "ChatSession",
+    "SandboxSession",
+    "SandboxActor",
+    "SandboxScenarioItem",
+    "SandboxCommand",
     "ThreatEvent",
     "SignalThreat",
     "AnomalyThreat",
@@ -83,4 +93,3 @@ __all__ = [
     "ThreatConfig",
     "CommsTranscriptionModel",
 ]
-

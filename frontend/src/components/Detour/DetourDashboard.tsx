@@ -8,19 +8,20 @@ import { CollisionAnalyzer } from './CollisionAnalyzer';
 import { ManeuverPlanner } from './ManeuverPlanner';
 import { ThreatList } from './ThreatList';
 import { OrbitVisualizer } from './OrbitVisualizer';
-import { AgentChat } from './AgentChat';
+import { AgentChat } from '@/components/Chat/AgentChat';
 import { OpsBriefPanel } from './OpsBriefPanel';
 
 export interface DetourDashboardProps {
-  /** Optional custom class name */
   className?: string;
+  sessionId?: string | null;
+  onSessionStart?: (sessionId: string) => void;
 }
 
 /**
  * Main dashboard layout for the Detour subsystem.
  * Composes the various sub‑components into a responsive grid.
  */
-export function DetourDashboard({ className }: DetourDashboardProps) {
+export function DetourDashboard({ className, sessionId, onSessionStart }: DetourDashboardProps) {
   return (
     <div className={`grid gap-4 md:grid-cols-2 lg:grid-cols-3 ${className ?? ''}`}>
       <Card>

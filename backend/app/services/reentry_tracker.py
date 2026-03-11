@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models.ontology import Satellite, Orbit
 from app.core.logging import get_logger
+from app.services.intelligence_support import derive_orbit_metrics
 
 logger = get_logger(__name__)
 
@@ -78,12 +79,16 @@ async def _fetch_celestrak_decays() -> list[dict]:
             epoch = datetime.fromisoformat(decay_date_str.replace("Z", "+00:00"))
         except (ValueError, AttributeError):
             continue
+        if epoch.tzinfo is None:
+            epoch = epoch.replace(tzinfo=timezone.utc)
 
         obj_type = _classify_object_type(name)
         # Window: wider for objects further from decay
         diff_hours = abs((epoch - now).total_seconds()) / 3600
         window = max(2.0, min(diff_hours * 0.3, 168.0))
         countdown_sec = (epoch - now).total_seconds()
+        if countdown_sec <= 0:
+            continue
 
         risk = _risk_from_type_and_window(obj_type, window)
 
@@ -131,8 +136,9 @@ async def _get_low_perigee_predictions(db: AsyncSession, tenant_id: str) -> list
         if not orbit:
             continue
 
-        perigee = orbit.perigee_km or 0
-        mean_motion = orbit.mean_motion_rev_day or 0
+        metrics = derive_orbit_metrics(orbit)
+        perigee = metrics.get("perigee_km") or 0
+        mean_motion = metrics.get("mean_motion_rev_day") or 0
 
         # Objects with perigee below 250 km or very high mean motion are candidates
         if perigee > 250 and mean_motion < 15.0:

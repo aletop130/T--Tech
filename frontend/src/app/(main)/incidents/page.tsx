@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
+import { severityIntent } from '@/lib/severity';
 import {
   Card,
   Elevation,
@@ -72,17 +73,6 @@ export default function IncidentsPage() {
   useEffect(() => {
     loadIncidents();
   }, [loadIncidents]);
-
-  const severityIntent = (severity: string) => {
-    const intents: Record<string, any> = {
-      critical: 'danger',
-      high: 'warning',
-      medium: 'warning',
-      low: 'success',
-      info: 'primary',
-    };
-    return intents[severity] || 'none';
-  };
 
   const statusIntent = (status: string) => {
     const intents: Record<string, any> = {

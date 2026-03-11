@@ -18,7 +18,7 @@ import random
 import time
 from typing import Optional
 
-from sqlalchemy import select, and_
+from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models.ontology import Satellite, Orbit, GroundStation, RFLink
@@ -26,6 +26,7 @@ from app.physics.bayesian_scorer import score_satellite, ADVERSARIAL_COUNTRIES
 from app.physics.orbital_similarity_scorer import score_orbital_similarity
 from app.physics.geo_loiter_detector import assess_satellite
 from app.core.logging import get_logger
+from app.services.intelligence_support import derive_orbit_metrics, is_hostile_asset, normalize_country
 
 logger = get_logger(__name__)
 
@@ -50,56 +51,68 @@ class ThreatDetectionService:
                     Satellite.is_active == True,
                 )
             )
+            .order_by(Satellite.id, Orbit.epoch.desc())
         )
         result = await self.db.execute(stmt)
         rows = result.all()
 
         sat_map: dict[str, dict] = {}
         for sat, orbit in rows:
+            country_code = normalize_country(sat.country)
+            is_hostile = is_hostile_asset(
+                norad_id=sat.norad_id,
+                name=sat.name,
+                country=sat.country,
+                faction=getattr(sat, "faction", None),
+                tags=sat.tags,
+            )
             if sat.id not in sat_map:
                 sat_map[sat.id] = {
                     "id": sat.id,
                     "name": sat.name,
                     "norad_id": sat.norad_id,
-                    "country_code": sat.country or "",
+                    "country_code": country_code,
                     "object_type": sat.object_type,
-                    "faction": getattr(sat, "faction", None),
+                    "faction": getattr(sat, "faction", None) or ("enemy" if is_hostile else None),
                     "tags": sat.tags or [],
                     "mass_kg": getattr(sat, "mass_kg", None),
                     "rcs_m2": getattr(sat, "rcs_m2", None),
+                    "is_hostile": is_hostile,
                     "altitude_km": 0.0,
                     "inclination_deg": 0.0,
                     "period_min": 0.0,
                     "eccentricity": 0.0,
                     "semi_major_axis_km": 0.0,
+                    "_orbit_epoch": None,
                 }
             if orbit:
-                sat_map[sat.id].update({
-                    "altitude_km": ((orbit.apogee_km or 0) + (orbit.perigee_km or 0)) / 2 if orbit.apogee_km else (orbit.semi_major_axis_km - 6378.137 if orbit.semi_major_axis_km else 0),
-                    "inclination_deg": orbit.inclination_deg or 0.0,
-                    "period_min": orbit.period_minutes or 0.0,
-                    "eccentricity": orbit.eccentricity or 0.0,
-                    "semi_major_axis_km": orbit.semi_major_axis_km or 0.0,
-                })
+                metrics = derive_orbit_metrics(orbit)
+                current_epoch = sat_map[sat.id].get("_orbit_epoch")
+                next_epoch = metrics.get("epoch")
+                should_update = current_epoch is None or (
+                    next_epoch is not None and next_epoch > current_epoch
+                )
+                if should_update:
+                    sat_map[sat.id].update({
+                        "altitude_km": metrics.get("altitude_km") or 0.0,
+                        "inclination_deg": metrics.get("inclination_deg") or 0.0,
+                        "period_min": metrics.get("period_minutes") or 0.0,
+                        "eccentricity": metrics.get("eccentricity") or 0.0,
+                        "semi_major_axis_km": metrics.get("semi_major_axis_km") or 0.0,
+                        "_orbit_epoch": next_epoch,
+                    })
 
-        return list(sat_map.values())
+        satellites = []
+        for sat in sat_map.values():
+            sat.pop("_orbit_epoch", None)
+            satellites.append(sat)
+        return satellites
 
     def _partition_satellites(self, sats: list[dict]) -> tuple[list[dict], list[dict]]:
         """Separate satellites into adversarial and allied."""
-        adversarial = [
-            s for s in sats
-            if s.get("country_code") in ADVERSARIAL_COUNTRIES
-            or s.get("faction") == "enemy"
-            or "enemy" in (s.get("tags") or [])
-        ]
+        adversarial = [s for s in sats if s.get("is_hostile")]
         adversarial_ids = {s["id"] for s in adversarial}
-        allied = [
-            s for s in sats
-            if s["id"] not in adversarial_ids
-            and (s.get("faction") in ("allied", "friendly", None)
-                 or "allied" in (s.get("tags") or [])
-                 or "friendly" in (s.get("tags") or []))
-        ]
+        allied = [s for s in sats if s["id"] not in adversarial_ids]
         return adversarial, allied
 
     async def detect_proximity_threats(self, tenant_id: str) -> list[dict]:
@@ -152,7 +165,7 @@ class ThreatDetectionService:
                 tca_min = int(5 + random.random() * 175)
                 approach_vel = round(0.1 + random.random() * 2.5, 2)
                 prox_cc = foreign.get("country_code", "UNK")
-                if prox_cc not in ADVERSARIAL_COUNTRIES and foreign.get("faction") == "enemy":
+                if prox_cc not in ADVERSARIAL_COUNTRIES and foreign.get("is_hostile"):
                     prox_cc = "CIS"
                 posterior = score_satellite(miss_km, prox_cc)
 
@@ -249,7 +262,7 @@ class ThreatDetectionService:
         for foreign in adversarial:
             f_cc = foreign.get("country_code", "UNK")
             # Use adversarial prior for faction-based enemies with unknown country
-            if f_cc not in ADVERSARIAL_COUNTRIES and foreign.get("faction") == "enemy":
+            if f_cc not in ADVERSARIAL_COUNTRIES and foreign.get("is_hostile"):
                 f_cc = "CIS"
             f_id = foreign["id"]
 
@@ -319,7 +332,7 @@ class ThreatDetectionService:
 
         for foreign in adversarial:
             osim_cc = foreign.get("country_code", "UNK")
-            if osim_cc not in ADVERSARIAL_COUNTRIES and foreign.get("faction") == "enemy":
+            if osim_cc not in ADVERSARIAL_COUNTRIES and foreign.get("is_hostile"):
                 osim_cc = "CIS"
             for target in allied:
                 div, posterior = score_orbital_similarity(
@@ -393,10 +406,7 @@ class ThreatDetectionService:
             country = sat.get("country_code", "")
             # If satellite is enemy by faction but country not in adversarial list,
             # use a known adversarial country code so geo-loiter detector processes it
-            if country not in ADVERSARIAL_COUNTRIES and (
-                sat.get("faction") == "enemy"
-                or "enemy" in (sat.get("tags") or [])
-            ):
+            if country not in ADVERSARIAL_COUNTRIES and sat.get("is_hostile"):
                 country = "CIS"
             r = assess_satellite(sat, country)
             if r is None:

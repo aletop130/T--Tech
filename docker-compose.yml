@@ -24,12 +24,14 @@ services:
   redis:
     image: redis:7-alpine
     container_name: sda-redis
+    command: ["redis-server", "/usr/local/etc/redis/redis.conf"]
     ports:
       - "6379:6379"
     volumes:
       - redis_data:/data
+      - ./redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD-SHELL", "redis-cli INFO replication | grep -q 'role:master'"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -153,6 +155,9 @@ services:
     environment:
       - NEXT_PUBLIC_API_URL=http://backend:8000
       - FRONTEND_MODE=${FRONTEND_MODE:-build}
+      - HOSTNAME=0.0.0.0
+      - PORT=3000
+      - NODE_OPTIONS=--disable-warning=DEP0060
       - DOCKER_ENV=1
     volumes:
       - ./frontend:/app
@@ -181,7 +186,7 @@ services:
       else
         echo "Dependencies unchanged, skipping install.";
       fi &&
-      if [ "$FRONTEND_MODE" = "dev" ]; then
+      if [ "$$FRONTEND_MODE" = "dev" ]; then
         bun run dev;
       else
         bun run build &&

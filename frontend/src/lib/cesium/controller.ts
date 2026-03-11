@@ -65,6 +65,7 @@ class CesiumControllerClass {
     this.registerHandler('cesium.annotatePoint', this.handleAnnotatePoint.bind(this));
     this.registerHandler('cesium.drawRegionHighlight', this.handleDrawRegionHighlight.bind(this));
     this.registerHandler('cesium.showTcaCountdown', this.handleShowTcaCountdown.bind(this));
+    this.registerHandler('cesium.resetView', this.handleResetView.bind(this));
   }
 
   // Country coordinates lookup table
@@ -376,6 +377,22 @@ class CesiumControllerClass {
         duration,
       }); completeFly();
     }
+  }
+
+  private handleResetView(_payload: Record<string, unknown>, Cesium: CesiumModule): void {
+    if (!this.viewer) return;
+    this.viewer.selectedEntity = undefined;
+    this.isFlying = true;
+    this.viewer.camera.flyTo({
+      destination: Cesium.Cartesian3.fromDegrees(0, 0, 20_000_000),
+      orientation: {
+        heading: 0.0,
+        pitch: -Cesium.Math.PI_OVER_TWO,
+        roll: 0.0,
+      },
+      duration: 1.2,
+    });
+    setTimeout(() => { this.isFlying = false; }, 1500);
   }
 
   private handleFlyToCountry(payload: Record<string, unknown>, Cesium: CesiumModule): void {

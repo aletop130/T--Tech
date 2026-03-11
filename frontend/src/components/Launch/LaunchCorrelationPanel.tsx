@@ -11,6 +11,14 @@ import type {
   LaunchInfo,
 } from '@/lib/api';
 
+type LaunchFeedKey = 'recent' | 'uncorrelated' | 'upcoming';
+
+const FEED_LABELS: Record<LaunchFeedKey, string> = {
+  recent: 'Recent launches',
+  uncorrelated: 'Uncorrelated objects',
+  upcoming: 'Upcoming launches',
+};
+
 function formatDate(dateStr: string | null): string {
   if (!dateStr) return 'Unknown';
   try {
@@ -167,19 +175,53 @@ export function LaunchCorrelationPanel() {
   const [upcomingData, setUpcomingData] = useState<UpcomingLaunchesResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [feedErrors, setFeedErrors] = useState<Partial<Record<LaunchFeedKey, string>>>({});
   const [activeTab, setActiveTab] = useState<'recent' | 'uncorrelated' | 'upcoming'>('recent');
 
   const fetchData = useCallback(async () => {
     try {
       setError(null);
-      const [recent, uncorrelated, upcoming] = await Promise.all([
+      const results = await Promise.allSettled([
         api.getRecentLaunchCorrelations(),
         api.getUncorrelatedObjects(),
         api.getUpcomingLaunches(),
       ]);
-      setRecentData(recent);
-      setUncorrelatedData(uncorrelated);
-      setUpcomingData(upcoming);
+
+      const nextErrors: Partial<Record<LaunchFeedKey, string>> = {};
+      let successCount = 0;
+
+      if (results[0].status === 'fulfilled') {
+        setRecentData(results[0].value);
+        successCount += 1;
+      } else {
+        setRecentData(null);
+        nextErrors.recent =
+          results[0].reason instanceof Error ? results[0].reason.message : 'Feed unavailable';
+      }
+
+      if (results[1].status === 'fulfilled') {
+        setUncorrelatedData(results[1].value);
+        successCount += 1;
+      } else {
+        setUncorrelatedData(null);
+        nextErrors.uncorrelated =
+          results[1].reason instanceof Error ? results[1].reason.message : 'Feed unavailable';
+      }
+
+      if (results[2].status === 'fulfilled') {
+        setUpcomingData(results[2].value);
+        successCount += 1;
+      } else {
+        setUpcomingData(null);
+        nextErrors.upcoming =
+          results[2].reason instanceof Error ? results[2].reason.message : 'Feed unavailable';
+      }
+
+      setFeedErrors(nextErrors);
+
+      if (successCount === 0) {
+        throw new Error('All launch feeds are currently unavailable');
+      }
     } catch (e) {
       console.error('Failed to fetch launch data:', e);
       setError(e instanceof Error ? e.message : 'Failed to load launch correlation data');
@@ -215,6 +257,13 @@ export function LaunchCorrelationPanel() {
     );
   }
 
+  const hasFeedWarnings = Object.keys(feedErrors).length > 0;
+  const renderUnavailable = (feedKey: LaunchFeedKey) => (
+    <Callout intent="warning" icon="warning-sign">
+      {FEED_LABELS[feedKey]} feed unavailable: {feedErrors[feedKey]}
+    </Callout>
+  );
+
   return (
     <div className="p-4">
       <h2 className="text-lg font-semibold mb-1" style={{ color: 'var(--sda-text-primary)' }}>
@@ -223,6 +272,11 @@ export function LaunchCorrelationPanel() {
       <p className="text-xs mb-4" style={{ color: 'var(--sda-text-secondary)' }}>
         Matches new catalog objects to their launch of origin
       </p>
+      {hasFeedWarnings && (
+        <Callout intent="warning" className="mb-4">
+          Some launch feeds are degraded. Available launch data is still shown.
+        </Callout>
+      )}
 
       {/* Summary Stats */}
       <div className="grid grid-cols-3 gap-3 mb-4">
@@ -270,10 +324,11 @@ export function LaunchCorrelationPanel() {
       {/* Tab Content */}
       {activeTab === 'recent' && (
         <div>
+          {feedErrors.recent ? renderUnavailable('recent') : null}
           {recentData?.launches.map((lc, i) => (
             <LaunchCard key={lc.launch.id || i} correlation={lc} />
           ))}
-          {(!recentData?.launches || recentData.launches.length === 0) && (
+          {!feedErrors.recent && (!recentData?.launches || recentData.launches.length === 0) && (
             <div className="text-sm" style={{ color: 'var(--sda-text-secondary)' }}>
               No recent launches found
             </div>
@@ -283,6 +338,7 @@ export function LaunchCorrelationPanel() {
 
       {activeTab === 'uncorrelated' && (
         <div>
+          {feedErrors.uncorrelated ? renderUnavailable('uncorrelated') : null}
           {uncorrelatedData?.objects.map((obj) => (
             <Card
               key={obj.norad_id}
@@ -323,7 +379,7 @@ export function LaunchCorrelationPanel() {
               )}
             </Card>
           ))}
-          {(!uncorrelatedData?.objects || uncorrelatedData.objects.length === 0) && (
+          {!feedErrors.uncorrelated && (!uncorrelatedData?.objects || uncorrelatedData.objects.length === 0) && (
             <Callout intent="success" icon="tick-circle">
               All recent objects have been correlated with launches
             </Callout>
@@ -333,10 +389,11 @@ export function LaunchCorrelationPanel() {
 
       {activeTab === 'upcoming' && (
         <div>
+          {feedErrors.upcoming ? renderUnavailable('upcoming') : null}
           {upcomingData?.launches.map((launch, i) => (
             <UpcomingLaunchCard key={launch.id || i} launch={launch} />
           ))}
-          {(!upcomingData?.launches || upcomingData.launches.length === 0) && (
+          {!feedErrors.upcoming && (!upcomingData?.launches || upcomingData.launches.length === 0) && (
             <div className="text-sm" style={{ color: 'var(--sda-text-secondary)' }}>
               No upcoming launches found
             </div>

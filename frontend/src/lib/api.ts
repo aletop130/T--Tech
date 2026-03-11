@@ -10,11 +10,10 @@ import type {
   IntelligenceReport,
 } from '@/types/threats';
 
-// Use relative URL to leverage Next.js API rewrites in development
-// This avoids CORS and network resolution issues
-const API_BASE = typeof window !== 'undefined' 
-  ? '' // Browser: use relative URLs (goes through Next.js rewrites)
-  : (process.env.NEXT_PUBLIC_API_URL || 'http://backend:8000'); // Server: use direct backend URL
+import { getApiBase } from '@/lib/utils';
+
+// Use relative URL to leverage Next.js API rewrites in browser
+const API_BASE = getApiBase();
 
 export interface PaginatedResponse<T> {
   items: T[];
@@ -316,7 +315,7 @@ export class ApiClient {
     this.tenantId = 'default';
   }
 
-  private async _fetch<T>(
+  protected async _fetch<T>(
     endpoint: string,
     options: RequestInit = {}
   ): Promise<T> {
@@ -386,7 +385,7 @@ export class ApiClient {
     return this._fetch(`/api/v1/ontology/satellites?${searchParams}`);
   }
 
-  async getSatellite(id: string): Promise<Satellite> {
+  async getSatellite(id: string): Promise<SatelliteDetail> {
     return this._fetch(`/api/v1/ontology/satellites/${id}`);
   }
 

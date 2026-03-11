@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { severityColor } from '@/lib/severity';
 import {
   Card,
   Collapse,
@@ -88,16 +89,6 @@ const [refreshingDebris, setRefreshingDebris] = useState(false);
     loadData();
   }, []);
 
-  const severityColor = (severity: string) => {
-    const colors: Record<string, string> = {
-      critical: 'bg-sda-accent-red',
-      high: 'bg-sda-accent-yellow',
-      medium: 'bg-sda-accent-yellow',
-      low: 'bg-sda-accent-green',
-      info: 'bg-sda-accent-blue',
-    };
-    return colors[severity] || colors.info;
-  };
 
    return (
      <div className="space-y-6 bg-sda-bg-primary">

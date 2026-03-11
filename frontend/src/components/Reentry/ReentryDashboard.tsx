@@ -4,6 +4,8 @@ import { useState, useEffect, useCallback } from 'react';
 import { Card, Tag, Spinner, Tabs, Tab, Button, Callout, HTMLTable, ProgressBar, Icon } from '@blueprintjs/core';
 import { api, ReentryPrediction, ReentryHistoryEntry } from '@/lib/api';
 
+type ReentryFeedKey = 'active' | 'history';
+
 function riskIntent(level: string): 'danger' | 'warning' | 'primary' | 'success' {
   switch (level) {
     case 'critical': return 'danger';
@@ -129,6 +131,7 @@ export function ReentryDashboard() {
   const [history, setHistory] = useState<ReentryHistoryEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [feedErrors, setFeedErrors] = useState<Partial<Record<ReentryFeedKey, string>>>({});
   const [activeTab, setActiveTab] = useState('active');
   const [sortKey, setSortKey] = useState<SortKey>('risk_level');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
@@ -136,12 +139,37 @@ export function ReentryDashboard() {
   const fetchData = useCallback(async () => {
     try {
       setError(null);
-      const [active, hist] = await Promise.all([
+      const results = await Promise.allSettled([
         api.getActiveReentries(),
         api.getReentryHistory(),
       ]);
-      setPredictions(active);
-      setHistory(hist);
+
+      const nextErrors: Partial<Record<ReentryFeedKey, string>> = {};
+      let successCount = 0;
+
+      if (results[0].status === 'fulfilled') {
+        setPredictions(results[0].value);
+        successCount += 1;
+      } else {
+        setPredictions([]);
+        nextErrors.active =
+          results[0].reason instanceof Error ? results[0].reason.message : 'Feed unavailable';
+      }
+
+      if (results[1].status === 'fulfilled') {
+        setHistory(results[1].value);
+        successCount += 1;
+      } else {
+        setHistory([]);
+        nextErrors.history =
+          results[1].reason instanceof Error ? results[1].reason.message : 'Feed unavailable';
+      }
+
+      setFeedErrors(nextErrors);
+
+      if (successCount === 0) {
+        throw new Error('All reentry feeds are currently unavailable');
+      }
     } catch (e) {
       console.error('Failed to fetch reentry data:', e);
       setError(e instanceof Error ? e.message : 'Failed to load reentry data');
@@ -182,6 +210,7 @@ export function ReentryDashboard() {
   const highCount = predictions.filter(p => p.risk_level === 'high').length;
   const controlledCount = history.filter(h => h.was_controlled).length;
   const sorted = sortPredictions(predictions, sortKey, sortDir);
+  const hasFeedWarnings = Object.keys(feedErrors).length > 0;
 
   return (
     <div className="p-4 space-y-4">
@@ -191,6 +220,11 @@ export function ReentryDashboard() {
         </h2>
         <Button small icon="refresh" onClick={fetchData}>Refresh</Button>
       </div>
+      {hasFeedWarnings && (
+        <Callout intent="warning">
+          Some reentry feeds are degraded. Available reentry data is still shown.
+        </Callout>
+      )}
 
       {/* Summary Cards */}
       <div className="grid grid-cols-4 gap-3">
@@ -228,7 +262,11 @@ export function ReentryDashboard() {
       >
         <Tab id="active" title={`Active Reentries (${predictions.length})`} panel={
           <div className="mt-2">
-            {predictions.length === 0 ? (
+            {feedErrors.active ? (
+              <Callout intent="warning" icon="warning-sign">
+                Active reentry feed unavailable: {feedErrors.active}
+              </Callout>
+            ) : predictions.length === 0 ? (
               <Callout intent="success" icon="tick-circle">
                 No active reentry predictions at this time.
               </Callout>
@@ -282,7 +320,11 @@ export function ReentryDashboard() {
 
         <Tab id="history" title={`History (${history.length})`} panel={
           <div className="mt-2">
-            {history.length === 0 ? (
+            {feedErrors.history ? (
+              <Callout intent="warning" icon="warning-sign">
+                Reentry history feed unavailable: {feedErrors.history}
+              </Callout>
+            ) : history.length === 0 ? (
               <Callout>No historical reentry data available.</Callout>
             ) : (
               <HTMLTable bordered  striped style={{ width: '100%' }}>

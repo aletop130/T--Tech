@@ -2,7 +2,7 @@
 
 Each function takes structured data from ChatCommandService and returns
 a formatted prompt string for the LLM to produce the final operator-facing
-response (bilingual IT/EN).
+response.
 """
 
 from __future__ import annotations
@@ -28,8 +28,7 @@ FORMAT RULES:
 - Start with a one-line status summary (e.g., "🔴 CRITICAL: 2 threats require immediate attention")
 - Group items by severity: CRITICAL first, then HIGH, MEDIUM, LOW/INFO
 - Use bullet points, keep each item to 1-2 lines
-- End with "Azioni raccomandate / Recommended actions" section
-- Be bilingual: Italian headers, English technical details
+- End with a "Recommended Actions" section
 - Do NOT invent data — only report what is provided below
 
 BRIEFING DATA:
@@ -38,7 +37,7 @@ Summary: CRITICAL={counts.get('critical', 0)}, HIGH={counts.get('high', 0)}, MED
 {error_note}
 
 ITEMS:
-{items_text if items_text else "Nessun alert attivo / No active alerts"}
+{items_text if items_text else "No active alerts"}
 
 Generate the shift briefing now. Keep it under 400 words."""
 
@@ -50,7 +49,7 @@ def fleet_threat_scan_prompt(data: dict[str, Any]) -> str:
         threats_text += (
             f"{i}. [{t['mode']}] {t['severity']} — {t.get('source', '?')} → {t.get('target', '?')}\n"
             f"   {t.get('detail', '')}\n"
-            f"   Raccomandazione: {t.get('recommendation', 'N/A')}\n"
+            f"   Recommendation: {t.get('recommendation', 'N/A')}\n"
         )
 
     counts = data.get("threat_counts", {})
@@ -68,8 +67,7 @@ FORMAT RULES:
 - List threats by risk score (highest first), numbered
 - Include the detection mode, target, source, and recommended action for each
 - Add a "Fleet Risk Summary" section with the top satellites at risk
-- End with "Priorità operative / Operational priorities" (top 3 actions)
-- Be bilingual: Italian headers, English technical details
+- End with "Operational Priorities" (top 3 actions)
 - Do NOT invent data
 
 SCAN DATA:
@@ -78,7 +76,7 @@ Total threats: {data.get('total_threats', 0)}
 By mode: proximity={counts.get('proximity', 0)}, signal={counts.get('signal', 0)}, anomaly={counts.get('anomaly', 0)}, orbital_similarity={counts.get('orbital_similarity', 0)}, geo_loiter={counts.get('geo_loiter', 0)}
 
 TOP THREATS:
-{threats_text if threats_text else "Nessuna minaccia rilevata / No threats detected"}
+{threats_text if threats_text else "No threats detected"}
 
 FLEET RISK (top 5):
 {fleet_text if fleet_text else "No fleet risk data"}
@@ -98,11 +96,11 @@ def what_if_scenario_prompt(data: dict[str, Any]) -> str:
     recs_text = "\n".join(f"{i+1}. {r}" for i, r in enumerate(recommendations))
 
     scenario_labels = {
-        "fragmentation": "Evento di frammentazione / Fragmentation Event",
-        "solar_storm": "Tempesta solare / Solar Storm",
-        "maneuver": "Simulazione manovra / Maneuver Simulation",
-        "ground_station_loss": "Perdita stazione / Ground Station Loss",
-        "generic": "Scenario generico / Generic Scenario",
+        "fragmentation": "Fragmentation Event",
+        "solar_storm": "Solar Storm",
+        "maneuver": "Maneuver Simulation",
+        "ground_station_loss": "Ground Station Loss",
+        "generic": "Generic Scenario",
     }
     label = scenario_labels.get(scenario_type, "Scenario")
 
@@ -114,13 +112,12 @@ Produce a what-if analysis report for: {label}
 
 FORMAT RULES:
 - Start with scenario description in 1-2 sentences
-- "Parametri / Parameters" section with simulation inputs
-- "Valutazione impatto / Impact Assessment" section
-- "Raccomandazioni / Recommendations" numbered list
+- "Parameters" section with simulation inputs
+- "Impact Assessment" section
+- "Recommendations" numbered list
 - If the scenario is fragmentation, mention debris cloud persistence
 - If solar storm, mention comm impact and drag
 - If maneuver, mention fuel budget and new conjunction risk
-- Be bilingual: Italian headers, English technical details
 - Do NOT invent data beyond what is provided
 {query_note}
 

@@ -8,12 +8,12 @@ from __future__ import annotations
 
 from typing import Optional
 
-from sqlalchemy import select, and_, or_
+from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models.ontology import Satellite, Orbit
-from app.physics.bayesian_scorer import ADVERSARIAL_COUNTRIES
 from app.core.logging import get_logger
+from app.services.intelligence_support import derive_orbit_metrics, is_hostile_asset, normalize_country
 
 logger = get_logger(__name__)
 
@@ -33,18 +33,25 @@ class AdversaryTrackingService:
                 and_(
                     Satellite.tenant_id == tenant_id,
                     Satellite.is_active == True,
-                    or_(
-                        Satellite.country.in_(list(ADVERSARIAL_COUNTRIES)),
-                        Satellite.faction == "enemy",
-                    ),
                 )
             )
+            .order_by(Satellite.name, Orbit.epoch.desc())
         )
         result = await self.db.execute(stmt)
         rows = result.all()
 
         sat_map: dict[str, dict] = {}
         for sat, orbit in rows:
+            is_hostile = is_hostile_asset(
+                norad_id=sat.norad_id,
+                name=sat.name,
+                country=sat.country,
+                faction=getattr(sat, "faction", None),
+                tags=sat.tags,
+            )
+            if not is_hostile:
+                continue
+
             if sat.id not in sat_map:
                 sat_map[sat.id] = {
                     "satellite_id": sat.id,
@@ -55,17 +62,29 @@ class AdversaryTrackingService:
                     "object_type": sat.object_type or "PAYLOAD",
                     "altitude_km": 0.0,
                     "inclination_deg": 0.0,
-                    "faction": getattr(sat, "faction", "hostile") or "hostile",
+                    "faction": getattr(sat, "faction", None) or "enemy",
                     "tags": sat.tags or [],
+                    "_orbit_epoch": None,
                 }
             if orbit:
-                alt = ((orbit.apogee_km or 0) + (orbit.perigee_km or 0)) / 2 if orbit.apogee_km else (orbit.semi_major_axis_km - 6378.137 if orbit.semi_major_axis_km else 0)
-                sat_map[sat.id].update({
-                    "altitude_km": round(alt, 1),
-                    "inclination_deg": round(orbit.inclination_deg or 0.0, 2),
-                })
+                metrics = derive_orbit_metrics(orbit)
+                current_epoch = sat_map[sat.id].get("_orbit_epoch")
+                next_epoch = metrics.get("epoch")
+                should_update = current_epoch is None or (
+                    next_epoch is not None and next_epoch > current_epoch
+                )
+                if should_update:
+                    sat_map[sat.id].update({
+                        "altitude_km": round(metrics.get("altitude_km") or 0.0, 1),
+                        "inclination_deg": round(metrics.get("inclination_deg") or 0.0, 2),
+                        "_orbit_epoch": next_epoch,
+                    })
 
-        return sorted(sat_map.values(), key=lambda s: s["name"])
+        catalog = []
+        for sat in sat_map.values():
+            sat.pop("_orbit_epoch", None)
+            catalog.append(sat)
+        return sorted(catalog, key=lambda s: s["name"])
 
     async def get_intelligence(self, tenant_id: str, satellite_id: str) -> dict:
         """Generate intelligence report for a specific adversary satellite."""
@@ -97,15 +116,24 @@ class AdversaryTrackingService:
 
         sat, orbit = row
         country = sat.country or "UNK"
+        country_code = normalize_country(country)
+        is_hostile = is_hostile_asset(
+            norad_id=sat.norad_id,
+            name=sat.name,
+            country=sat.country,
+            faction=getattr(sat, "faction", None),
+            tags=sat.tags,
+        )
+        orbit_metrics = derive_orbit_metrics(orbit)
 
         # Build intelligence based on country and satellite type
         precedents = []
         capabilities = []
         threat_level = "low"
 
-        if country in ("PRC", "CIS", "RUS"):
+        if country_code in ("PRC", "CIS", "RUS"):
             threat_level = "high"
-            if country == "PRC":
+            if country_code == "PRC":
                 precedents = [
                     "SC-19 kinetic kill test (2007) — destroyed FY-1C",
                     "SJ-21 grappling demonstration (2022)",
@@ -127,21 +155,42 @@ class AdversaryTrackingService:
                     "Direct-ascent ASAT",
                     "Electronic warfare",
                 ]
+        elif is_hostile:
+            threat_level = "medium"
+            capabilities = [
+                "Mission profile unattributed",
+                "Requires persistent tracking",
+                "Potential proximity or inspection activity",
+            ]
 
         maneuvers = []
-        if orbit and orbit.semi_major_axis_km:
-            maneuvers.append(f"Current orbit: {orbit.semi_major_axis_km:.0f} km SMA, {orbit.inclination_deg:.1f}° inclination")
+        if orbit_metrics.get("semi_major_axis_km") and orbit_metrics.get("inclination_deg") is not None:
+            maneuvers.append(
+                "Current orbit: "
+                f"{orbit_metrics['semi_major_axis_km']:.0f} km SMA, "
+                f"{orbit_metrics['inclination_deg']:.1f}° inclination"
+            )
 
         return {
             "satellite_id": satellite_id,
             "satellite_name": sat.name,
             "country": country,
-            "risk_assessment": f"{'High' if threat_level == 'high' else 'Medium'} risk — {country} military/dual-use satellite",
+            "risk_assessment": (
+                "High risk"
+                if threat_level == "high"
+                else "Medium risk"
+                if threat_level == "medium"
+                else "Low risk"
+            )
+            + f" — {country} satellite track",
             "historical_precedents": precedents,
             "capabilities": capabilities,
             "recent_maneuvers": maneuvers,
             "threat_level": threat_level,
-            "summary": f"{sat.name} is a {country} satellite assessed as {threat_level} threat level based on nation-state capabilities and historical precedents.",
+            "summary": (
+                f"{sat.name} is assessed as {threat_level} threat level. "
+                f"Country attribution is {country}."
+            ),
         }
 
     async def chat_about_satellite(

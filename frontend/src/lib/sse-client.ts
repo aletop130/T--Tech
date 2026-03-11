@@ -1,3 +1,5 @@
+import { getApiBase } from '@/lib/utils';
+
 export interface SSEToolCallEvent {
   event_type: 'tool_call';
   tool_name: string;
@@ -39,6 +41,15 @@ export interface SSEChatClientConfig {
   onToolCall?: (toolName: string, args: Record<string, unknown>) => void;
   onToolResult?: (toolCallId: string, toolName: string, result: unknown, error?: string) => void;
   onAction?: (action: { type: string; payload: Record<string, unknown> }) => void;
+  onSimulationControl?: (command: {
+    action: string;
+    mode?: string;
+    source?: string;
+    prompt?: string;
+  }) => void;
+  onConfirmationRequired?: (operation: Record<string, unknown>) => void;
+  onAgentStart?: (agent: string, message?: string) => void;
+  onAgentComplete?: (agent: string, message?: string) => void;
   onSession?: (sessionId: string) => void;
   onMemoryUsage?: (percentage: number) => void;
   onMemoryError?: (error: string, details?: string) => void;
@@ -51,20 +62,19 @@ export interface SSEChatClientConfig {
 }
 
 export class SSEChatClient {
-  private eventSource: EventSource | null = null;
   private config: SSEChatClientConfig;
   private messageBuffer: string = '';
   private isComplete: boolean = false;
   private actionsCount: number = 0;
   private baseUrl: string;
   private tenantId: string;
+  private abortController: AbortController | null = null;
+  private activeStreamId: number = 0;
 
   constructor(config: SSEChatClientConfig) {
     this.config = config;
     // Use relative URL in browser to leverage Next.js rewrites, direct URL on server
-    this.baseUrl = typeof window !== 'undefined'
-      ? ''  // Browser: use relative URLs (goes through Next.js rewrites)
-      : (process.env.NEXT_PUBLIC_API_URL || 'http://backend:8000');  // Server: use direct backend URL
+    this.baseUrl = getApiBase();
     this.tenantId = 'default';
   }
 
@@ -73,70 +83,11 @@ export class SSEChatClient {
     sceneState: Record<string, unknown>,
     sessionId?: string
   ): Promise<void> {
-    this.messageBuffer = '';
-    this.isComplete = false;
-    this.actionsCount = 0;
-
-    // Construct URL - use URL constructor for absolute URLs, string concatenation for relative
-    const url = this.baseUrl
-      ? new URL(`${this.baseUrl}/api/v1/ai/chat/stream`).toString()
-      : '/api/v1/ai/chat/stream';
-
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Tenant-ID': this.tenantId,
-      },
-      body: JSON.stringify({
-        messages,
-        sceneState,
-        session_id: sessionId,
-      }),
+    await this.streamFromEndpoint('/api/v1/ai/chat/stream', {
+      messages,
+      sceneState,
+      session_id: sessionId,
     });
-
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({}));
-      this.config.onError?.(error.detail || `HTTP error: ${response.status}`);
-      return;
-    }
-
-    const reader = response.body?.getReader();
-    if (!reader) {
-      this.config.onError?.('No response body');
-      return;
-    }
-
-    const decoder = new TextDecoder();
-    let buffer = '';
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split('\n');
-      buffer = lines.pop() || '';
-
-      for (const line of lines) {
-        if (line.startsWith('data: ')) {
-          const data = line.slice(6).trim();
-          if (data === '[DONE]') {
-            this.isComplete = true;
-            this.config.onMessageChunk?.('', true);
-            this.config.onDone?.(this.messageBuffer, this.actionsCount);
-            return;
-          }
-
-          try {
-            const event = JSON.parse(data);
-            this.handleEvent(event);
-          } catch (e) {
-            // Ignore parse errors for incomplete lines
-          }
-        }
-      }
-    }
   }
 
   async streamAgentChat(
@@ -144,53 +95,89 @@ export class SSEChatClient {
     sceneState: Record<string, unknown>,
     sessionId?: string
   ): Promise<void> {
+    await this.streamFromEndpoint('/api/v1/ai/chat/agent', {
+      messages,
+      sceneState,
+      session_id: sessionId,
+    });
+  }
+
+  async streamOrchestratedChat(
+    message: string,
+    sessionId?: string,
+    mapSessionId?: string,
+    mode: 'analyze' | 'execute' = 'analyze'
+  ): Promise<void> {
+    await this.streamFromEndpoint('/api/v1/ai/chat/orchestrate', {
+      message,
+      session_id: sessionId,
+      map_session_id: mapSessionId,
+      mode,
+    });
+  }
+
+  private async streamFromEndpoint(
+    endpoint: string,
+    body: Record<string, unknown>
+  ): Promise<void> {
+    this.close();
     this.messageBuffer = '';
     this.isComplete = false;
     this.actionsCount = 0;
 
-    // Construct URL - use URL constructor for absolute URLs, string concatenation for relative
+    const streamId = ++this.activeStreamId;
+    const controller = new AbortController();
+    this.abortController = controller;
+
     const url = this.baseUrl
-      ? new URL(`${this.baseUrl}/api/v1/ai/chat/agent`).toString()
-      : '/api/v1/ai/chat/agent';
+      ? new URL(`${this.baseUrl}${endpoint}`).toString()
+      : endpoint;
 
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Tenant-ID': this.tenantId,
-      },
-      body: JSON.stringify({
-        messages,
-        sceneState,
-        session_id: sessionId,
-      }),
-    });
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Tenant-ID': this.tenantId,
+        },
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
 
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({}));
-      this.config.onError?.(error.detail || `HTTP error: ${response.status}`);
-      return;
-    }
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}));
+        if (this.isCurrentStream(streamId)) {
+          this.config.onError?.(error.detail || `HTTP error: ${response.status}`);
+        }
+        return;
+      }
 
-    const reader = response.body?.getReader();
-    if (!reader) {
-      this.config.onError?.('No response body');
-      return;
-    }
+      const reader = response.body?.getReader();
+      if (!reader) {
+        if (this.isCurrentStream(streamId)) {
+          this.config.onError?.('No response body');
+        }
+        return;
+      }
 
-    const decoder = new TextDecoder();
-    let buffer = '';
+      const decoder = new TextDecoder();
+      let buffer = '';
 
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done || !this.isCurrentStream(streamId)) {
+          break;
+        }
 
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split('\n');
-      buffer = lines.pop() || '';
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
 
-      for (const line of lines) {
-        if (line.startsWith('data: ')) {
+        for (const line of lines) {
+          if (!this.isCurrentStream(streamId) || !line.startsWith('data: ')) {
+            continue;
+          }
+
           const data = line.slice(6).trim();
           if (data === '[DONE]') {
             this.isComplete = true;
@@ -202,10 +189,20 @@ export class SSEChatClient {
           try {
             const event = JSON.parse(data);
             this.handleEvent(event);
-          } catch (e) {
-            // Ignore parse errors for incomplete lines
+          } catch {
+            // Ignore parse errors for incomplete lines.
           }
         }
+      }
+    } catch (error) {
+      if (!this.isAbortError(error) && this.isCurrentStream(streamId)) {
+        this.config.onError?.(
+          error instanceof Error ? error.message : 'Streaming request failed'
+        );
+      }
+    } finally {
+      if (this.abortController === controller) {
+        this.abortController = null;
       }
     }
   }
@@ -249,6 +246,56 @@ export class SSEChatClient {
           const payload = event.payload as Record<string, unknown>;
           this.config.onAction?.({ type: actionType, payload });
         }
+        break;
+
+      case 'cesium_action':
+        {
+          this.actionsCount++;
+          const action = event.action as { type?: string; payload?: Record<string, unknown> } | undefined;
+          if (action?.type) {
+            this.config.onAction?.({
+              type: action.type,
+              payload: action.payload || {},
+            });
+          }
+        }
+        break;
+
+      case 'simulation_control':
+        {
+          const action = event.action as string;
+          if (action) {
+            this.config.onSimulationControl?.({
+              action,
+              mode: event.mode as string | undefined,
+              source: event.source as string | undefined,
+              prompt: event.prompt as string | undefined,
+            });
+          }
+        }
+        break;
+
+      case 'confirmation_required':
+        {
+          const operation = event.operation as Record<string, unknown> | undefined;
+          if (operation) {
+            this.config.onConfirmationRequired?.(operation);
+          }
+        }
+        break;
+
+      case 'agent_start':
+        this.config.onAgentStart?.(
+          event.agent as string,
+          event.message as string | undefined
+        );
+        break;
+
+      case 'agent_complete':
+        this.config.onAgentComplete?.(
+          event.agent as string,
+          event.message as string | undefined
+        );
         break;
 
       case 'session':
@@ -311,10 +358,21 @@ export class SSEChatClient {
     }
   }
 
+  private isAbortError(error: unknown): boolean {
+    if (typeof DOMException !== 'undefined' && error instanceof DOMException) {
+      return error.name === 'AbortError';
+    }
+    return error instanceof Error && error.name === 'AbortError';
+  }
+
+  private isCurrentStream(streamId: number): boolean {
+    return streamId === this.activeStreamId;
+  }
+
   close(): void {
-    if (this.eventSource) {
-      this.eventSource.close();
-      this.eventSource = null;
+    if (this.abortController) {
+      this.abortController.abort();
+      this.abortController = null;
     }
   }
 }

@@ -1,8 +1,12 @@
+const path = require('path');
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   output: 'standalone',
   reactStrictMode: true,
-  turbopack: {},
+  turbopack: {
+    root: path.resolve(__dirname),
+  },
   transpilePackages: [
     "resium",
   ],

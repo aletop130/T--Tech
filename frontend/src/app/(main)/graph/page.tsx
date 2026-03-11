@@ -1,650 +1,1155 @@
-'use client';
+"use client";
 
-import { useEffect, useRef, useState } from 'react';
-import { Card, Elevation, Icon, Button, Spinner, Tag, Dialog, Classes } from '@blueprintjs/core';
-import * as d3 from 'd3';
-import { api, SatelliteDetail, GroundStation, ConjunctionEvent, ProximityAlert, Incident } from '@/lib/api';
+import { useEffect, useRef, useState } from "react";
+import { severityIntent } from "@/lib/severity";
+import {
+  Button,
+  Callout,
+  Card,
+  Elevation,
+  Icon,
+  Spinner,
+  Tag,
+} from "@blueprintjs/core";
+import * as d3 from "d3";
+import { api, type ConjunctionEvent, type SatelliteDetail } from "@/lib/api";
+import type {
+  OrbitalSimilarityThreat,
+  ProximityThreat,
+  SignalThreat,
+} from "@/types/threats";
 
-interface GraphNode {
+type NodeFaction = "allied" | "enemy" | "neutral" | "unknown";
+type EdgeKind = "proximity" | "orbital" | "signal" | "conjunction";
+type GraphFilter = "all" | EdgeKind;
+
+interface DetailRow {
+  label: string;
+  value: string;
+}
+
+interface NetworkNode {
   id: string;
   label: string;
-  type: 'satellite' | 'ground_station' | 'sensor' | 'debris';
-  faction?: 'allied' | 'enemy' | 'neutral';
-  x?: number;
-  y?: number;
+  type: "satellite";
+  faction: NodeFaction;
+  riskScore: number;
+  directConnections: number;
+  issueCounts: Record<EdgeKind, number>;
+  riskComponents: Record<string, number>;
+  country?: string;
+  operator?: string;
+  orbitType?: string;
+  tags: string[];
 }
 
-interface GraphLink {
-  id?: string;
+interface NetworkEdge {
+  id: string;
   source: string;
   target: string;
-  type: 'relation' | 'conjunction' | 'proximity' | 'cyber' | 'maneuver';
-  severity?: string;
-  incident?: Incident;
+  kind: EdgeKind;
+  severity: string;
+  score: number;
+  label: string;
+  summary: string;
+  details: DetailRow[];
 }
 
-const isAlliedSatellite = (sat: SatelliteDetail): boolean => {
-  const name = sat.name?.toLowerCase() || '';
-  return name.includes('guardian') || name.includes('deepwatch') || name.includes('terrascan') ||
-         name.includes('starfinder') || name.includes('celestial') || name.includes('windwatcher') ||
-         name.includes('commlink') || name.includes('weathereye') || name.includes('navbeacon') ||
-         name.includes('eyeinsky');
+type RenderNode = NetworkNode & d3.SimulationNodeDatum;
+type RenderLink = NetworkEdge & d3.SimulationLinkDatum<RenderNode>;
+
+const EDGE_LABELS: Record<EdgeKind, string> = {
+  proximity: "PROX",
+  orbital: "OSIM",
+  signal: "SIG",
+  conjunction: "CDM",
 };
 
-const isEnemySatellite = (sat: SatelliteDetail): boolean => {
-  const name = sat.name?.toLowerCase() || '';
-  return name.includes('unknown') || name.includes('hostile') || name.includes('suspect') ||
-         name.includes('tracked') || name.includes('unidentified') || name.includes('contact');
+const EDGE_COLORS: Record<EdgeKind, string> = {
+  proximity: "#fb923c",
+  orbital: "#8b5cf6",
+  signal: "#14b8a6",
+  conjunction: "#f43f5e",
 };
+
+const NODE_COLORS: Record<NodeFaction, string> = {
+  allied: "#3b82f6",
+  enemy: "#ef4444",
+  neutral: "#94a3b8",
+  unknown: "#64748b",
+};
+
+const SEVERITY_RANK: Record<string, number> = {
+  critical: 4,
+  high: 3.5,
+  threatened: 3,
+  watched: 2,
+  medium: 2,
+  low: 1,
+  nominal: 0.5,
+  info: 0.5,
+};
+
+function normalizeFaction(value?: string | null): NodeFaction {
+  if (!value) return "unknown";
+  const normalized = value.toLowerCase();
+  if (normalized === "allied" || normalized === "friendly") return "allied";
+  if (
+    normalized === "enemy" ||
+    normalized === "hostile" ||
+    normalized === "adversary"
+  )
+    return "enemy";
+  if (normalized === "neutral") return "neutral";
+  return "unknown";
+}
+
+
+function formatPercent(value: number): string {
+  return `${(value * 100).toFixed(value >= 0.1 ? 0 : 1)}%`;
+}
+
+function edgePriority(edge: NetworkEdge): number {
+  return (SEVERITY_RANK[edge.severity.toLowerCase()] ?? 0) + edge.score;
+}
+
+function edgeStrokeWidth(edge: NetworkEdge): number {
+  return 2 + Math.min(4, edgePriority(edge));
+}
+
+function nodeRadius(node: NetworkNode): number {
+  return (
+    15 + Math.min(8, node.riskScore * 10) + (node.faction === "enemy" ? 2 : 0)
+  );
+}
+
+function buildConjunctionScore(conjunction: ConjunctionEvent): number {
+  if (typeof conjunction.risk_score === "number") {
+    return Math.max(0, Math.min(1, conjunction.risk_score / 100));
+  }
+  if (typeof conjunction.collision_probability === "number") {
+    return Math.max(0, Math.min(1, conjunction.collision_probability));
+  }
+  return 0.35;
+}
 
 export default function GraphPage() {
   const svgRef = useRef<SVGSVGElement>(null);
   const zoomRef = useRef<d3.ZoomBehavior<SVGSVGElement, unknown> | null>(null);
+
   const [loading, setLoading] = useState(true);
-  const [nodes, setNodes] = useState<GraphNode[]>([]);
-  const [links, setLinks] = useState<GraphLink[]>([]);
-  const [filter, setFilter] = useState<'all' | 'allied' | 'enemy' | 'ground_stations'>('all');
-  const [displayedNodes, setDisplayedNodes] = useState<GraphNode[]>([]);
-  const [displayedLinks, setDisplayedLinks] = useState<GraphLink[]>([]);
-  const [selectedIncident, setSelectedIncident] = useState<Incident | null>(null);
-  const [selectedLink, setSelectedLink] = useState<GraphLink | null>(null);
-  const [stats, setStats] = useState({
-    satellites: 0,
-    totalSatellites: 0,
-    groundStations: 0,
-    links: 0,
-    conjunctions: 0,
-    proximityAlerts: 0,
-    cyberAlerts: 0,
-    maneuverAlerts: 0,
-  });
   const [refreshKey, setRefreshKey] = useState(0);
+  const [edgeFilter, setEdgeFilter] = useState<GraphFilter>("all");
+  const [focusSatelliteId, setFocusSatelliteId] = useState<string>("all");
+  const [allNodes, setAllNodes] = useState<NetworkNode[]>([]);
+  const [allEdges, setAllEdges] = useState<NetworkEdge[]>([]);
+  const [displayedNodes, setDisplayedNodes] = useState<NetworkNode[]>([]);
+  const [displayedEdges, setDisplayedEdges] = useState<NetworkEdge[]>([]);
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
+  const [lastUpdated, setLastUpdated] = useState<string | null>(null);
 
   useEffect(() => {
-    const loadData = async () => {
+    const intervalId = window.setInterval(() => {
+      setRefreshKey((current) => current + 1);
+    }, 30000);
+
+    return () => window.clearInterval(intervalId);
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadData() {
+      setLoading(true);
       try {
         const [
-          satellitesData,
-          groundStationsData,
-          conjunctionsData,
-          proximityAlertsData,
-          cyberAlertsData,
-          maneuverAlertsData,
-          allIncidentsData,
+          satelliteCatalog,
+          fleetRisk,
+          proximityThreats,
+          signalThreats,
+          orbitalThreats,
+          conjunctionsResponse,
+          adversaryCatalog,
         ] = await Promise.all([
           api.getSatellitesWithOrbits(),
-          api.getGroundStations({ page_size: 20 }),
-          api.getConjunctions({ page_size: 50, is_actionable: true }),
-          api.getActiveProximityAlerts(),
-          api.getCyberIncidents({ page_size: 50 }),
-          api.getManeuverIncidents({ page_size: 50 }),
-          api.getIncidents({ page_size: 100 }),
+          api.getFleetRiskCurrent(),
+          api.getProximityThreats(),
+          api.getSignalThreats(),
+          api.getOrbitalSimilarityThreats(),
+          api.getConjunctions({ page_size: 30, is_actionable: true }),
+          api.getAdversaryCatalog(),
         ]);
 
-        const satellites: SatelliteDetail[] = satellitesData;
-        const groundStations: GroundStation[] = groundStationsData.items;
-        const conjunctions: ConjunctionEvent[] = conjunctionsData.items;
-        const proximityAlerts: ProximityAlert[] = proximityAlertsData;
-        const cyberAlerts: Incident[] = cyberAlertsData.items;
-        const maneuverAlerts: Incident[] = maneuverAlertsData.items;
-        const allIncidents: Incident[] = allIncidentsData.items;
+        if (cancelled) {
+          return;
+        }
 
-        // Limit satellites to prevent browser crash - show only meaningful ones
-        const MAX_SATELLITES = 50;
-        const limitedSatellites = satellites.slice(0, MAX_SATELLITES);
+        const satellitesById = new Map<string, SatelliteDetail>(
+          satelliteCatalog.map((satellite) => [satellite.id, satellite]),
+        );
+        const riskById = new Map(
+          fleetRisk.satellites.map((snapshot) => [
+            snapshot.satellite_id,
+            snapshot,
+          ]),
+        );
+        const adversaryById = new Map(
+          adversaryCatalog.map((satellite) => [
+            satellite.satellite_id,
+            satellite,
+          ]),
+        );
 
-        const incidentMap = new Map(allIncidents.map(inc => [inc.id, inc]));
+        const nodes = new Map<string, NetworkNode>();
+        const edges = new Map<string, NetworkEdge>();
 
-        const graphNodes: GraphNode[] = [];
-        const graphLinks: GraphLink[] = [];
+        const ensureNode = (
+          satelliteId: string,
+          fallbackLabel: string,
+          factionHint?: NodeFaction,
+        ): NetworkNode => {
+          const existing = nodes.get(satelliteId);
+          const catalogSatellite = satellitesById.get(satelliteId);
+          const adversarySatellite = adversaryById.get(satelliteId);
+          const riskSnapshot = riskById.get(satelliteId);
 
-        limitedSatellites.forEach((sat: SatelliteDetail) => {
-          const node: GraphNode = {
-            id: sat.id,
-            label: sat.name,
-            type: 'satellite',
+          const computedFaction =
+            normalizeFaction(catalogSatellite?.faction) !== "unknown"
+              ? normalizeFaction(catalogSatellite?.faction)
+              : adversarySatellite
+                ? "enemy"
+                : (factionHint ?? "unknown");
+
+          if (existing) {
+            if (
+              existing.faction === "unknown" &&
+              computedFaction !== "unknown"
+            ) {
+              existing.faction = computedFaction;
+            }
+            if (
+              !existing.country &&
+              (catalogSatellite?.country || adversarySatellite?.country)
+            ) {
+              existing.country =
+                catalogSatellite?.country || adversarySatellite?.country;
+            }
+            if (
+              !existing.operator &&
+              (catalogSatellite?.operator || adversarySatellite?.operator)
+            ) {
+              existing.operator =
+                catalogSatellite?.operator || adversarySatellite?.operator;
+            }
+            if (
+              !existing.orbitType &&
+              catalogSatellite?.latest_orbit?.orbit_type
+            ) {
+              existing.orbitType = catalogSatellite.latest_orbit.orbit_type;
+            }
+            if (!existing.label || existing.label === existing.id) {
+              existing.label =
+                catalogSatellite?.name ||
+                adversarySatellite?.name ||
+                fallbackLabel ||
+                existing.id;
+            }
+            return existing;
+          }
+
+          const newNode: NetworkNode = {
+            id: satelliteId,
+            label:
+              catalogSatellite?.name ||
+              adversarySatellite?.name ||
+              fallbackLabel ||
+              satelliteId,
+            type: "satellite",
+            faction: computedFaction,
+            riskScore: riskSnapshot?.risk_score ?? 0,
+            directConnections: 0,
+            issueCounts: {
+              proximity: 0,
+              orbital: 0,
+              signal: 0,
+              conjunction: 0,
+            },
+            riskComponents: riskSnapshot?.components ?? {},
+            country: catalogSatellite?.country || adversarySatellite?.country,
+            operator:
+              catalogSatellite?.operator || adversarySatellite?.operator,
+            orbitType: catalogSatellite?.latest_orbit?.orbit_type,
+            tags: catalogSatellite?.tags ?? adversarySatellite?.tags ?? [],
           };
-          if (isAlliedSatellite(sat)) {
-            node.faction = 'allied';
-          } else if (isEnemySatellite(sat)) {
-            node.faction = 'enemy';
-          } else {
-            node.faction = 'neutral';
-          }
-          graphNodes.push(node);
-        });
 
-        groundStations.forEach((station: GroundStation) => {
-          graphNodes.push({
-            id: station.id,
-            label: station.name,
-            type: 'ground_station',
-            faction: 'neutral',
+          nodes.set(satelliteId, newNode);
+          return newNode;
+        };
+
+        const addEdge = (edge: NetworkEdge) => {
+          const existing = edges.get(edge.id);
+          if (!existing || edgePriority(edge) > edgePriority(existing)) {
+            edges.set(edge.id, edge);
+          }
+        };
+
+        proximityThreats.forEach((threat: ProximityThreat) => {
+          const source = ensureNode(
+            threat.foreignSatId,
+            threat.foreignSatName,
+            "enemy",
+          );
+          const target = ensureNode(
+            threat.targetAssetId,
+            threat.targetAssetName,
+            "allied",
+          );
+          addEdge({
+            id: `proximity:${source.id}:${target.id}`,
+            source: source.id,
+            target: target.id,
+            kind: "proximity",
+            severity: threat.severity,
+            score: threat.confidence,
+            label: EDGE_LABELS.proximity,
+            summary: `${threat.missDistanceKm.toFixed(1)} km miss distance, TCA in ${threat.tcaInMinutes} min`,
+            details: [
+              { label: "Foreign Satellite", value: source.label },
+              { label: "Target Satellite", value: target.label },
+              {
+                label: "Miss Distance",
+                value: `${threat.missDistanceKm.toFixed(1)} km`,
+              },
+              {
+                label: "Approach Velocity",
+                value: `${threat.approachVelocityKms.toFixed(2)} km/s`,
+              },
+              { label: "TCA", value: `${threat.tcaInMinutes} min` },
+              { label: "Pattern", value: threat.approachPattern },
+              { label: "Confidence", value: formatPercent(threat.confidence) },
+            ],
           });
         });
 
-        const seenLinks = new Set<string>();
-
-        // Add links from satellite relations
-        limitedSatellites.forEach((sat: SatelliteDetail) => {
-          sat.relations.forEach((rel) => {
-            const linkKey = `rel-${rel.source_id}-${rel.target_id}-${rel.relation_type}`;
-            if (!seenLinks.has(linkKey)) {
-              seenLinks.add(linkKey);
-              graphLinks.push({
-                id: linkKey,
-                source: rel.source_id,
-                target: rel.target_id,
-                type: 'relation',
-              });
-            }
+        orbitalThreats.forEach((threat: OrbitalSimilarityThreat) => {
+          const source = ensureNode(
+            threat.foreignSatId,
+            threat.foreignSatName,
+            "enemy",
+          );
+          const target = ensureNode(
+            threat.targetAssetId,
+            threat.targetAssetName,
+            "allied",
+          );
+          addEdge({
+            id: `orbital:${source.id}:${target.id}`,
+            source: source.id,
+            target: target.id,
+            kind: "orbital",
+            severity: threat.severity,
+            score: threat.confidence,
+            label: EDGE_LABELS.orbital,
+            summary: `${threat.pattern} pattern, ${threat.altitudeDiffKm.toFixed(1)} km altitude delta`,
+            details: [
+              { label: "Foreign Satellite", value: source.label },
+              { label: "Target Satellite", value: target.label },
+              { label: "Pattern", value: threat.pattern },
+              {
+                label: "Altitude Delta",
+                value: `${threat.altitudeDiffKm.toFixed(1)} km`,
+              },
+              {
+                label: "Inclination Delta",
+                value: `${threat.inclinationDiffDeg.toFixed(2)} deg`,
+              },
+              {
+                label: "Divergence Score",
+                value: threat.divergenceScore.toFixed(4),
+              },
+              { label: "Confidence", value: formatPercent(threat.confidence) },
+            ],
           });
         });
 
-        // Only show actual relations from data - no artificial links
-        // Links will only come from conjunctions, proximity alerts, cyber, and maneuver incidents
+        signalThreats.forEach((threat: SignalThreat) => {
+          const source = ensureNode(
+            threat.interceptorId,
+            threat.interceptorName,
+            "enemy",
+          );
+          const target = ensureNode(
+            threat.targetLinkAssetId,
+            threat.targetLinkAssetName,
+            "allied",
+          );
+          addEdge({
+            id: `signal:${source.id}:${target.id}`,
+            source: source.id,
+            target: target.id,
+            kind: "signal",
+            severity: threat.severity,
+            score: threat.interceptionProbability,
+            label: EDGE_LABELS.signal,
+            summary: `${formatPercent(threat.interceptionProbability)} interception risk via ${threat.groundStationName}`,
+            details: [
+              { label: "Interceptor", value: source.label },
+              { label: "Target Satellite", value: target.label },
+              { label: "Ground Station", value: threat.groundStationName },
+              {
+                label: "Interception Probability",
+                value: formatPercent(threat.interceptionProbability),
+              },
+              {
+                label: "Comm Windows At Risk",
+                value: `${threat.commWindowsAtRisk}/${threat.totalCommWindows}`,
+              },
+              {
+                label: "Path Angle",
+                value: `${threat.signalPathAngleDeg.toFixed(1)} deg`,
+              },
+              { label: "Confidence", value: formatPercent(threat.confidence) },
+            ],
+          });
+        });
 
-        conjunctions.forEach((conj: ConjunctionEvent) => {
-          const linkKey = `conj-${conj.primary_object_id}-${conj.secondary_object_id}`;
-          if (!seenLinks.has(linkKey)) {
-            seenLinks.add(linkKey);
-            graphLinks.push({
-              id: linkKey,
-              source: conj.primary_object_id,
-              target: conj.secondary_object_id,
-              type: 'conjunction',
-              severity: conj.risk_level,
-            });
+        conjunctionsResponse.items.forEach((conjunction: ConjunctionEvent) => {
+          const source = ensureNode(
+            conjunction.primary_object_id,
+            conjunction.object1_name || conjunction.primary_object_id,
+          );
+          const target = ensureNode(
+            conjunction.secondary_object_id,
+            conjunction.object2_name || conjunction.secondary_object_id,
+          );
+
+          const left = [source.id, target.id].sort()[0];
+          const right = [source.id, target.id].sort()[1];
+
+          addEdge({
+            id: `conjunction:${left}:${right}`,
+            source: source.id,
+            target: target.id,
+            kind: "conjunction",
+            severity: conjunction.risk_level,
+            score: buildConjunctionScore(conjunction),
+            label: EDGE_LABELS.conjunction,
+            summary: `${conjunction.miss_distance_km.toFixed(2)} km miss distance at ${new Date(conjunction.tca).toLocaleString()}`,
+            details: [
+              { label: "Primary Object", value: source.label },
+              { label: "Secondary Object", value: target.label },
+              {
+                label: "Risk Level",
+                value: conjunction.risk_level.toUpperCase(),
+              },
+              {
+                label: "Miss Distance",
+                value: `${conjunction.miss_distance_km.toFixed(2)} km`,
+              },
+              {
+                label: "TCA",
+                value: new Date(conjunction.tca).toLocaleString(),
+              },
+              {
+                label: "Collision Probability",
+                value:
+                  typeof conjunction.collision_probability === "number"
+                    ? formatPercent(conjunction.collision_probability)
+                    : "N/A",
+              },
+            ],
+          });
+        });
+
+        const nodeList = Array.from(nodes.values());
+        const edgeList = Array.from(edges.values()).sort(
+          (left, right) => edgePriority(right) - edgePriority(left),
+        );
+
+        edgeList.forEach((edge) => {
+          const source = nodes.get(edge.source);
+          const target = nodes.get(edge.target);
+          if (source) {
+            source.directConnections += 1;
+            source.issueCounts[edge.kind] += 1;
+          }
+          if (target) {
+            target.directConnections += 1;
+            target.issueCounts[edge.kind] += 1;
           }
         });
 
-        proximityAlerts.forEach((alert: ProximityAlert) => {
-          if (alert.primary_satellite_id && alert.secondary_satellite_id) {
-            const linkKey = `prox-${alert.primary_satellite_id}-${alert.secondary_satellite_id}`;
-            if (!seenLinks.has(linkKey)) {
-              seenLinks.add(linkKey);
-              const incident = allIncidents.find(i => 
-                i.affected_assets?.some(a => a.id === alert.primary_satellite_id || a.id === alert.secondary_satellite_id)
-              );
-              graphLinks.push({
-                id: linkKey,
-                source: alert.primary_satellite_id,
-                target: alert.secondary_satellite_id,
-                type: 'proximity',
-                severity: alert.alert_level,
-                incident: incident,
-              });
-            }
-          }
-        });
+        const fleetTimestamp =
+          typeof fleetRisk.computed_at === "number"
+            ? new Date(fleetRisk.computed_at * 1000).toISOString()
+            : new Date().toISOString();
 
-        cyberAlerts.forEach((alert: Incident) => {
-          if (alert.affected_assets && alert.affected_assets.length > 0) {
-            alert.affected_assets.forEach((asset) => {
-              if (asset.id) {
-                const linkKey = `cyber-${alert.id}-${asset.id}`;
-                if (!seenLinks.has(linkKey)) {
-                  seenLinks.add(linkKey);
-                  graphLinks.push({
-                    id: linkKey,
-                    source: alert.id,
-                    target: asset.id,
-                    type: 'cyber',
-                    severity: alert.severity,
-                    incident: alert,
-                  });
-                }
-              }
-            });
-          }
-        });
-
-        maneuverAlerts.forEach((alert: Incident) => {
-          if (alert.affected_assets && alert.affected_assets.length > 0) {
-            alert.affected_assets.forEach((asset) => {
-              if (asset.id) {
-                const linkKey = `man-${alert.id}-${asset.id}`;
-                if (!seenLinks.has(linkKey)) {
-                  seenLinks.add(linkKey);
-                  graphLinks.push({
-                    id: linkKey,
-                    source: alert.id,
-                    target: asset.id,
-                    type: 'maneuver',
-                    severity: alert.severity,
-                    incident: alert,
-                  });
-                }
-              }
-            });
-          }
-        });
-
-        setNodes(graphNodes);
-        setLinks(graphLinks);
-        setStats({
-          satellites: limitedSatellites.length,
-          totalSatellites: satellites.length,
-          groundStations: groundStations.length,
-          links: graphLinks.length,
-          conjunctions: conjunctions.length,
-          proximityAlerts: proximityAlerts.length,
-          cyberAlerts: cyberAlerts.length,
-          maneuverAlerts: maneuverAlerts.length,
-        });
+        setAllNodes(
+          nodeList.sort(
+            (left, right) =>
+              right.riskScore - left.riskScore ||
+              right.directConnections - left.directConnections ||
+              left.label.localeCompare(right.label),
+          ),
+        );
+        setAllEdges(edgeList);
+        setLastUpdated(fleetTimestamp);
       } catch (error) {
-        console.warn('Failed to load graph data:', error);
+        console.warn("Failed to load live graph data:", error);
+        if (!cancelled) {
+          setAllNodes([]);
+          setAllEdges([]);
+          setLastUpdated(null);
+        }
       } finally {
-        setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+        }
       }
-    };
+    }
 
     loadData();
+
+    return () => {
+      cancelled = true;
+    };
   }, [refreshKey]);
 
   useEffect(() => {
-    let filtered: GraphNode[];
-    
-    if (filter === 'all') {
-      filtered = nodes;
-    } else if (filter === 'ground_stations') {
-      filtered = nodes.filter((n) => n.type === 'ground_station');
-    } else {
-      filtered = nodes.filter((n) => n.faction === filter);
-    }
-    
-    setDisplayedNodes(filtered);
+    const filteredEdges = allEdges.filter(
+      (edge) => edgeFilter === "all" || edge.kind === edgeFilter,
+    );
 
-    const nodeIds = new Set(filtered.map((n) => n.id));
-    const filteredLinks = links.filter((l) => nodeIds.has(l.source) && nodeIds.has(l.target));
-    setDisplayedLinks(filteredLinks);
-  }, [filter, nodes, links]);
+    if (focusSatelliteId !== "all") {
+      const neighborhoodIds = new Set<string>([focusSatelliteId]);
+      filteredEdges.forEach((edge) => {
+        if (
+          edge.source === focusSatelliteId ||
+          edge.target === focusSatelliteId
+        ) {
+          neighborhoodIds.add(edge.source);
+          neighborhoodIds.add(edge.target);
+        }
+      });
+
+      const scopedEdges = filteredEdges.filter(
+        (edge) =>
+          neighborhoodIds.has(edge.source) &&
+          neighborhoodIds.has(edge.target) &&
+          (edge.source === focusSatelliteId ||
+            edge.target === focusSatelliteId),
+      );
+      const scopedNodes = allNodes.filter((node) =>
+        neighborhoodIds.has(node.id),
+      );
+
+      setDisplayedEdges(scopedEdges);
+      setDisplayedNodes(scopedNodes);
+      return;
+    }
+
+    const topEdges = filteredEdges.slice(0, 18);
+    const visibleNodeIds = new Set<string>();
+    topEdges.forEach((edge) => {
+      visibleNodeIds.add(edge.source);
+      visibleNodeIds.add(edge.target);
+    });
+
+    const scopedNodes = allNodes.filter((node) => visibleNodeIds.has(node.id));
+    setDisplayedEdges(topEdges);
+    setDisplayedNodes(scopedNodes);
+  }, [allEdges, allNodes, edgeFilter, focusSatelliteId]);
 
   useEffect(() => {
-    if (!svgRef.current || displayedNodes.length === 0) return;
+    if (
+      selectedNodeId &&
+      !displayedNodes.some((node) => node.id === selectedNodeId)
+    ) {
+      setSelectedNodeId(null);
+    }
+    if (
+      selectedEdgeId &&
+      !displayedEdges.some((edge) => edge.id === selectedEdgeId)
+    ) {
+      setSelectedEdgeId(null);
+    }
+  }, [displayedEdges, displayedNodes, selectedEdgeId, selectedNodeId]);
 
-    const svg = d3.select(svgRef.current);
-    const width = svgRef.current.clientWidth;
-    const height = svgRef.current.clientHeight;
+  useEffect(() => {
+    if (!svgRef.current) {
+      return;
+    }
 
-    svg.selectAll('*').remove();
+    const svgElement = svgRef.current;
+    const svg = d3.select(svgElement);
+    const width = svgElement.clientWidth;
+    const height = svgElement.clientHeight;
 
-    // Create a map of node IDs for quick lookup
-    const nodeMap = new Map(displayedNodes.map(n => [n.id, n]));
-
-    // Filter and prepare links - D3 will convert source/target to node references
-    const validLinks = displayedLinks.filter(l => {
-      const sourceId = typeof l.source === 'string' ? l.source : (l.source as any)?.id;
-      const targetId = typeof l.target === 'string' ? l.target : (l.target as any)?.id;
-      return nodeMap.has(sourceId) && nodeMap.has(targetId);
+    svg.selectAll("*").remove();
+    svg.on("click", () => {
+      setSelectedNodeId(null);
+      setSelectedEdgeId(null);
     });
 
-    console.log('Graph debug:', {
-      nodes: displayedNodes.length,
-      totalLinks: displayedLinks.length,
-      validLinks: validLinks.length,
-      linkTypes: validLinks.map(l => l.type)
+    if (displayedNodes.length === 0 || displayedEdges.length === 0) {
+      return;
+    }
+
+    const renderNodes: RenderNode[] = displayedNodes.map((node) => ({
+      ...node,
+    }));
+    const nodeById = new Map(renderNodes.map((node) => [node.id, node]));
+    const renderLinks: RenderLink[] = [];
+    displayedEdges.forEach((edge) => {
+      const source = nodeById.get(edge.source);
+      const target = nodeById.get(edge.target);
+      if (!source || !target) {
+        return;
+      }
+
+      renderLinks.push({
+        ...edge,
+        source,
+        target,
+      } as RenderLink);
     });
 
-    const colorScale: Record<string, string> = {
-      satellite: '#39c5cf',
-      allied: '#3b82f6',
-      enemy: '#ef4444',
-      neutral: '#8b949e',
-      debris: '#f85149',
-      ground_station: '#3fb950',
-      sensor: '#d29922',
-      conjunction: '#a371f7',
-      proximity: '#f59e0b',
-      cyber: '#ef4444',
-      maneuver: '#ec4899',
-    };
-
-    const linkColorScale: Record<string, string> = {
-      relation: '#6e7681',
-      conjunction: '#a371f7',
-      proximity: '#f59e0b',
-      cyber: '#ef4444',
-      maneuver: '#ec4899',
-    };
+    const container = svg.append("g");
 
     const simulation = d3
-      .forceSimulation(displayedNodes as any)
+      .forceSimulation<RenderNode>(renderNodes)
       .force(
-        'link',
-        d3.forceLink(validLinks).id((d: any) => d.id).distance(100)
-      )
-      .force('charge', d3.forceManyBody().strength(-300))
-      .force('center', d3.forceCenter(width / 2, height / 2))
-      .force('collision', d3.forceCollide().radius(40));
-
-    const container = svg.append('g');
-
-    const link = container
-      .append('g')
-      .selectAll('line')
-      .data(validLinks)
-      .join('line')
-      .attr('stroke', (d: GraphLink) => linkColorScale[d.type] || '#6e7681')
-      .attr('stroke-width', (d: GraphLink) => d.type === 'relation' ? 2 : d.type === 'conjunction' || d.type === 'proximity' ? 4 : 3)
-      .attr('stroke-opacity', (d: GraphLink) => d.type === 'relation' ? 0.8 : 1)
-      .attr('stroke-dasharray', (d: GraphLink) => d.type === 'cyber' || d.type === 'maneuver' ? '8,4' : 'none')
-      .style('cursor', 'pointer')
-      .on('click', (event: MouseEvent, d: GraphLink) => {
-        event.stopPropagation();
-        if (d.incident) {
-          setSelectedIncident(d.incident);
-          setSelectedLink(d);
-        }
-      });
-
-    const linkLabel = container
-      .append('g')
-      .selectAll('text')
-      .data(validLinks)
-      .join('text')
-      .text((d: GraphLink) => d.type === 'conjunction' ? 'CONJ' : d.type === 'proximity' ? 'PROX' : d.type === 'cyber' ? 'CYBER' : d.type === 'maneuver' ? 'MAN' : d.type)
-      .attr('font-size', 8)
-      .attr('fill', (d: GraphLink) => linkColorScale[d.type] || '#6e7681')
-      .attr('text-anchor', 'middle')
-      .style('pointer-events', 'none');
-
-    const node = container
-      .append('g')
-      .selectAll('g')
-      .data(displayedNodes)
-      .join('g')
-      .call(
+        "link",
         d3
-          .drag<any, GraphNode>()
-          .on('start', (event, d: any) => {
-            if (!event.active) simulation.alphaTarget(0.3).restart();
-            d.fx = d.x;
-            d.fy = d.y;
-          })
-          .on('drag', (event, d: any) => {
-            d.fx = event.x;
-            d.fy = event.y;
-          })
-          .on('end', (event, d: any) => {
-            if (!event.active) simulation.alphaTarget(0);
-            d.fx = null;
-            d.fy = null;
-          })
+          .forceLink<RenderNode, RenderLink>(renderLinks)
+          .id((node) => node.id)
+          .distance((link) => {
+            switch (link.kind) {
+              case "proximity":
+                return 110;
+              case "signal":
+                return 140;
+              case "orbital":
+                return 160;
+              case "conjunction":
+                return 180;
+              default:
+                return 150;
+            }
+          }),
       )
-      .on('click', (event: MouseEvent, d: GraphNode) => {
+      .force("charge", d3.forceManyBody().strength(-420))
+      .force("center", d3.forceCenter(width / 2, height / 2))
+      .force(
+        "collision",
+        d3.forceCollide<RenderNode>().radius((node) => nodeRadius(node) + 26),
+      );
+
+    const linkGroup = container
+      .append("g")
+      .selectAll("line")
+      .data(renderLinks)
+      .join("line")
+      .attr("stroke", (edge) => EDGE_COLORS[edge.kind])
+      .attr("stroke-width", (edge) => edgeStrokeWidth(edge))
+      .attr("stroke-opacity", 0.9)
+      .attr("stroke-dasharray", (edge) =>
+        edge.kind === "orbital" ? "7,4" : "none",
+      )
+      .style("cursor", "pointer")
+      .on("click", (event, edge) => {
         event.stopPropagation();
-        const relatedLinks = links.filter(l => l.source === d.id || l.target === d.id);
-        const incidentLink = relatedLinks.find(l => l.incident);
-        if (incidentLink?.incident) {
-          setSelectedIncident(incidentLink.incident);
-          setSelectedLink(incidentLink);
-        }
+        setSelectedEdgeId(edge.id);
+        setSelectedNodeId(null);
       });
 
-    node
-      .append('circle')
-      .attr('r', (d: GraphNode) => d.type === 'ground_station' ? 15 : 20)
-      .attr('fill', (d: GraphNode) => {
-        if (d.faction) return colorScale[d.faction];
-        return colorScale[d.type] || '#8b949e';
+    linkGroup.append("title").text((edge) => `${edge.label}: ${edge.summary}`);
+
+    const linkLabels = container
+      .append("g")
+      .selectAll("text")
+      .data(renderLinks)
+      .join("text")
+      .text((edge) => edge.label)
+      .attr("font-size", 9)
+      .attr("font-weight", 700)
+      .attr("fill", (edge) => EDGE_COLORS[edge.kind])
+      .attr("text-anchor", "middle")
+      .style("pointer-events", "none");
+
+    const dragBehavior = d3
+      .drag<SVGGElement, RenderNode>()
+      .on("start", (event, node) => {
+        if (!event.active) {
+          simulation.alphaTarget(0.3).restart();
+        }
+        node.fx = node.x;
+        node.fy = node.y;
       })
-      .attr('stroke', '#e6edf3')
-      .attr('stroke-width', 2)
-      .style('cursor', 'pointer');
+      .on("drag", (event, node) => {
+        node.fx = event.x;
+        node.fy = event.y;
+      })
+      .on("end", (event, node) => {
+        if (!event.active) {
+          simulation.alphaTarget(0);
+        }
+        node.fx = null;
+        node.fy = null;
+      });
 
-    node
-      .append('text')
-      .text((d: GraphNode) => d.label)
-      .attr('text-anchor', 'middle')
-      .attr('dy', (d: GraphNode) => d.type === 'ground_station' ? 28 : 32)
-      .attr('fill', '#e6edf3')
-      .attr('font-size', 10)
-      .style('pointer-events', 'none');
+    const nodeGroup = container
+      .append("g")
+      .selectAll<SVGGElement, RenderNode>("g")
+      .data(renderNodes)
+      .join("g")
+      .style("cursor", "pointer")
+      .call(dragBehavior)
+      .on("click", (event, node) => {
+        event.stopPropagation();
+        setSelectedNodeId(node.id);
+        setSelectedEdgeId(null);
+      });
 
-    simulation.on('tick', () => {
-      link
-        .attr('x1', (d: any) => d.source.x)
-        .attr('y1', (d: any) => d.source.y)
-        .attr('x2', (d: any) => d.target.x)
-        .attr('y2', (d: any) => d.target.y);
+    nodeGroup
+      .append("circle")
+      .attr("r", (node) => nodeRadius(node))
+      .attr("fill", (node) => NODE_COLORS[node.faction])
+      .attr("stroke", (node) => (node.riskScore >= 0.5 ? "#f8fafc" : "#cbd5e1"))
+      .attr("stroke-width", (node) => (node.riskScore >= 0.5 ? 3 : 2));
 
-      linkLabel
-        .attr('x', (d: any) => (d.source.x + d.target.x) / 2)
-        .attr('y', (d: any) => (d.source.y + d.target.y) / 2);
+    nodeGroup
+      .append("circle")
+      .attr("r", (node) => nodeRadius(node) + 5)
+      .attr("fill", "none")
+      .attr("stroke", "#facc15")
+      .attr("stroke-width", (node) => (node.riskScore >= 0.25 ? 1.5 : 0))
+      .attr("stroke-opacity", 0.8);
 
-      node.attr('transform', (d: any) => `translate(${d.x},${d.y})`);
+    nodeGroup
+      .append("text")
+      .text((node) => node.label)
+      .attr("text-anchor", "middle")
+      .attr("dy", (node) => nodeRadius(node) + 15)
+      .attr("fill", "#e2e8f0")
+      .attr("font-size", 10)
+      .style("pointer-events", "none");
+
+    nodeGroup
+      .append("text")
+      .text((node) => (node.riskScore > 0 ? formatPercent(node.riskScore) : ""))
+      .attr("text-anchor", "middle")
+      .attr("dy", 4)
+      .attr("fill", "#0f172a")
+      .attr("font-size", 9)
+      .attr("font-weight", 700)
+      .style("pointer-events", "none");
+
+    nodeGroup
+      .append("title")
+      .text(
+        (node) =>
+          `${node.label}\nFaction: ${node.faction}\nRisk: ${formatPercent(node.riskScore)}\nLinks: ${node.directConnections}`,
+      );
+
+    const getSourceNode = (link: RenderLink): RenderNode =>
+      link.source as RenderNode;
+    const getTargetNode = (link: RenderLink): RenderNode =>
+      link.target as RenderNode;
+
+    simulation.on("tick", () => {
+      linkGroup
+        .attr("x1", (link) => getSourceNode(link).x ?? 0)
+        .attr("y1", (link) => getSourceNode(link).y ?? 0)
+        .attr("x2", (link) => getTargetNode(link).x ?? 0)
+        .attr("y2", (link) => getTargetNode(link).y ?? 0);
+
+      linkLabels
+        .attr(
+          "x",
+          (link) =>
+            ((getSourceNode(link).x ?? 0) + (getTargetNode(link).x ?? 0)) / 2,
+        )
+        .attr(
+          "y",
+          (link) =>
+            ((getSourceNode(link).y ?? 0) + (getTargetNode(link).y ?? 0)) / 2 -
+            6,
+        );
+
+      nodeGroup.attr(
+        "transform",
+        (node) => `translate(${node.x ?? 0},${node.y ?? 0})`,
+      );
     });
 
-    if (svgRef.current) {
-      const svg = d3.select(svgRef.current);
-      const zoom = d3.zoom<SVGSVGElement, unknown>()
-        .scaleExtent([0.1, 4])
-        .on('zoom', (event) => {
-          container.attr('transform', event.transform);
-        });
-      svg.call(zoom);
-      zoomRef.current = zoom;
-    }
+    const zoom = d3
+      .zoom<SVGSVGElement, unknown>()
+      .scaleExtent([0.4, 3])
+      .on("zoom", (event) => {
+        container.attr("transform", event.transform);
+      });
+
+    svg.call(zoom);
+    zoomRef.current = zoom;
 
     return () => {
       simulation.stop();
     };
-  }, [displayedNodes, displayedLinks, links]);
+  }, [displayedEdges, displayedNodes]);
+
+  const selectedNode = selectedNodeId
+    ? (displayedNodes.find((node) => node.id === selectedNodeId) ?? null)
+    : null;
+  const selectedEdge = selectedEdgeId
+    ? (displayedEdges.find((edge) => edge.id === selectedEdgeId) ?? null)
+    : null;
+
+  const highRiskNodeCount = displayedNodes.filter(
+    (node) => node.riskScore >= 0.3,
+  ).length;
+  const topRiskNode = displayedNodes[0] ?? null;
+  const focusOptions = allNodes.filter((node) => node.type === "satellite");
 
   const handleZoomIn = () => {
-    if (!svgRef.current || !zoomRef.current) return;
-    const svg = d3.select(svgRef.current);
-    svg.transition().duration(300).call(zoomRef.current.scaleBy as any, 1.3);
+    if (!svgRef.current || !zoomRef.current) {
+      return;
+    }
+    d3.select(svgRef.current)
+      .transition()
+      .duration(250)
+      .call(zoomRef.current.scaleBy as never, 1.2);
   };
 
   const handleZoomOut = () => {
-    if (!svgRef.current || !zoomRef.current) return;
-    const svg = d3.select(svgRef.current);
-    svg.transition().duration(300).call(zoomRef.current.scaleBy as any, 0.7);
+    if (!svgRef.current || !zoomRef.current) {
+      return;
+    }
+    d3.select(svgRef.current)
+      .transition()
+      .duration(250)
+      .call(zoomRef.current.scaleBy as never, 0.8);
   };
 
   const handleZoomToFit = () => {
-    if (!svgRef.current || !zoomRef.current || displayedNodes.length === 0) return;
+    if (!svgRef.current || !zoomRef.current || displayedNodes.length === 0) {
+      return;
+    }
+
     const svg = d3.select(svgRef.current);
+    const graphGroup = svgRef.current.querySelector("g");
+    if (!graphGroup) {
+      svg
+        .transition()
+        .duration(400)
+        .call(zoomRef.current.transform as never, d3.zoomIdentity);
+      return;
+    }
+
     const width = svgRef.current.clientWidth;
     const height = svgRef.current.clientHeight;
-    
-    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-    displayedNodes.forEach((node: any) => {
-      if (node.x !== undefined && node.y !== undefined) {
-        minX = Math.min(minX, node.x);
-        minY = Math.min(minY, node.y);
-        maxX = Math.max(maxX, node.x);
-        maxY = Math.max(maxY, node.y);
-      }
-    });
-    
-    if (minX === Infinity) {
-      minX = 0; minY = 0; maxX = width; maxY = height;
-    }
-    
-    const bounds = { 
-      x: minX - 100, 
-      y: minY - 100, 
-      width: (maxX - minX) + 200, 
-      height: (maxY - minY) + 200 
-    };
-    
-    const scale = 0.8 / Math.max(bounds.width / width, bounds.height / height);
-    const translate = [width / 2 - scale * (bounds.x + bounds.width / 2), height / 2 - scale * (bounds.y + bounds.height / 2)];
-    
-    svg.transition()
-      .duration(750)
-      .call(zoomRef.current.transform as any, d3.zoomIdentity.translate(translate[0], translate[1]).scale(scale));
-  };
+    const bounds = graphGroup.getBBox();
+    const graphWidth = Math.max(1, bounds.width);
+    const graphHeight = Math.max(1, bounds.height);
+    const scale = Math.min(
+      1.2,
+      0.8 / Math.max(graphWidth / width, graphHeight / height),
+    );
+    const translateX = width / 2 - scale * (bounds.x + graphWidth / 2);
+    const translateY = height / 2 - scale * (bounds.y + graphHeight / 2);
 
-  const severityIntent = (severity: string): any => {
-    const intents: Record<string, any> = {
-      critical: 'danger',
-      high: 'warning',
-      medium: 'warning',
-      low: 'success',
-      info: 'primary',
-    };
-    return intents[severity] || 'none';
+    svg
+      .transition()
+      .duration(500)
+      .call(
+        zoomRef.current.transform as never,
+        d3.zoomIdentity.translate(translateX, translateY).scale(scale),
+      );
   };
 
   return (
     <div className="h-full flex flex-col">
-      <div className="flex items-center justify-between mb-4">
-        <h1 className="text-2xl font-bold text-sda-text-primary flex items-center gap-2">
-          <Icon icon="graph" className="text-sda-accent-purple" />
-          Graph View
-        </h1>
-        <div className="flex gap-2 items-center">
-          <div className="flex gap-2">
-          <Button icon="refresh" minimal onClick={() => setRefreshKey(k => k + 1)} />
-          <Button text="All" minimal={filter !== 'all'} onClick={() => setFilter('all')} />
-            <Button text="Allied" minimal={filter !== 'allied'} onClick={() => setFilter('allied')} />
-            <Button text="Enemy" minimal={filter !== 'enemy'} onClick={() => setFilter('enemy')} />
-            <Button text="Stations" minimal={filter !== 'ground_stations'} onClick={() => setFilter('ground_stations')} />
-          </div>
-          <div className="w-px h-6 bg-sda-border-default mx-2"></div>
-          <div className="flex gap-2">
-            <Button icon="zoom-in" minimal onClick={handleZoomIn} />
-            <Button icon="zoom-out" minimal onClick={handleZoomOut} />
-            <Button icon="zoom-to-fit" minimal onClick={handleZoomToFit} />
-          </div>
+      <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
+        <div>
+          <h1 className="text-2xl font-bold text-sda-text-primary flex items-center gap-2">
+            <Icon icon="graph" className="text-sda-accent-purple" />
+            Graph View
+          </h1>
+          <p className="text-sm text-sda-text-secondary mt-1">
+            Live satellite links only: proximity, orbital shadowing, signal
+            interception risk, and actionable conjunctions.
+          </p>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            icon="refresh"
+            minimal
+            onClick={() => setRefreshKey((current) => current + 1)}
+          />
+          <Button icon="zoom-in" minimal onClick={handleZoomIn} />
+          <Button icon="zoom-out" minimal onClick={handleZoomOut} />
+          <Button icon="zoom-to-fit" minimal onClick={handleZoomToFit} />
         </div>
       </div>
 
-      <div className="flex gap-4 mb-4 flex-wrap">
-        <div className="flex items-center gap-2">
-          <Tag intent="primary" minimal>
-            {stats.satellites}{stats.totalSatellites > stats.satellites ? ` / ${stats.totalSatellites}` : ''} Satellites
-          </Tag>
-        </div>
-        <div className="flex items-center gap-2">
-          <Tag minimal>{stats.groundStations} Stations</Tag>
-        </div>
-        <div className="flex items-center gap-2">
-          <Tag minimal>{stats.links} Links</Tag>
-        </div>
-        {stats.conjunctions > 0 && (
-          <div className="flex items-center gap-2">
-            <Tag intent="warning" minimal>{stats.conjunctions} Conjunctions</Tag>
-          </div>
-        )}
-        {stats.proximityAlerts > 0 && (
-          <div className="flex items-center gap-2">
-            <Tag intent="danger" minimal>{stats.proximityAlerts} Proximity</Tag>
-          </div>
-        )}
-        {stats.cyberAlerts > 0 && (
-          <div className="flex items-center gap-2">
-            <Tag intent="danger" minimal>{stats.cyberAlerts} Cyber</Tag>
-          </div>
-        )}
-        {stats.maneuverAlerts > 0 && (
-          <div className="flex items-center gap-2">
-            <Tag intent="warning" minimal>{stats.maneuverAlerts} Maneuver</Tag>
-          </div>
-        )}
-      </div>
+      <Callout intent="primary" className="mb-4">
+        Manual ontology relations are intentionally hidden here. They are not
+        dynamically maintained, so they should only come back as editable
+        analyst annotations, not as primary graph edges.
+      </Callout>
 
-      <div className="flex gap-4 mb-4 flex-wrap">
-        {[
-          { type: 'allied', color: '#3b82f6', label: 'Allied' },
-          { type: 'enemy', color: '#ef4444', label: 'Enemy' },
-          { type: 'satellite', color: '#39c5cf', label: 'Satellite' },
-          { type: 'ground_station', color: '#3fb950', label: 'Ground Station' },
-          { type: 'conjunction', color: '#a371f7', label: 'Conjunction' },
-          { type: 'proximity', color: '#f59e0b', label: 'Proximity Alert' },
-          { type: 'cyber', color: '#ef4444', label: 'Cyber Alert' },
-          { type: 'maneuver', color: '#ec4899', label: 'Maneuver' },
-        ].map((item) => (
-          <div key={item.type} className="flex items-center gap-2">
-            <div
-              className="w-3 h-3 rounded-full"
-              style={{ backgroundColor: item.color }}
-            />
-            <span className="text-sm text-sda-text-secondary">{item.label}</span>
-          </div>
+      <div className="flex flex-wrap gap-2 mb-4 items-center">
+        <select
+          className="bg-sda-bg-secondary border border-sda-border-default rounded px-3 py-2 text-sm text-sda-text-primary"
+          value={focusSatelliteId}
+          onChange={(event) => setFocusSatelliteId(event.target.value)}
+        >
+          <option value="all">Top live network</option>
+          {focusOptions.map((node) => (
+            <option key={node.id} value={node.id}>
+              {node.label}
+            </option>
+          ))}
+        </select>
+
+        {(
+          [
+            "all",
+            "proximity",
+            "orbital",
+            "signal",
+            "conjunction",
+          ] as GraphFilter[]
+        ).map((filterValue) => (
+          <Button
+            key={filterValue}
+            text={
+              filterValue === "all" ? "All Links" : EDGE_LABELS[filterValue]
+            }
+            minimal={edgeFilter !== filterValue}
+            onClick={() => setEdgeFilter(filterValue)}
+          />
         ))}
       </div>
 
-      <Card elevation={Elevation.TWO} className="flex-1 overflow-hidden">
-        {loading && (
-          <div className="flex items-center justify-center h-full">
-            <Spinner />
-          </div>
+      <div className="flex flex-wrap gap-3 mb-4">
+        <Tag intent="primary" minimal>
+          {displayedNodes.length} Satellites In Scope
+        </Tag>
+        <Tag minimal>{displayedEdges.length} Live Links</Tag>
+        <Tag intent={highRiskNodeCount > 0 ? "warning" : "none"} minimal>
+          {highRiskNodeCount} High Risk Assets
+        </Tag>
+        {topRiskNode && (
+          <Tag
+            intent={severityIntent(
+              topRiskNode.riskScore >= 0.5
+                ? "high"
+                : topRiskNode.riskScore >= 0.25
+                  ? "medium"
+                  : "low",
+            )}
+            minimal
+          >
+            Top Risk: {topRiskNode.label} (
+            {formatPercent(topRiskNode.riskScore)})
+          </Tag>
         )}
-        <svg ref={svgRef} className="w-full h-full" />
-      </Card>
+        {lastUpdated && (
+          <Tag minimal>
+            Updated {new Date(lastUpdated).toLocaleTimeString()}
+          </Tag>
+        )}
+      </div>
 
-      <Dialog
-        isOpen={!!selectedIncident}
-        onClose={() => { setSelectedIncident(null); setSelectedLink(null); }}
-        title={selectedIncident?.title || 'Incident Details'}
-        className="bp6-dark"
-        style={{ width: 600 }}
-      >
-        {selectedIncident && (
-          <div className={Classes.DIALOG_BODY}>
-            <div className="space-y-4">
-              <div className="flex gap-2">
-                <Tag intent={severityIntent(selectedIncident.severity)}>
-                  {selectedIncident.severity.toUpperCase()}
-                </Tag>
-                <Tag className="capitalize">
-                  {selectedIncident.incident_type.replace(/_/g, ' ')}
-                </Tag>
-                <Tag minimal>
-                  {selectedIncident.status.toUpperCase()}
-                </Tag>
-              </div>
+      <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_340px] gap-4 flex-1 min-h-0">
+        <Card
+          elevation={Elevation.TWO}
+          className="min-h-[560px] overflow-hidden relative"
+        >
+          {loading && (
+            <div className="absolute inset-0 flex items-center justify-center bg-sda-bg-primary/60 z-10">
+              <Spinner />
+            </div>
+          )}
 
-              <div>
-                <h4 className="text-sm font-medium text-sda-text-secondary mb-1">
-                  Description
-                </h4>
-                <p className="text-sda-text-primary whitespace-pre-wrap">
-                  {selectedIncident.description || 'No description provided'}
+          {displayedNodes.length === 0 || displayedEdges.length === 0 ? (
+            <div className="h-full flex items-center justify-center">
+              <div className="text-center">
+                <p className="text-sda-text-primary font-medium">
+                  No live satellite links in scope
+                </p>
+                <p className="text-sm text-sda-text-secondary mt-1">
+                  Change the filter or wait for the next refresh if detections
+                  are still running.
                 </p>
               </div>
+            </div>
+          ) : (
+            <svg ref={svgRef} className="w-full h-full min-h-[560px]" />
+          )}
+        </Card>
 
-              {selectedLink && (
+        <Card elevation={Elevation.ONE} className="p-4 overflow-auto">
+          {!selectedNode && !selectedEdge && (
+            <div>
+              <h2 className="text-lg font-semibold text-sda-text-primary mb-2">
+                Operational View
+              </h2>
+              <p className="text-sm text-sda-text-secondary mb-4">
+                This graph is now centered on why assets are linked right now,
+                not on static ontology records.
+              </p>
+              <div className="space-y-2 text-sm text-sda-text-secondary">
+                <div>Blue nodes are allied or protected satellites.</div>
+                <div>Red nodes are hostile or adversary satellites.</div>
+                <div>Node size and inner label reflect current fleet risk.</div>
                 <div>
-                  <h4 className="text-sm font-medium text-sda-text-secondary mb-1">
-                    Event Type
-                  </h4>
-                  <p className="text-sda-text-primary capitalize">
-                    {selectedLink.type} - {selectedLink.severity || 'N/A'}
-                  </p>
+                  Click a node for asset context or an edge for the operational
+                  reason behind the link.
                 </div>
-              )}
-
-              {selectedIncident.affected_assets && selectedIncident.affected_assets.length > 0 && (
-                <div>
-                  <h4 className="text-sm font-medium text-sda-text-secondary mb-1">
-                    Affected Assets
-                  </h4>
-                  <div className="space-y-1">
-                    {selectedIncident.affected_assets.map((asset, idx) => (
-                      <div key={idx} className="text-sm text-sda-text-primary">
-                        • {asset.type}: {asset.name || asset.id}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              <div>
-                <h4 className="text-sm font-medium text-sda-text-secondary mb-1">
-                  Priority
-                </h4>
-                <p>{selectedIncident.priority}</p>
               </div>
             </div>
-          </div>
-        )}
-      </Dialog>
+          )}
+
+          {selectedNode && (
+            <div>
+              <div className="flex items-center justify-between gap-2 mb-3">
+                <h2 className="text-lg font-semibold text-sda-text-primary">
+                  {selectedNode.label}
+                </h2>
+                <Tag
+                  intent={severityIntent(
+                    selectedNode.riskScore >= 0.5
+                      ? "high"
+                      : selectedNode.riskScore >= 0.25
+                        ? "medium"
+                        : "low",
+                  )}
+                >
+                  {formatPercent(selectedNode.riskScore)} risk
+                </Tag>
+              </div>
+
+              <div className="space-y-3 text-sm">
+                <div className="flex flex-wrap gap-2">
+                  <Tag minimal>{selectedNode.faction}</Tag>
+                  {selectedNode.country && (
+                    <Tag minimal>{selectedNode.country}</Tag>
+                  )}
+                  {selectedNode.orbitType && (
+                    <Tag minimal>{selectedNode.orbitType}</Tag>
+                  )}
+                </div>
+
+                {selectedNode.operator && (
+                  <div>
+                    <div className="text-sda-text-secondary">Operator</div>
+                    <div className="text-sda-text-primary">
+                      {selectedNode.operator}
+                    </div>
+                  </div>
+                )}
+
+                <div>
+                  <div className="text-sda-text-secondary">Direct links</div>
+                  <div className="text-sda-text-primary">
+                    {selectedNode.directConnections}
+                  </div>
+                </div>
+
+                <div>
+                  <div className="text-sda-text-secondary mb-1">
+                    Live link counts
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {Object.entries(selectedNode.issueCounts).map(
+                      ([kind, count]) => (
+                        <Tag key={kind} minimal>
+                          {EDGE_LABELS[kind as EdgeKind]}: {count}
+                        </Tag>
+                      ),
+                    )}
+                  </div>
+                </div>
+
+                {Object.keys(selectedNode.riskComponents).length > 0 && (
+                  <div>
+                    <div className="text-sda-text-secondary mb-1">
+                      Risk components
+                    </div>
+                    <div className="space-y-1">
+                      {Object.entries(selectedNode.riskComponents)
+                        .sort((left, right) => right[1] - left[1])
+                        .map(([component, value]) => (
+                          <div
+                            key={component}
+                            className="flex items-center justify-between"
+                          >
+                            <span className="text-sda-text-secondary">
+                              {component}
+                            </span>
+                            <span className="text-sda-text-primary">
+                              {formatPercent(value)}
+                            </span>
+                          </div>
+                        ))}
+                    </div>
+                  </div>
+                )}
+
+                {selectedNode.tags.length > 0 && (
+                  <div>
+                    <div className="text-sda-text-secondary mb-1">Tags</div>
+                    <div className="flex flex-wrap gap-2">
+                      {selectedNode.tags.map((tag) => (
+                        <Tag key={tag} minimal>
+                          {tag}
+                        </Tag>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {selectedEdge && (
+            <div>
+              <div className="flex items-center justify-between gap-2 mb-3">
+                <h2 className="text-lg font-semibold text-sda-text-primary">
+                  {selectedEdge.label}
+                </h2>
+                <Tag intent={severityIntent(selectedEdge.severity)}>
+                  {selectedEdge.severity.toUpperCase()}
+                </Tag>
+              </div>
+
+              <p className="text-sm text-sda-text-primary mb-4">
+                {selectedEdge.summary}
+              </p>
+
+              <div className="space-y-2">
+                {selectedEdge.details.map((detail) => (
+                  <div
+                    key={`${selectedEdge.id}-${detail.label}`}
+                    className="flex items-start justify-between gap-3 text-sm"
+                  >
+                    <span className="text-sda-text-secondary">
+                      {detail.label}
+                    </span>
+                    <span className="text-sda-text-primary text-right">
+                      {detail.value}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </Card>
+      </div>
     </div>
   );
 }

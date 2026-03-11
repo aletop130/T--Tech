@@ -27,6 +27,7 @@ const navGroups: NavGroup[] = [
     items: [
       { icon: 'dashboard', label: 'Dashboard', href: '/dashboard', colorVar: '--sda-accent-blue' },
       { icon: 'globe', label: 'Map', href: '/map', colorVar: '--sda-accent-cyan' },
+      { icon: 'build', label: 'Sandbox', href: '/sandbox', colorVar: '#f59e0b' },
       { icon: 'search-around', label: 'Explorer', href: '/explorer', colorVar: '--sda-accent-green' },
       { icon: 'graph', label: 'Graph', href: '/graph', colorVar: '#a371f7' },
     ],
@@ -47,15 +48,6 @@ const navGroups: NavGroup[] = [
       { icon: 'shield', label: 'Threats & Intel', href: '/threats', colorVar: '#ff6b6b' },
       { icon: 'rocket-slant', label: 'Events', href: '/events', colorVar: '#69db7c' },
       { icon: 'flash', label: 'Environment', href: '/environment', colorVar: '#fcc419' },
-    ],
-  },
-  {
-    id: 'data',
-    label: 'DATA',
-    items: [
-      { icon: 'flag', label: 'Countries', href: '/country-dashboard', colorVar: '#20c997' },
-      { icon: 'import', label: 'Ingestion', href: '/ingestion', colorVar: '#8000ca' },
-      { icon: 'cog', label: 'Admin', href: '/admin', colorVar: '#8b949e' },
     ],
   },
 ];

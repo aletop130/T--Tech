@@ -17,6 +17,12 @@ from app.db.models.ontology import ConjunctionEvent
 
 from app.db.base import Base, AuditMixin, generate_uuid
 
+DETOUR_ENUM_KWARGS = {
+    "native_enum": False,
+    "create_constraint": False,
+    "validate_strings": True,
+}
+
 
 class DetourAnalysisStatus(str, enum.Enum):
     """Status of a detour conjunction analysis."""
@@ -85,7 +91,11 @@ class DetourConjunctionAnalysis(Base, AuditMixin):
     miss_distance_km = Column(Float, nullable=False)
     tca = Column(DateTime, nullable=True)
 
-    analysis_status = Column(SQLEnum(DetourAnalysisStatus), default=DetourAnalysisStatus.PENDING, nullable=False)
+    analysis_status = Column(
+        SQLEnum(DetourAnalysisStatus, **DETOUR_ENUM_KWARGS),
+        default=DetourAnalysisStatus.PENDING,
+        nullable=False,
+    )
     ai_analysis = Column(JSON, nullable=True)
 
     conjunction_event = relationship("ConjunctionEvent", back_populates="detour_analyses", lazy="selectin")
@@ -106,7 +116,11 @@ class DetourManeuverPlan(Base, AuditMixin):
     expected_miss_distance_km = Column(Float, nullable=True)
     risk_reduction_percent = Column(Float, nullable=True)
 
-    status = Column(SQLEnum(DetourManeuverStatus), default=DetourManeuverStatus.PROPOSED, nullable=False)
+    status = Column(
+        SQLEnum(DetourManeuverStatus, **DETOUR_ENUM_KWARGS),
+        default=DetourManeuverStatus.PROPOSED,
+        nullable=False,
+    )
     ai_recommendation = Column(JSON, nullable=True)
 
     approved_by = Column(String(50), nullable=True)
@@ -121,7 +135,11 @@ class DetourAgentSession(Base, AuditMixin):
 
     id = Column(String(50), primary_key=True, default=generate_uuid)
     session_type = Column(String(50), nullable=False)
-    status = Column(SQLEnum(DetourAgentSessionStatus), default=DetourAgentSessionStatus.ACTIVE, nullable=False)
+    status = Column(
+        SQLEnum(DetourAgentSessionStatus, **DETOUR_ENUM_KWARGS),
+        default=DetourAgentSessionStatus.ACTIVE,
+        nullable=False,
+    )
 
     input_data = Column(JSON, nullable=True)
     output_data = Column(JSON, nullable=True)
@@ -142,8 +160,16 @@ class DetourStepSession(Base, AuditMixin):
     satellite_id = Column(String(50), nullable=False)
     tenant_id = Column(String(50), nullable=False, index=True)
     
-    execution_mode = Column(SQLEnum(DetourExecutionMode), default=DetourExecutionMode.STEP_BY_STEP, nullable=False)
-    status = Column(SQLEnum(DetourAgentSessionStatus), default=DetourAgentSessionStatus.ACTIVE, nullable=False)
+    execution_mode = Column(
+        SQLEnum(DetourExecutionMode, **DETOUR_ENUM_KWARGS),
+        default=DetourExecutionMode.STEP_BY_STEP,
+        nullable=False,
+    )
+    status = Column(
+        SQLEnum(DetourAgentSessionStatus, **DETOUR_ENUM_KWARGS),
+        default=DetourAgentSessionStatus.ACTIVE,
+        nullable=False,
+    )
     
     current_agent = Column(String(50), nullable=True)
     current_step_number = Column(String(10), nullable=True)
@@ -168,7 +194,11 @@ class DetourAgentStep(Base, AuditMixin):
     agent_name = Column(String(50), nullable=False)
     step_number = Column(String(10), nullable=False)
     
-    status = Column(SQLEnum(DetourStepStatus), default=DetourStepStatus.PENDING, nullable=False)
+    status = Column(
+        SQLEnum(DetourStepStatus, **DETOUR_ENUM_KWARGS),
+        default=DetourStepStatus.PENDING,
+        nullable=False,
+    )
     
     input_data = Column(JSON, nullable=True)
     output_data = Column(JSON, nullable=True)
