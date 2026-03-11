@@ -25,19 +25,16 @@ const navGroups: NavGroup[] = [
     id: 'core',
     label: 'CORE',
     items: [
-      { icon: 'dashboard', label: 'Dashboard', href: '/dashboard', colorVar: '--sda-accent-blue' },
-      { icon: 'globe', label: 'Map', href: '/map', colorVar: '--sda-accent-cyan' },
-      { icon: 'build', label: 'Sandbox', href: '/sandbox', colorVar: '#f59e0b' },
-      { icon: 'search-around', label: 'Explorer', href: '/explorer', colorVar: '--sda-accent-green' },
-      { icon: 'graph', label: 'Graph', href: '/graph', colorVar: '#a371f7' },
+      { icon: 'dashboard',     label: 'Dashboard',    href: '/dashboard',    colorVar: '--sda-accent-blue' },
+      { icon: 'globe',         label: 'Map',          href: '/map',          colorVar: '--sda-accent-cyan' },
+      { icon: 'build',         label: 'Sandbox',      href: '/sandbox',      colorVar: '#f59e0b' },
+      { icon: 'search-around', label: 'Explorer',     href: '/explorer',     colorVar: '--sda-accent-green' },
     ],
   },
   {
     id: 'operations',
     label: 'OPERATIONS',
     items: [
-      { icon: 'warning-sign', label: 'Incidents', href: '/incidents', colorVar: '--sda-accent-red' },
-      { icon: 'route', label: 'Detour', href: '/detour', colorVar: '#f78166' },
       { icon: 'flows', label: 'Operations', href: '/operations', colorVar: '--sda-accent-blue' },
     ],
   },
@@ -45,9 +42,14 @@ const navGroups: NavGroup[] = [
     id: 'intelligence',
     label: 'INTELLIGENCE',
     items: [
-      { icon: 'shield', label: 'Threats & Intel', href: '/threats', colorVar: '#ff6b6b' },
-      { icon: 'rocket-slant', label: 'Events', href: '/events', colorVar: '#69db7c' },
-      { icon: 'flash', label: 'Environment', href: '/environment', colorVar: '#fcc419' },
+      { icon: 'shield', label: 'Intelligence', href: '/intelligence', colorVar: '#ff6b6b' },
+    ],
+  },
+  {
+    id: 'system',
+    label: 'SYSTEM',
+    items: [
+      { icon: 'cog', label: 'System', href: '/system', colorVar: '--sda-text-secondary' },
     ],
   },
 ];

@@ -22,7 +22,7 @@ import { api, Incident } from '@/lib/api';
 import { format } from 'date-fns';
 import { AgentChat } from '@/components/Chat/AgentChat';
 
-export default function IncidentsPage() {
+export function IncidentPanel() {
   const [incidents, setIncidents] = useState<Incident[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedIncident, setSelectedIncident] = useState<Incident | null>(null);
@@ -30,8 +30,7 @@ export default function IncidentsPage() {
   const [severityFilter, setSeverityFilter] = useState<string>('');
   const [aiChatOpen, setAiChatOpen] = useState(false);
   const [aiChatIncident, setAiChatIncident] = useState<Incident | null>(null);
-  
-  // Create incident dialog
+
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [createLoading, setCreateLoading] = useState(false);
   const [newIncident, setNewIncident] = useState({
@@ -40,18 +39,15 @@ export default function IncidentsPage() {
     incident_type: 'proximity',
     severity: 'medium',
   });
-  
-  // Assign dialog
+
   const [assignDialogOpen, setAssignDialogOpen] = useState(false);
   const [assignTo, setAssignTo] = useState('');
   const [assignLoading, setAssignLoading] = useState(false);
-  
-  // Comment dialog
+
   const [commentDialogOpen, setCommentDialogOpen] = useState(false);
   const [commentContent, setCommentContent] = useState('');
   const [commentLoading, setCommentLoading] = useState(false);
-  
-  // Action feedback
+
   const [actionMessage, setActionMessage] = useState<{ text: string; intent: Intent } | null>(null);
   const [detecting, setDetecting] = useState(false);
 
@@ -107,11 +103,8 @@ export default function IncidentsPage() {
       await api.updateIncidentStatus(selectedIncident.id, 'investigating', 'Acknowledged');
       setActionMessage({ text: 'Incident acknowledged', intent: Intent.SUCCESS });
       await loadIncidents();
-      // Update selected incident
       const updated = incidents.find(i => i.id === selectedIncident.id);
-      if (updated) {
-        setSelectedIncident({ ...updated, status: 'investigating' });
-      }
+      if (updated) setSelectedIncident({ ...updated, status: 'investigating' });
     } catch (error) {
       setActionMessage({ text: error instanceof Error ? error.message : 'Failed to acknowledge', intent: Intent.DANGER });
     }
@@ -148,7 +141,6 @@ export default function IncidentsPage() {
     }
   };
 
-  // Clear action message after 3 seconds
   useEffect(() => {
     if (actionMessage) {
       const timer = setTimeout(() => setActionMessage(null), 3000);
@@ -160,15 +152,15 @@ export default function IncidentsPage() {
     setDetecting(true);
     try {
       const result = await api.runProximityDetection();
-      setActionMessage({ 
-        text: `Detection complete: ${result.events_created} new, ${result.events_updated} updated events`, 
-        intent: Intent.SUCCESS 
+      setActionMessage({
+        text: `Detection complete: ${result.events_created} new, ${result.events_updated} updated events`,
+        intent: Intent.SUCCESS,
       });
       await loadIncidents();
     } catch (error) {
-      setActionMessage({ 
-        text: error instanceof Error ? error.message : 'Failed to run detection', 
-        intent: Intent.DANGER 
+      setActionMessage({
+        text: error instanceof Error ? error.message : 'Failed to run detection',
+        intent: Intent.DANGER,
       });
     } finally {
       setDetecting(false);
@@ -184,10 +176,10 @@ export default function IncidentsPage() {
           Incident Console
         </h1>
         <div className="flex gap-2">
-          <Button 
-            icon="pulse" 
-            outlined 
-            onClick={handleRunProximityDetection} 
+          <Button
+            icon="pulse"
+            outlined
+            onClick={handleRunProximityDetection}
             loading={detecting}
             title="Run proximity detection to generate new events"
           >
@@ -199,9 +191,8 @@ export default function IncidentsPage() {
         </div>
       </div>
 
-      {/* Action feedback */}
       {actionMessage && (
-        <div className={`mb-4 p-3 rounded-md bg-sda-bg-secondary border border-sda-border-default`}>
+        <div className="mb-4 p-3 rounded-md bg-sda-bg-secondary border border-sda-border-default">
           <span className={actionMessage.intent === Intent.SUCCESS ? 'text-sda-accent-green' : 'text-sda-accent-red'}>
             {actionMessage.text}
           </span>
@@ -210,10 +201,7 @@ export default function IncidentsPage() {
 
       {/* Filters */}
       <div className="flex gap-3 mb-4">
-        <HTMLSelect
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
-        >
+        <HTMLSelect value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
           <option value="">All Status</option>
           <option value="open">Open</option>
           <option value="investigating">Investigating</option>
@@ -221,11 +209,7 @@ export default function IncidentsPage() {
           <option value="resolved">Resolved</option>
           <option value="closed">Closed</option>
         </HTMLSelect>
-
-        <HTMLSelect
-          value={severityFilter}
-          onChange={(e) => setSeverityFilter(e.target.value)}
-        >
+        <HTMLSelect value={severityFilter} onChange={(e) => setSeverityFilter(e.target.value)}>
           <option value="">All Severity</option>
           <option value="critical">Critical</option>
           <option value="high">High</option>
@@ -233,9 +217,7 @@ export default function IncidentsPage() {
           <option value="low">Low</option>
           <option value="info">Info</option>
         </HTMLSelect>
-
         <div className="flex-1" />
-
         <Button icon="refresh" onClick={loadIncidents} />
       </div>
 
@@ -274,9 +256,7 @@ export default function IncidentsPage() {
                           {incident.incident_type.replace(/_/g, ' ')}
                         </Tag>
                       </div>
-                      <h3 className="font-semibold text-sda-text-primary mb-1">
-                        {incident.title}
-                      </h3>
+                      <h3 className="font-semibold text-sda-text-primary mb-1">{incident.title}</h3>
                       {incident.description && (
                         <p className="text-sm text-sda-text-secondary line-clamp-2">
                           {incident.description}
@@ -284,9 +264,7 @@ export default function IncidentsPage() {
                       )}
                     </div>
                     <div className="text-right text-sm text-sda-text-muted">
-                      <div>
-                        {format(new Date(incident.detected_at), 'MMM d, HH:mm')}
-                      </div>
+                      <div>{format(new Date(incident.detected_at), 'MMM d, HH:mm')}</div>
                       {incident.assigned_to && (
                         <div className="flex items-center gap-1 mt-1">
                           <Icon icon="user" size={12} />
@@ -352,43 +330,26 @@ export default function IncidentsPage() {
                   {selectedIncident.incident_type.replace(/_/g, ' ')}
                 </Tag>
               </div>
-
               <div>
-                <h4 className="text-sm font-medium text-sda-text-secondary mb-1">
-                  Description
-                </h4>
+                <h4 className="text-sm font-medium text-sda-text-secondary mb-1">Description</h4>
                 <p className="text-sda-text-primary">
                   {selectedIncident.description || 'No description provided'}
                 </p>
               </div>
-
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <h4 className="text-sm font-medium text-sda-text-secondary mb-1">
-                    Detected
-                  </h4>
-                  <p>
-                    {format(new Date(selectedIncident.detected_at), 'PPpp')}
-                  </p>
+                  <h4 className="text-sm font-medium text-sda-text-secondary mb-1">Detected</h4>
+                  <p>{format(new Date(selectedIncident.detected_at), 'PPpp')}</p>
                 </div>
                 <div>
-                  <h4 className="text-sm font-medium text-sda-text-secondary mb-1">
-                    Priority
-                  </h4>
+                  <h4 className="text-sm font-medium text-sda-text-secondary mb-1">Priority</h4>
                   <p>{selectedIncident.priority}</p>
                 </div>
               </div>
-
               <div>
-                <h4 className="text-sm font-medium text-sda-text-secondary mb-2">
-                  Actions
-                </h4>
+                <h4 className="text-sm font-medium text-sda-text-secondary mb-2">Actions</h4>
                 <div className="flex gap-2">
-                  <Button
-                    icon="endorsed"
-                    intent="success"
-                    onClick={handleAcknowledge}
-                  >
+                  <Button icon="endorsed" intent="success" onClick={handleAcknowledge}>
                     Acknowledge
                   </Button>
                   <Button icon="user" outlined onClick={() => setAssignDialogOpen(true)}>
@@ -533,4 +494,3 @@ export default function IncidentsPage() {
     </div>
   );
 }
-

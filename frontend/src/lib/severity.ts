@@ -36,3 +36,29 @@ export function severityHex(severity: string): string {
       return '#51cf66';
   }
 }
+
+/** Map a risk level to a hex color for inline styles. */
+export function riskColor(level: string): string {
+  const map: Record<string, string> = {
+    critical: '#ff4d4f',
+    high: '#ff7a45',
+    medium: '#ffc53d',
+    low: '#73d13d',
+    nominal: '#73d13d',
+    info: '#4dabf7',
+  };
+  return map[level.toLowerCase()] ?? '#8c8c8c';
+}
+
+/** Map a risk level to a Blueprint Intent. */
+export function riskIntent(level: string): Intent {
+  const map: Record<string, Intent> = {
+    critical: 'danger',
+    high: 'warning',
+    medium: 'warning',
+    low: 'success',
+    nominal: 'success',
+    info: 'primary',
+  };
+  return map[level.toLowerCase()] ?? 'none';
+}

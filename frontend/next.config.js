@@ -93,15 +93,29 @@ const nextConfig = {
   },
   async redirects() {
     return [
-      { source: '/fleet-risk', destination: '/threats?tab=fleet-risk', permanent: true },
-      { source: '/adversary', destination: '/threats?tab=adversary', permanent: true },
-      { source: '/launches', destination: '/events?tab=launches', permanent: true },
-      { source: '/reentry', destination: '/events?tab=reentry', permanent: true },
-      { source: '/maneuvers', destination: '/events?tab=maneuvers', permanent: true },
-      { source: '/space-weather', destination: '/environment?tab=space-weather', permanent: true },
-      { source: '/rf-spectrum', destination: '/environment?tab=rf-spectrum', permanent: true },
-      { source: '/comms', destination: '/operations?tab=comms', permanent: true },
-      { source: '/timeline', destination: '/dashboard', permanent: true },
+      // Intelligence consolidation
+      { source: '/threats',           destination: '/intelligence?tab=detection',  permanent: true },
+      { source: '/events',            destination: '/intelligence?tab=launches',   permanent: true },
+      { source: '/environment',       destination: '/intelligence?tab=weather',    permanent: true },
+      { source: '/fleet-risk',        destination: '/intelligence?tab=fleet-risk', permanent: true },
+      { source: '/adversary',         destination: '/intelligence?tab=adversary',  permanent: true },
+      { source: '/launches',          destination: '/intelligence?tab=launches',   permanent: true },
+      { source: '/reentry',           destination: '/intelligence?tab=reentry',    permanent: true },
+      { source: '/maneuvers',         destination: '/intelligence?tab=maneuvers',  permanent: true },
+      { source: '/space-weather',     destination: '/intelligence?tab=weather',    permanent: true },
+      { source: '/rf-spectrum',       destination: '/intelligence?tab=rf',         permanent: true },
+      // Operations consolidation
+      { source: '/incidents',         destination: '/operations?tab=incidents',    permanent: true },
+      { source: '/detour',            destination: '/operations?tab=detour',       permanent: true },
+      { source: '/comms',             destination: '/operations?tab=comms',        permanent: true },
+      // Explorer consolidation
+      { source: '/graph',             destination: '/explorer?tab=network',        permanent: true },
+      { source: '/country-dashboard', destination: '/explorer?tab=countries',      permanent: true },
+      // System consolidation
+      { source: '/admin',             destination: '/system?tab=status',           permanent: true },
+      { source: '/ingestion',         destination: '/system?tab=ingestion',        permanent: true },
+      // Legacy
+      { source: '/timeline',          destination: '/dashboard',                   permanent: true },
     ];
   },
 };
