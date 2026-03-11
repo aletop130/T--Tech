@@ -7,6 +7,7 @@ and classifies maneuvers by type.
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import logging
 import math
@@ -246,24 +247,47 @@ class ManeuverDetectionService:
 
         return maneuvers
 
-    async def scan_all(self) -> List[dict]:
-        """Scan all tracked satellites for maneuvers. Uses cache if fresh."""
-        now = time.time()
-        if self._last_scan and (now - self._last_scan) < CACHE_TTL and self._all_maneuvers:
-            return self._all_maneuvers
-
-        tracked = self._get_tracked_satellites()
-        all_maneuvers: List[dict] = []
-
-        for norad_id, info in tracked.items():
+    async def _fetch_and_detect(
+        self,
+        norad_id: int,
+        info: dict,
+        semaphore: asyncio.Semaphore,
+    ) -> List[dict]:
+        """Fetch GP history and detect maneuvers for one satellite, bounded by semaphore."""
+        async with semaphore:
             sat_name = info.get("name", f"NORAD-{norad_id}")
             gp_records = await self._fetch_gp_history(norad_id)
             maneuvers = self._detect_maneuvers_from_gp(norad_id, sat_name, gp_records)
             if maneuvers:
                 self._maneuver_cache[norad_id] = maneuvers
-                all_maneuvers.extend(maneuvers)
+            return maneuvers
 
-        # Sort by detection time, most recent first
+    async def scan_all(self) -> List[dict]:
+        """Scan all tracked satellites for maneuvers. Uses cache if fresh.
+
+        Fetches CelesTrak GP history in parallel (max 10 concurrent requests)
+        to avoid sequential timeout when the satellite list is large.
+        """
+        now = time.time()
+        if self._last_scan and (now - self._last_scan) < CACHE_TTL and self._all_maneuvers:
+            return self._all_maneuvers
+
+        tracked = self._get_tracked_satellites()
+
+        # Parallel fetch with concurrency cap to be polite to CelesTrak
+        semaphore = asyncio.Semaphore(10)
+        tasks = [
+            self._fetch_and_detect(norad_id, info, semaphore)
+            for norad_id, info in tracked.items()
+        ]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        all_maneuvers: List[dict] = []
+        for result in results:
+            if isinstance(result, list):
+                all_maneuvers.extend(result)
+            # silently skip exceptions — already logged inside _fetch_gp_history
+
         all_maneuvers.sort(key=lambda m: m["detection_time"], reverse=True)
         self._all_maneuvers = all_maneuvers
         self._last_scan = now
@@ -283,18 +307,23 @@ class ManeuverDetectionService:
 
     async def analyze_satellites(self, norad_ids: List[int]) -> dict:
         """Trigger analysis for a specific set of satellites."""
-        results: List[dict] = []
         tracked = self._get_tracked_satellites()
 
+        # Clear GP cache to force re-fetch, then fetch in parallel
         for norad_id in norad_ids:
-            info = tracked.get(norad_id, {})
-            sat_name = info.get("name", f"NORAD-{norad_id}")
-            # Clear GP cache for this satellite to force re-fetch
             self._cache.pop(norad_id, None)
-            gp_records = await self._fetch_gp_history(norad_id)
-            maneuvers = self._detect_maneuvers_from_gp(norad_id, sat_name, gp_records)
-            self._maneuver_cache[norad_id] = maneuvers
-            results.extend(maneuvers)
+
+        semaphore = asyncio.Semaphore(10)
+        tasks = [
+            self._fetch_and_detect(norad_id, tracked.get(norad_id, {}), semaphore)
+            for norad_id in norad_ids
+        ]
+        raw = await asyncio.gather(*tasks, return_exceptions=True)
+
+        results: List[dict] = []
+        for item in raw:
+            if isinstance(item, list):
+                results.extend(item)
 
         results.sort(key=lambda m: m["detection_time"], reverse=True)
         return {
