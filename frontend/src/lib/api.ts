@@ -219,6 +219,16 @@ export interface SpaceWeatherCurrentResponse {
   solar_wind_speed: number | null;
   storm_level: 'none' | 'minor' | 'moderate' | 'strong' | 'severe' | 'extreme';
   timestamp: string;
+  xray_class: string | null;
+  proton_flux_10mev: number | null;
+  dst_index: number | null;
+}
+
+export interface SolarWindData {
+  speed_km_s: number | null;
+  density_n_cm3: number | null;
+  bz_gsm_nt: number | null;
+  temperature_k: number | null;
 }
 
 export interface DragImpactSatellite {
@@ -234,12 +244,56 @@ export interface NOAAAlert {
   message: string;
 }
 
+export interface ParsedAlert {
+  product_id: string;
+  alert_type: string;
+  title: string;
+  description: string;
+  noaa_scale: string | null;
+  issued: string | null;
+  valid_from: string | null;
+  valid_to: string | null;
+  serial: string | null;
+}
+
+export interface KpTrendPoint {
+  kp: number;
+  time: string;
+}
+
 export interface SpaceWeatherImpactResponse {
   current_conditions: SpaceWeatherCurrentResponse;
   affected_satellites: DragImpactSatellite[];
   alert_level: 'green' | 'yellow' | 'orange' | 'red';
   active_alerts: NOAAAlert[];
   total_affected: number;
+  kp_trend_24h?: KpTrendPoint[];
+  solar_wind: SolarWindData | null;
+  parsed_alerts: ParsedAlert[];
+}
+
+export interface SystemImpact {
+  system: string;
+  status: string;
+  detail: string;
+  color: string;
+}
+
+export interface SatelliteWeatherAnalysis {
+  norad_id: number;
+  name: string;
+  altitude_km: number | null;
+  inclination_deg: number | null;
+  orbit_type: string | null;
+  drag_increase_pct: number;
+  drag_risk: string;
+  projected_decay_m_day: number | null;
+  impacts: SystemImpact[];
+  vulnerability_score: number;
+  vulnerability_level: string;
+  recommendations: string[];
+  current_kp: number;
+  current_storm: string;
 }
 
 export interface IncidentStats {
@@ -391,6 +445,17 @@ export class ApiClient {
 
   async getSatellitesWithOrbits(): Promise<SatelliteDetail[]> {
     return this._fetch('/api/v1/ontology/satellites/with-orbits');
+  }
+
+  async deleteSatellite(id: string): Promise<void> {
+    await this._fetch(`/api/v1/ontology/satellites/${id}`, { method: 'DELETE' });
+  }
+
+  async batchDeleteSatellites(satelliteIds: string[]): Promise<{ deleted: number; errors: string[] }> {
+    return this._fetch('/api/v1/ontology/satellites/batch-delete', {
+      method: 'POST',
+      body: JSON.stringify({ satellite_ids: satelliteIds }),
+    });
   }
 
   // Ground Stations
@@ -1141,6 +1206,10 @@ export class ApiClient {
     });
   }
 
+  async getAdversaryManeuvers(satId: string): Promise<{ norad_id: number; satellite_name: string; maneuvers: Array<{ id: string; maneuver_type: string; detection_time: string; delta_a_km: number; estimated_delta_v_ms: number; confidence: number }>; total: number }> {
+    return this._fetch(`/api/v1/adversary/${satId}/maneuvers`);
+  }
+
   // ========== Satellite Profile Endpoints ==========
   async getSatelliteProfile(noradId: number): Promise<SatelliteProfile> {
     return this._fetch(`/api/v1/satellite-profile/${noradId}`);
@@ -1190,6 +1259,10 @@ export class ApiClient {
 
   async getSpaceWeatherImpactLive(): Promise<SpaceWeatherImpactResponse> {
     return this._fetch('/api/v1/space-weather/impact');
+  }
+
+  async getSpaceWeatherSatelliteAnalysis(noradId: number): Promise<SatelliteWeatherAnalysis> {
+    return this._fetch(`/api/v1/space-weather/satellite/${noradId}`);
   }
 
   // ========== Timeline Endpoints ==========
@@ -1300,6 +1373,10 @@ export class ApiClient {
     return this._fetch('/api/v1/rf-spectrum/bands');
   }
 
+  async getRFOperationalDashboard(): Promise<RFOperationalDashboard> {
+    return this._fetch('/api/v1/rf-spectrum/operational-dashboard');
+  }
+
   // ========== Launch Correlation Endpoints ==========
   async getRecentLaunchCorrelations(): Promise<LaunchCorrelationResponse> {
     return this._fetch('/api/v1/launch-correlation/recent');
@@ -1401,6 +1478,10 @@ export class ApiClient {
     if (params?.altitude_min !== undefined) searchParams.set('altitude_min', params.altitude_min.toString());
     if (params?.altitude_max !== undefined) searchParams.set('altitude_max', params.altitude_max.toString());
     return this._fetch(`/api/v1/collision-heatmap/events?${searchParams}`);
+  }
+
+  async getHealth(): Promise<{ status: string; version: string; timestamp: string; services: Record<string, string> }> {
+    return this._fetch('/health');
   }
 }
 
@@ -1909,6 +1990,67 @@ export interface RFTransmitterSearchResult {
   total: number;
   band_filter: string | null;
   mode_filter: string | null;
+}
+
+// RF Operational Dashboard types
+export interface BandOperationalStatus {
+  band_name: string;
+  frequency_range: string;
+  status: 'operational' | 'degraded' | 'blackout';
+  degradation_pct: number;
+  reason: string;
+  satellite_count: number;
+  transmitter_count: number;
+  vulnerability: string;
+  alternative_band: string | null;
+}
+
+export interface ScintillationRegion {
+  region: 'polar' | 'equatorial' | 'mid_latitude';
+  s4_index: number;
+  severity: 'none' | 'weak' | 'moderate' | 'strong';
+  affected_bands: string[];
+}
+
+export interface BandForecastPoint {
+  hours_ahead: number;
+  status: 'operational' | 'degraded' | 'blackout';
+  degradation_pct: number;
+  confidence: number;
+}
+
+export interface BandForecast {
+  band_name: string;
+  points: BandForecastPoint[];
+}
+
+export interface FrequencyAlternative {
+  degraded_band: string;
+  alternative_band: string;
+  reason: string;
+  link_margin_impact: 'minimal' | 'moderate' | 'significant';
+}
+
+export interface SpaceWeatherStrip {
+  kp_index: number;
+  f10_7: number | null;
+  xray_flux: number | null;
+  xray_class: string | null;
+  proton_flux: number | null;
+  storm_level: string;
+  alert_level: 'green' | 'yellow' | 'orange' | 'red';
+  hf_blackout: boolean;
+  polar_cap_absorption: boolean;
+  timestamp: string;
+}
+
+export interface RFOperationalDashboard {
+  space_weather: SpaceWeatherStrip;
+  band_status: BandOperationalStatus[];
+  scintillation: ScintillationRegion[];
+  forecasts: BandForecast[];
+  alternatives: FrequencyAlternative[];
+  overall_status: 'nominal' | 'degraded' | 'critical';
 }
 
 // ========== Launch Correlation Interfaces ==========

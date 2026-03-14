@@ -125,10 +125,11 @@ export function SatelliteLayer({
         );
 
         const colorIdx = groupIndexMap.get(group) ?? 0;
-        const colorHex = GROUP_COLORS[colorIdx % GROUP_COLORS.length];
+        const isDebris = group === 'debris';
+        const colorHex = isDebris ? '#f59e0b' : GROUP_COLORS[colorIdx % GROUP_COLORS.length];
         const isSelected = selectedSatelliteIds?.has(sat.id) ?? false;
         const pointColor = hexToColor(Cesium, colorHex);
-        const orbitColor = hexToColor(Cesium, colorHex, isSelected ? 0.9 : 0.06);
+        const orbitColor = hexToColor(Cesium, colorHex, isSelected ? 0.9 : (isDebris ? 0.015 : 0.12));
 
         const satelliteId = `satellite-${sat.id}`;
         const orbitId = `orbit-${sat.id}`;
@@ -173,10 +174,10 @@ export function SatelliteLayer({
           name: sat.name,
           position: currentPos,
           point: {
-            pixelSize: isSelected ? 12 : 8,
+            pixelSize: isDebris ? (isSelected ? 6 : 4) : (isSelected ? 12 : 8),
             color: pointColor,
             outlineColor: isSelected ? Cesium.Color.WHITE : Cesium.Color.WHITE,
-            outlineWidth: isSelected ? 3 : 2,
+            outlineWidth: isDebris ? 0 : (isSelected ? 3 : 2),
             heightReference: Cesium.HeightReference.NONE,
           },
           label: {

@@ -6,21 +6,26 @@ interface CesiumViewerProps {
   className?: string;
   onViewerReady?: (viewer: InstanceType<CesiumModule['Viewer']>) => void;
   showTerrain?: boolean;
+  photorealistic3D?: boolean;
 }
 
-const ViewerConfig = memo(function ViewerConfig({ 
-  onViewerReady, 
+const ViewerConfig = memo(function ViewerConfig({
+  onViewerReady,
   showTerrain,
-  Cesium 
-}: { 
-  onViewerReady?: (viewer: InstanceType<CesiumModule['Viewer']>) => void; 
+  photorealistic3D,
+  Cesium
+}: {
+  onViewerReady?: (viewer: InstanceType<CesiumModule['Viewer']>) => void;
   showTerrain?: boolean;
+  photorealistic3D?: boolean;
   Cesium: CesiumModule;
 }) {
   const { viewer } = useCesium();
   const isConfiguredRef = useRef(false);
   const terrainLoadedRef = useRef(false);
+  const tilesetRef = useRef<any>(null);
 
+  // Initial setup (runs once)
   const handleReady = useCallback(async () => {
     if (viewer && !isConfiguredRef.current) {
       viewer.scene.globe.enableLighting = true;
@@ -68,7 +73,7 @@ const ViewerConfig = memo(function ViewerConfig({
 
       try {
         viewer.imageryLayers.removeAll();
-        
+
         const satelliteProvider = new Cesium.UrlTemplateImageryProvider({
           url: 'https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
           maximumLevel: 19,
@@ -108,10 +113,46 @@ const ViewerConfig = memo(function ViewerConfig({
     handleReady();
   }, [handleReady]);
 
+  // Toggle photorealistic 3D tiles on/off at runtime
+  useEffect(() => {
+    if (!viewer || !isConfiguredRef.current) return;
+
+    const togglePhotorealistic = async () => {
+      if (photorealistic3D) {
+        // Enable: hide globe, load Google 3D Tiles
+        viewer.scene.globe.show = false;
+
+        if (!tilesetRef.current) {
+          try {
+            const tileset = await (Cesium as any).createGooglePhotorealistic3DTileset();
+            tilesetRef.current = tileset;
+            viewer.scene.primitives.add(tileset);
+            console.log('Google Photorealistic 3D Tiles loaded');
+          } catch (error) {
+            console.warn('Failed to load Google Photorealistic 3D Tiles:', error);
+            // Restore globe on failure
+            viewer.scene.globe.show = true;
+          }
+        } else {
+          tilesetRef.current.show = true;
+        }
+      } else {
+        // Disable: show globe, hide 3D tiles
+        viewer.scene.globe.show = true;
+
+        if (tilesetRef.current) {
+          tilesetRef.current.show = false;
+        }
+      }
+    };
+
+    togglePhotorealistic();
+  }, [viewer, photorealistic3D, Cesium]);
+
   return null;
 });
 
-export const CesiumViewer = memo(function CesiumViewer({ className, onViewerReady, showTerrain }: CesiumViewerProps) {
+export const CesiumViewer = memo(function CesiumViewer({ className, onViewerReady, showTerrain, photorealistic3D }: CesiumViewerProps) {
   const creditContainerRef = useRef<HTMLDivElement | null>(null);
   const [isMounted, setIsMounted] = useState(false);
   const [cesium, setCesium] = useState<CesiumModule | null>(null);
@@ -151,7 +192,7 @@ export const CesiumViewer = memo(function CesiumViewer({ className, onViewerRead
          creditContainer={creditContainerRef.current ?? undefined}
          skyBox={false}
        >
-        <ViewerConfig onViewerReady={onViewerReady} showTerrain={showTerrain} Cesium={cesium} />
+        <ViewerConfig onViewerReady={onViewerReady} showTerrain={showTerrain} photorealistic3D={photorealistic3D} Cesium={cesium} />
       </Viewer>
     </div>
   );

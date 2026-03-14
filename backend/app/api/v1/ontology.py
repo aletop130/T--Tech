@@ -149,6 +149,9 @@ def _is_valid_tle(tle_line1: str, tle_line2: str) -> bool:
         return False
 
 
+MAX_TLE_AGE_DAYS = 14  # Skip TLEs older than this for propagation accuracy
+
+
 @router.get("/debris", response_model=DebrisResponse)
 async def get_debris(
     user: Annotated[TokenData, Depends(get_current_user)],
@@ -157,18 +160,15 @@ async def get_debris(
     orbitClasses: str = Query("LEO"),
 ):
     """Retrieve debris objects for visualization."""
-    # Fetch debris with orbits (ignoring orbitClasses for now)
     debris_with_orbits = await service.get_debris_with_orbits(user.tenant_id, limit=limit)
-    limited = debris_with_orbits
-    # Compute current time and skyfield timescale once for efficiency
     from skyfield.api import EarthSatellite, load
     ts = load.timescale()
     now = datetime.utcnow()
     t = ts.utc(now.year, now.month, now.day, now.hour, now.minute, now.second + now.microsecond / 1_000_000)
     objects = []
-    for sat, orb in limited:
+    for sat, orb in debris_with_orbits:
         lat, lon, alt_km = None, None, None
-        
+
         # Synthetic debris: assign plausible random coordinates (no TLE propagation)
         if orb.source == "api_generated":
             import random
@@ -176,10 +176,11 @@ async def get_debris(
             lon = random.uniform(-180, 180)
             alt_km = random.uniform(400, 2000)
         else:
-            # Skip debris with invalid TLE (decayed orbits, etc.)
+            # Skip stale TLEs — SGP4 degrades beyond ~14 days from epoch
+            if orb.epoch and (now - orb.epoch).days > MAX_TLE_AGE_DAYS:
+                continue
             if not _is_valid_tle(orb.tle_line1, orb.tle_line2):
                 continue
-            # Compute position from TLE at current time for real debris
             try:
                 sat_ephem = EarthSatellite(orb.tle_line1, orb.tle_line2, name=str(sat.norad_id), ts=ts)
                 subpoint = sat_ephem.at(t).subpoint()
@@ -187,7 +188,6 @@ async def get_debris(
                 lon = subpoint.longitude.degrees
                 alt_km = subpoint.elevation.km
             except Exception:
-                # If computation fails for any reason, skip this debris
                 continue
         if lat is None:
             continue
@@ -211,18 +211,17 @@ async def get_debris_with_orbits(
 ):
     """Retrieve debris objects with TLE data for detailed visualization."""
     debris_with_orbits = await service.get_debris_with_orbits(user.tenant_id, limit=limit)
-    limited = debris_with_orbits
     result = []
-    # Compute current time and skyfield timescale once
     from skyfield.api import EarthSatellite, load
     ts = load.timescale()
     now = datetime.utcnow()
     t = ts.utc(now.year, now.month, now.day, now.hour, now.minute, now.second + now.microsecond / 1_000_000)
-    for sat, orb in limited:
-        # Skip debris with invalid TLE (decayed orbits, etc.)
+    for sat, orb in debris_with_orbits:
+        # Skip stale TLEs
+        if orb.epoch and (now - orb.epoch).days > MAX_TLE_AGE_DAYS:
+            continue
         if not _is_valid_tle(orb.tle_line1, orb.tle_line2):
             continue
-        # Compute position from TLE at current time
         try:
             sat_ephem = EarthSatellite(orb.tle_line1, orb.tle_line2, name=str(sat.norad_id), ts=ts)
             subpoint = sat_ephem.at(t).subpoint()
@@ -331,6 +330,37 @@ async def create_satellite(
         tenant_id=user.tenant_id,
         user_id=user.sub,
     )
+
+
+from pydantic import BaseModel
+
+
+class BatchDeleteRequest(BaseModel):
+    satellite_ids: list[str]
+
+
+class BatchDeleteResponse(BaseModel):
+    deleted: int
+    errors: list[str]
+
+
+@router.post("/satellites/batch-delete", response_model=BatchDeleteResponse)
+async def batch_delete_satellites(
+    data: BatchDeleteRequest,
+    user: Annotated[TokenData, Depends(get_current_user)],
+    service: Annotated[OntologyService, Depends(get_ontology_service)],
+):
+    """Delete multiple satellites in bulk.
+
+    Handles related data cleanup (orbits, conjunctions, proximity events,
+    relations) and processes in chunks to avoid timeouts.
+    """
+    result = await service.batch_delete_satellites(
+        satellite_ids=data.satellite_ids,
+        tenant_id=user.tenant_id,
+        user_id=user.sub,
+    )
+    return BatchDeleteResponse(**result)
 
 
 @router.get("/satellites/celestrak-groups", response_model=CelestrackGroupsResponse)
@@ -459,6 +489,8 @@ async def delete_satellite(
         tenant_id=user.tenant_id,
         user_id=user.sub,
     )
+
+
 
 
 # ============== Orbits ==============

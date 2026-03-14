@@ -6,11 +6,13 @@ from fastapi import APIRouter, Query
 
 from app.schemas.rf_spectrum import (
     BandSummary,
+    RFOperationalDashboard,
     SatelliteRFProfile,
     TransmitterSearchResult,
 )
 from app.services.rf_spectrum import (
     get_band_summary,
+    get_operational_dashboard,
     get_satellite_rf_profile,
     search_transmitters,
 )
@@ -38,3 +40,10 @@ async def rf_search(
 async def rf_bands():
     """Get band usage summary across all tracked satellites."""
     return await get_band_summary()
+
+
+@router.get("/operational-dashboard", response_model=RFOperationalDashboard)
+async def rf_operational_dashboard():
+    """RF operational dashboard with space weather correlation, band status,
+    scintillation indices, 12h availability forecast, and frequency routing."""
+    return await get_operational_dashboard()

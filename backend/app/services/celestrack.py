@@ -28,31 +28,31 @@ ALLIED_SATELLITES = {
 # Enemy satellites (unknown/hostile forces) - Displayed as RED
 # Data sourced from CelesTrak (celestrak.org) - Real NORAD Catalog IDs
 ENEMY_SATELLITES = {
-    # Space stations and related
-    48274: {"name": "UNKNOWN-ALPHA", "country": "Unknown", "operator": "Unknown", "faction": "enemy"},
-    49044: {"name": "UNKNOWN-BETA", "country": "Unknown", "operator": "Unknown", "faction": "enemy"},
-    53239: {"name": "UNKNOWN-GAMMA", "country": "Unknown", "operator": "Unknown", "faction": "enemy"},
-    # GPS and navigation
-    24876: {"name": "HOSTILE-NAV-1", "country": "Unknown", "operator": "Unknown", "faction": "enemy"},
-    26407: {"name": "HOSTILE-NAV-2", "country": "Unknown", "operator": "Unknown", "faction": "enemy"},
-    26690: {"name": "HOSTILE-NAV-3", "country": "Unknown", "operator": "Unknown", "faction": "enemy"},
-    27663: {"name": "HOSTILE-NAV-4", "country": "Unknown", "operator": "Unknown", "faction": "enemy"},
-    27704: {"name": "HOSTILE-NAV-5", "country": "Unknown", "operator": "Unknown", "faction": "enemy"},
-    # Communication satellites
-    40115: {"name": "SUSPECT-COM-1", "country": "Unknown", "operator": "Unknown", "faction": "enemy"},
-    40116: {"name": "SUSPECT-COM-2", "country": "Unknown", "operator": "Unknown", "faction": "enemy"},
-    41771: {"name": "SUSPECT-COM-3", "country": "Unknown", "operator": "Unknown", "faction": "enemy"},
-    # Weather/Earth observation
-    27424: {"name": "TRACKED-OBJ-1", "country": "Unknown", "operator": "Unknown", "faction": "enemy"},
-    33591: {"name": "TRACKED-OBJ-2", "country": "Unknown", "operator": "Unknown", "faction": "enemy"},
-    37214: {"name": "TRACKED-OBJ-3", "country": "Unknown", "operator": "Unknown", "faction": "enemy"},
-    # Scientific/Research
-    39444: {"name": "UNIDENTIFIED-1", "country": "Unknown", "operator": "Unknown", "faction": "enemy"},
-    41465: {"name": "UNIDENTIFIED-2", "country": "Unknown", "operator": "Unknown", "faction": "enemy"},
-    44484: {"name": "UNIDENTIFIED-3", "country": "Unknown", "operator": "Unknown", "faction": "enemy"},
-    # Debris/Other tracked objects
-    49271: {"name": "CONTACT-X1", "country": "Unknown", "operator": "Unknown", "faction": "enemy"},
-    54216: {"name": "CONTACT-X2", "country": "Unknown", "operator": "Unknown", "faction": "enemy"},
+    # Space stations and related — Chinese CSS modules
+    48274: {"name": "UNKNOWN-ALPHA", "country": "China", "operator": "CNSA", "faction": "enemy"},
+    49044: {"name": "UNKNOWN-BETA", "country": "Russia", "operator": "Roscosmos", "faction": "enemy"},
+    53239: {"name": "UNKNOWN-GAMMA", "country": "China", "operator": "CNSA", "faction": "enemy"},
+    # Navigation constellation — adversary GNSS
+    24876: {"name": "HOSTILE-NAV-1", "country": "Russia", "operator": "VKS", "faction": "enemy"},
+    26407: {"name": "HOSTILE-NAV-2", "country": "Russia", "operator": "VKS", "faction": "enemy"},
+    26690: {"name": "HOSTILE-NAV-3", "country": "Russia", "operator": "VKS", "faction": "enemy"},
+    27663: {"name": "HOSTILE-NAV-4", "country": "Russia", "operator": "VKS", "faction": "enemy"},
+    27704: {"name": "HOSTILE-NAV-5", "country": "Russia", "operator": "VKS", "faction": "enemy"},
+    # Communication / SIGINT satellites
+    40115: {"name": "SUSPECT-COM-1", "country": "Russia", "operator": "GRU", "faction": "enemy"},
+    40116: {"name": "SUSPECT-COM-2", "country": "Russia", "operator": "GRU", "faction": "enemy"},
+    41771: {"name": "SUSPECT-COM-3", "country": "China", "operator": "PLA-SSF", "faction": "enemy"},
+    # Earth observation / reconnaissance
+    27424: {"name": "TRACKED-OBJ-1", "country": "China", "operator": "PLA-SSF", "faction": "enemy"},
+    33591: {"name": "TRACKED-OBJ-2", "country": "China", "operator": "CNSA", "faction": "enemy"},
+    37214: {"name": "TRACKED-OBJ-3", "country": "China", "operator": "CMA", "faction": "enemy"},
+    # Scientific / dual-use
+    39444: {"name": "UNIDENTIFIED-1", "country": "Iran", "operator": "ISA", "faction": "enemy"},
+    41465: {"name": "UNIDENTIFIED-2", "country": "DPRK", "operator": "NADA", "faction": "enemy"},
+    44484: {"name": "UNIDENTIFIED-3", "country": "Iran", "operator": "IRGC-ASF", "faction": "enemy"},
+    # Recent contacts — unattributed
+    49271: {"name": "CONTACT-X1", "country": "China", "operator": "Unknown", "faction": "enemy"},
+    54216: {"name": "CONTACT-X2", "country": "China", "operator": "CNSA", "faction": "enemy"},
 }
 
 # Italian satellites (ASI / Italian MoD) - Displayed as BLUE
@@ -810,6 +810,18 @@ class CelesTrackService:
             "satellites": satellites,
         }
 
+    @staticmethod
+    def _detect_object_type(group: str, name: str):
+        """Detect the object type based on CelesTrak group name and object name."""
+        from app.db.models.ontology import ObjectType
+        group_lower = group.lower()
+        name_upper = name.upper()
+        if "debris" in group_lower or "DEB" in name_upper:
+            return ObjectType.DEBRIS
+        if "r/b" in name_upper or "rocket" in group_lower:
+            return ObjectType.ROCKET_BODY
+        return ObjectType.SATELLITE
+
     async def fetch_and_store_by_group(
         self,
         group: str,
@@ -869,9 +881,11 @@ class CelesTrackService:
                         updated_count += 1
                         satellite_ids.append(satellite_id)
                     else:
+                        obj_name = tle_data.get("name", f"Satellite {norad_id}")
                         sat_data = SatelliteCreate(
                             norad_id=norad_id,
-                            name=tle_data.get("name", f"Satellite {norad_id}"),
+                            name=obj_name,
+                            object_type=self._detect_object_type(group, obj_name),
                             country=None,
                             operator=None,
                             classification=tle_data.get("classification", "unclassified"),

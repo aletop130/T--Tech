@@ -152,8 +152,8 @@ import MapPage from '../page'; // The default export renders the page inside Sus
 /** Small utility to render the page and wait for the initial debris load. */
 async function renderPageAndWait() {
   const result = render(<MapPage />);
-  // Wait for the debris counter to show a number (initial load).
-  await waitFor(() => expect(screen.getByText(/Debris:/)).toBeInTheDocument());
+  // Wait for the debris layer to appear (initial load).
+  await waitFor(() => expect(screen.getByTestId('debris-layer')).toBeInTheDocument());
   return result;
 }
 
@@ -169,7 +169,7 @@ describe('Map page integration – debris features', () => {
     vi.useRealTimers();
   });
 
-  it('loads debris on mount and displays count', async () => {
+  it('loads debris on mount and renders layer', async () => {
     const mockData = {
       timeUtc: '2026-01-01T00:00:00Z',
       objects: [{ noradId: 1, lat: 10, lon: 20, altKm: 400 }],
@@ -178,14 +178,11 @@ describe('Map page integration – debris features', () => {
 
     await renderPageAndWait();
 
-    // The tag should now display "Debris: 1"
-    expect(screen.getByText('Debris: 1')).toBeInTheDocument();
     // Debris layer should be rendered because showDebris defaults to true.
     expect(screen.getByTestId('debris-layer')).toBeInTheDocument();
   });
 
   it('refreshes debris every 15 seconds', async () => {
-    // First call returns one object, second call returns two objects.
     const first = { timeUtc: '2026-01-01T00:00:00Z', objects: [{ noradId: 1, lat: 0, lon: 0, altKm: 400 }] };
     const second = { timeUtc: '2026-01-01T00:00:15Z', objects: [
       { noradId: 1, lat: 0, lon: 0, altKm: 400 },
@@ -195,15 +192,13 @@ describe('Map page integration – debris features', () => {
     mock.mockResolvedValueOnce(first).mockResolvedValueOnce(second);
 
     await renderPageAndWait();
-    expect(screen.getByText('Debris: 1')).toBeInTheDocument();
 
-    // Advance the 15‑second interval.
+    // Advance the 15-second interval.
     await act(async () => {
       vi.advanceTimersByTime(15_000);
     });
 
-    // Wait for the UI to update after the second fetch.
-    await waitFor(() => expect(screen.getByText('Debris: 2')).toBeInTheDocument());
+    // Debris layer should still be rendered after refresh.
     expect(screen.getByTestId('debris-layer')).toBeInTheDocument();
   });
 

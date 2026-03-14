@@ -132,8 +132,20 @@ async def _get_low_perigee_predictions(db: AsyncSession, tenant_id: str) -> list
     now = datetime.now(timezone.utc)
     predictions = []
 
+    # NORAD IDs of actively maintained stations (regular reboost) — never predict reentry
+    REBOOSTED_NORAD_IDS = {
+        25544,  # ISS
+        48274,  # CSS Tianhe
+        53239,  # CSS Wentian
+        54216,  # CSS Mengtian
+    }
+
     for sat, orbit in rows:
         if not orbit:
+            continue
+
+        # Skip stations with active reboost — they don't decay naturally
+        if sat.norad_id in REBOOSTED_NORAD_IDS:
             continue
 
         metrics = derive_orbit_metrics(orbit)

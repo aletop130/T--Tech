@@ -10,6 +10,7 @@ import type {
   GeoLoiterThreat,
 } from '@/types/threats';
 import { api } from '@/lib/api';
+import { severityHex } from '@/lib/severity';
 
 type ThreatFeedKey = 'proximity' | 'signal' | 'anomaly' | 'orbital' | 'geoloiter';
 
@@ -21,19 +22,11 @@ const FEED_LABELS: Record<ThreatFeedKey, string> = {
   geoloiter: 'GEO loiter',
 };
 
-function severityColor(severity: string): string {
-  switch (severity) {
-    case 'threatened': return '#ff6b6b';
-    case 'watched': return '#ffd43b';
-    default: return '#51cf66';
-  }
-}
-
 function SeverityTag({ severity }: { severity: string }) {
   return (
     <Tag
       minimal
-      style={{ backgroundColor: severityColor(severity), color: '#000' }}
+      style={{ backgroundColor: severityHex(severity), color: '#000' }}
     >
       {severity.toUpperCase()}
     </Tag>
@@ -134,11 +127,38 @@ export function ThreatPanel() {
     );
   };
 
+  const totalThreats = proximity.length + signal.length + anomaly.length + orbital.length + geoLoiter.length;
+
   return (
     <div className="p-4">
-      <h2 className="text-lg font-semibold mb-3" style={{ color: 'var(--sda-text-primary)' }}>
-        Multi-Modal Threat Detection
-      </h2>
+      <div className="flex items-center justify-between mb-3">
+        <h2 className="text-lg font-semibold" style={{ color: 'var(--sda-text-primary)' }}>
+          Multi-Modal Threat Detection
+        </h2>
+        <div className="flex items-center gap-2">
+          <Tag minimal intent={totalThreats > 0 ? 'danger' : 'success'}>
+            {totalThreats} active threats
+          </Tag>
+          <Button small icon="refresh" onClick={fetchThreats}>Refresh</Button>
+        </div>
+      </div>
+      {/* Summary row */}
+      <div className="flex gap-3 mb-3">
+        {[
+          { label: 'Proximity', count: proximity.length, color: '#ff6b6b' },
+          { label: 'Signal', count: signal.length, color: '#ffd43b' },
+          { label: 'Anomaly', count: anomaly.length, color: '#ff922b' },
+          { label: 'Orbital', count: orbital.length, color: '#74c0fc' },
+          { label: 'GEO Loiter', count: geoLoiter.length, color: '#da77f2' },
+        ].map(f => (
+          <div key={f.label} className="text-xs text-center" style={{ color: 'var(--sda-text-secondary)' }}>
+            <div style={{ color: f.count > 0 ? f.color : 'var(--sda-text-secondary)', fontWeight: 700, fontSize: '1.1rem' }}>
+              {f.count}
+            </div>
+            {f.label}
+          </div>
+        ))}
+      </div>
       {hasFeedWarnings && (
         <Callout intent="warning" className="mb-3">
           Some threat feeds are degraded. Available feeds are still shown.

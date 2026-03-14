@@ -102,8 +102,6 @@ const nextConfig = {
       { source: '/launches',          destination: '/intelligence?tab=launches',   permanent: true },
       { source: '/reentry',           destination: '/intelligence?tab=reentry',    permanent: true },
       { source: '/maneuvers',         destination: '/intelligence?tab=maneuvers',  permanent: true },
-      { source: '/space-weather',     destination: '/intelligence?tab=weather',    permanent: true },
-      { source: '/rf-spectrum',       destination: '/intelligence?tab=rf',         permanent: true },
       // Operations consolidation
       { source: '/incidents',         destination: '/operations?tab=incidents',    permanent: true },
       { source: '/detour',            destination: '/operations?tab=detour',       permanent: true },

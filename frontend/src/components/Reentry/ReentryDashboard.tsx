@@ -1,28 +1,12 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { Card, Tag, Spinner, Tabs, Tab, Button, Callout, HTMLTable, ProgressBar, Icon } from '@blueprintjs/core';
+import { Card, Tag, Spinner, Tabs, Tab, Button, Callout, HTMLTable, ProgressBar, Icon, Popover } from '@blueprintjs/core';
+import { useRouter } from 'next/navigation';
 import { api, ReentryPrediction, ReentryHistoryEntry } from '@/lib/api';
+import { riskIntent, riskColor } from '@/lib/severity';
 
 type ReentryFeedKey = 'active' | 'history';
-
-function riskIntent(level: string): 'danger' | 'warning' | 'primary' | 'success' {
-  switch (level) {
-    case 'critical': return 'danger';
-    case 'high': return 'warning';
-    case 'moderate': return 'primary';
-    default: return 'success';
-  }
-}
-
-function riskColor(level: string): string {
-  switch (level) {
-    case 'critical': return '#ff6b6b';
-    case 'high': return '#ffa94d';
-    case 'moderate': return '#74c0fc';
-    default: return '#51cf66';
-  }
-}
 
 function objectTypeColor(type: string): string {
   switch (type) {
@@ -65,7 +49,7 @@ function CountdownTimer({ seconds: initialSeconds }: { seconds: number }) {
     if (seconds <= 0) return;
     const t = setInterval(() => setSeconds(s => Math.max(0, s - 1)), 1000);
     return () => clearInterval(t);
-  }, [seconds > 0]);
+  }, [seconds]);
 
   const isUrgent = seconds < 3600;
   const isImminent = seconds < 600;
@@ -123,6 +107,33 @@ function SortableHeader({ label, sortKey, currentKey, dir, onSort }: {
       {label}{' '}
       {isActive && <Icon icon={dir === 'asc' ? 'chevron-up' : 'chevron-down'} size={12} />}
     </th>
+  );
+}
+
+function NoradMapPopover({ noradId, name }: { noradId: number; name: string }) {
+  const router = useRouter();
+  return (
+    <Popover
+      content={
+        <div className="p-2">
+          <div className="text-sm font-medium" style={{ color: 'var(--sda-text-primary)' }}>{name}</div>
+          <div className="text-xs mb-2" style={{ color: 'var(--sda-text-secondary)' }}>NORAD {noradId}</div>
+          <Button
+            small
+            intent="primary"
+            icon="map"
+            onClick={() => router.push(`/map?highlight_norad=${noradId}`)}
+          >
+            Open on Map
+          </Button>
+        </div>
+      }
+      interactionKind="click"
+    >
+      <span className="cursor-pointer hover:text-cyan-400 transition-colors inline-flex items-center gap-1">
+        {noradId} <Icon icon="map-marker" size={10} />
+      </span>
+    </Popover>
   );
 }
 
@@ -254,6 +265,18 @@ export function ReentryDashboard() {
         </Card>
       </div>
 
+      {/* Data Source Legend */}
+      <div className="flex items-center gap-4 text-xs" style={{ color: 'var(--sda-text-secondary)' }}>
+        <span className="flex items-center gap-1">
+          <span className="inline-block w-2 h-2 rounded-full" style={{ backgroundColor: '#22c55e' }} />
+          CelesTrak (real)
+        </span>
+        <span className="flex items-center gap-1">
+          <span className="inline-block w-2 h-2 rounded-full" style={{ backgroundColor: '#74c0fc' }} />
+          Database (analyzed)
+        </span>
+      </div>
+
       {/* Tabs */}
       <Tabs
         id="reentry-tabs"
@@ -282,6 +305,7 @@ export function ReentryDashboard() {
                     <SortableHeader label="Risk" sortKey="risk_level" currentKey={sortKey} dir={sortDir} onSort={handleSort} />
                     <th>Uncertainty</th>
                     <th>NORAD</th>
+                    <th>Src</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -309,7 +333,16 @@ export function ReentryDashboard() {
                           stripes={p.risk_level === 'critical' || p.risk_level === 'high'}
                         />
                       </td>
-                      <td style={{ fontFamily: 'monospace', fontSize: '0.8rem' }}>{p.norad_id}</td>
+                      <td style={{ fontFamily: 'monospace', fontSize: '0.8rem' }}>
+                        <NoradMapPopover noradId={p.norad_id} name={p.name} />
+                      </td>
+                      <td>
+                        <span
+                          className="inline-block w-2 h-2 rounded-full"
+                          style={{ backgroundColor: p.source === 'celestrak' ? '#22c55e' : '#74c0fc' }}
+                          title={p.source === 'celestrak' ? 'CelesTrak real data' : 'Database analysis'}
+                        />
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -356,7 +389,9 @@ export function ReentryDashboard() {
                         )}
                       </td>
                       <td>{h.country || 'Unknown'}</td>
-                      <td style={{ fontFamily: 'monospace', fontSize: '0.8rem' }}>{h.norad_id}</td>
+                      <td style={{ fontFamily: 'monospace', fontSize: '0.8rem' }}>
+                        <NoradMapPopover noradId={h.norad_id} name={h.name} />
+                      </td>
                     </tr>
                   ))}
                 </tbody>

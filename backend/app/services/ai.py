@@ -61,6 +61,15 @@ You can help with:
 - Incident analysis and management (you have access to active incidents)
 - General questions about space domain awareness
 
+SANDBOX RULE — very important:
+If the user wants to build a custom scenario, create their own simulation, place actors (satellites, ships, bases, drones, convoys), run a war game or exercise, or describe a multi-actor tactical/space setup — do NOT try to do it here. You cannot create custom scenarios in this chat.
+Instead, reply with a short message pointing them to the Sandbox. Always mention "Sandbox" by name.
+Examples:
+- Italian: "Per creare scenari personalizzati usa la sezione Sandbox — descrivi attori, orbite e comportamenti in linguaggio naturale direttamente da lì."
+- English: "Head to the Sandbox section to build that — you can place satellites, ships, bases and describe behaviors in plain language."
+This applies even if the request sounds technical (e.g. "6 satellites at 550km" or "allied base in Rome, hostile base in Belgrade"). If it's about authoring a custom setup, Sandbox is the answer.
+Keep the reply short (1-2 sentences), never ask clarifying questions in these cases.
+
 When technical data IS requested and available, provide structured, actionable insights citing specific data."""
     
     VISUALIZATION_PATTERNS = {
@@ -760,6 +769,11 @@ BEHAVIORAL RULES:
    For locations/countries use cesium_fly_to_country or cesium_search_location.
 8. Before showing any visualization, ALWAYS query to obtain real data.
    Never invent data or IDs.
+9. SANDBOX RULE — critical: If the user wants to build a custom scenario, create their own simulation, place actors (satellites, ships, bases, drones), design a war game or exercise, or author any multi-actor setup — do NOT do it here and do NOT invent fake data for it.
+   Reply with a single short message pointing them to the Sandbox. Always say "Sandbox" by name.
+   Example (Italian): "Per costruire scenari personalizzati usa la sezione Sandbox — puoi descrivere attori, orbite e comportamenti in linguaggio naturale."
+   Example (English): "Head to the Sandbox to build that — describe actors, orbits and behaviors in plain language there."
+   This rule overrides everything else. Do not query data, do not show options, just redirect to Sandbox.
 """
 
     # Scenario templates that the run_scenario tool can return
@@ -2047,8 +2061,8 @@ Fornisci 2-3 opzioni realistiche in formato JSON:
             yield f"data: {json.dumps({'type': 'simulation_control', **command})}\n\n"
 
             assistant_text = (
-                "Opening Sandbox for a custom scenario. "
-                "Continue authoring the session there."
+                "This looks like a scenario you'd build in the Sandbox. "
+                "Opening the Sandbox now — you can describe actors, orbits, and behaviors there in natural language."
             )
             await memory_call(
                 "add_open_sandbox_message",
@@ -2266,7 +2280,7 @@ INSTRUCTIONS: Use cesium_fly_to with longitude/latitude from the list""")
         shift_brief_patterns = (
             "briefing turno", "shift brief", "briefing di turno",
             "briefing operativo", "stato del mondo", "situazione generale",
-            "morning brief", "handover brief",
+            "morning brief", "handover brief", "briefing situazione",
         )
         if any(p in message_lower for p in shift_brief_patterns):
             return "shift_brief"
@@ -2285,8 +2299,9 @@ INSTRUCTIONS: Use cesium_fly_to with longitude/latitude from the list""")
         ):
             return "open_sandbox"
 
+
         if re.search(
-            r"\b(cosa succede|what if|what-if|simula|scenario|se\s+.+\s+esplod|se\s+.+\s+fragment|"
+            r"\b(cosa succede se|what if|what-if|se\s+.+\s+esplod|se\s+.+\s+fragment|"
             r"se perdo|if i lose|se approvo|if i approve|se la manovra)\b",
             message_lower,
         ):
@@ -3196,11 +3211,35 @@ INSTRUCTIONS: Use cesium_fly_to with longitude/latitude from the list""")
             )
             
             full_content = ""
+            buffer = ""
             async for chunk in response:
                 if chunk.choices[0].delta.content:
                     content = chunk.choices[0].delta.content
                     full_content += content
-                    yield f"data: {json.dumps({'type': 'content', 'chunk': content})}\n\n"
+                    buffer += content
+                    # Hold back output while a potential <tool_call> tag is accumulating
+                    if "<tool_call>" in buffer:
+                        # Strip raw tool-call XML that the LLM may emit when tools aren't registered
+                        cleaned = re.sub(
+                            r"<tool_call>.*?</tool_call>",
+                            "",
+                            buffer,
+                            flags=re.DOTALL,
+                        )
+                        buffer = cleaned
+                        continue
+                    if "<tool_call" in buffer and "</tool_call>" not in buffer:
+                        # Partial tag — keep buffering
+                        continue
+                    if buffer:
+                        yield f"data: {json.dumps({'type': 'content', 'chunk': buffer})}\n\n"
+                        buffer = ""
+            # Flush any remaining buffered content (excluding stale tool_call fragments)
+            if buffer:
+                cleaned = re.sub(r"<tool_call>.*?</tool_call>", "", buffer, flags=re.DOTALL)
+                cleaned = re.sub(r"<tool_call.*$", "", cleaned, flags=re.DOTALL)
+                if cleaned.strip():
+                    yield f"data: {json.dumps({'type': 'content', 'chunk': cleaned})}\n\n"
             
             # Add assistant response to memory
             memory = PostgreSQLChatMemory(

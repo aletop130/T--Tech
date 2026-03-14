@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { Card, Spinner, Tag, Icon, Collapse, Callout, Button } from '@blueprintjs/core';
+import { Card, Spinner, Tag, Icon, Collapse, Callout, Button, Tabs, Tab, Popover } from '@blueprintjs/core';
+import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
 import type {
   LaunchCorrelationResponse,
@@ -38,6 +39,39 @@ function confidenceColor(c: number): string {
   if (c >= 0.7) return '#51cf66';
   if (c >= 0.5) return '#ffd43b';
   return '#ff922b';
+}
+
+function OpenOnMapPopover({ noradId, name }: { noradId: number; name: string }) {
+  const router = useRouter();
+  return (
+    <Popover
+      content={
+        <div className="p-2">
+          <div className="text-sm font-medium" style={{ color: 'var(--sda-text-primary)' }}>{name}</div>
+          <div className="text-xs mb-2" style={{ color: 'var(--sda-text-secondary)' }}>NORAD {noradId}</div>
+          <Button
+            small
+            intent="primary"
+            icon="map"
+            onClick={(e: React.MouseEvent) => {
+              e.stopPropagation();
+              router.push(`/map?highlight_norad=${noradId}`);
+            }}
+          >
+            Open on Map
+          </Button>
+        </div>
+      }
+      interactionKind="click"
+    >
+      <span
+        className="cursor-pointer hover:text-cyan-400 transition-colors inline-flex items-center gap-1"
+        onClick={(e: React.MouseEvent) => e.stopPropagation()}
+      >
+        NORAD {noradId} <Icon icon="map-marker" size={10} />
+      </span>
+    </Popover>
+  );
 }
 
 function LaunchCard({ correlation }: { correlation: LaunchCorrelation }) {
@@ -110,9 +144,7 @@ function LaunchCard({ correlation }: { correlation: LaunchCorrelation }) {
                     <span style={{ color: 'var(--sda-text-primary)' }}>
                       {obj.name}
                     </span>
-                    <span style={{ color: 'var(--sda-text-secondary)' }}>
-                      NORAD {obj.norad_id}
-                    </span>
+                    <OpenOnMapPopover noradId={obj.norad_id} name={obj.name} />
                   </div>
                   <div className="flex items-center gap-2">
                     {obj.orbit_type && (
@@ -266,11 +298,20 @@ export function LaunchCorrelationPanel() {
 
   return (
     <div className="p-4">
-      <h2 className="text-lg font-semibold mb-1" style={{ color: 'var(--sda-text-primary)' }}>
-        Launch Correlation Engine
-      </h2>
+      <div className="flex items-center justify-between mb-1">
+        <h2 className="text-lg font-semibold" style={{ color: 'var(--sda-text-primary)' }}>
+          Launch Correlation Engine
+        </h2>
+        <div className="flex items-center gap-2">
+          <Tag minimal style={{ fontSize: '9px' }}>
+            <span className="inline-block w-2 h-2 rounded-full mr-1" style={{ backgroundColor: '#22c55e' }} />
+            Space Devs API
+          </Tag>
+          <Button small icon="refresh" onClick={fetchData}>Refresh</Button>
+        </div>
+      </div>
       <p className="text-xs mb-4" style={{ color: 'var(--sda-text-secondary)' }}>
-        Matches new catalog objects to their launch of origin
+        Matches new catalog objects to their launch of origin &middot; {recentData?.cached_at ? `Cached: ${new Date(recentData.cached_at).toLocaleTimeString()}` : ''}
       </p>
       {hasFeedWarnings && (
         <Callout intent="warning" className="mb-4">
@@ -301,105 +342,100 @@ export function LaunchCorrelationPanel() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 mb-3">
-        {(['recent', 'uncorrelated', 'upcoming'] as const).map((tab) => (
-          <button
-            key={tab}
-            onClick={() => setActiveTab(tab)}
-            className="px-3 py-1.5 rounded text-xs font-medium transition-colors"
-            style={{
-              backgroundColor: activeTab === tab ? 'var(--sda-bg-tertiary)' : 'transparent',
-              color: activeTab === tab ? 'var(--sda-text-primary)' : 'var(--sda-text-secondary)',
-              border: '1px solid',
-              borderColor: activeTab === tab ? 'var(--sda-border-default)' : 'transparent',
-            }}
-          >
-            {tab === 'recent' && `Recent (${recentData?.total_launches || 0})`}
-            {tab === 'uncorrelated' && `Uncorrelated (${uncorrelatedData?.total || 0})`}
-            {tab === 'upcoming' && `Upcoming (${upcomingData?.total || 0})`}
-          </button>
-        ))}
-      </div>
-
-      {/* Tab Content */}
-      {activeTab === 'recent' && (
-        <div>
-          {feedErrors.recent ? renderUnavailable('recent') : null}
-          {recentData?.launches.map((lc, i) => (
-            <LaunchCard key={lc.launch.id || i} correlation={lc} />
-          ))}
-          {!feedErrors.recent && (!recentData?.launches || recentData.launches.length === 0) && (
-            <div className="text-sm" style={{ color: 'var(--sda-text-secondary)' }}>
-              No recent launches found
-            </div>
-          )}
-        </div>
-      )}
-
-      {activeTab === 'uncorrelated' && (
-        <div>
-          {feedErrors.uncorrelated ? renderUnavailable('uncorrelated') : null}
-          {uncorrelatedData?.objects.map((obj) => (
-            <Card
-              key={obj.norad_id}
-              className="mb-2 p-3"
-              style={{ backgroundColor: 'var(--sda-bg-secondary)' }}
-            >
-              <div className="flex justify-between items-center mb-1">
-                <div className="flex items-center gap-2">
-                  <Icon icon="warning-sign" size={14} style={{ color: '#ff922b' }} />
-                  <span className="font-medium text-sm" style={{ color: 'var(--sda-text-primary)' }}>
-                    {obj.name}
-                  </span>
-                  <span className="text-xs" style={{ color: 'var(--sda-text-secondary)' }}>
-                    NORAD {obj.norad_id}
-                  </span>
-                </div>
-                <Tag intent="warning" minimal round>Unmatched</Tag>
-              </div>
-              <div className="flex gap-2 text-xs" style={{ color: 'var(--sda-text-secondary)' }}>
-                {obj.epoch && <span>Epoch: {formatDate(obj.epoch)}</span>}
-                {obj.orbit_params?.orbit_type !== undefined && obj.orbit_params?.orbit_type !== null && (
-                  <Tag minimal  style={{ fontSize: '10px' }}>
-                    {String(obj.orbit_params.orbit_type)}
-                  </Tag>
-                )}
-              </div>
-              {obj.possible_launches.length > 0 && (
-                <div className="mt-2">
-                  <div className="text-xs" style={{ color: 'var(--sda-text-secondary)' }}>
-                    Possible launches:
-                  </div>
-                  {obj.possible_launches.map((pl) => (
-                    <div key={pl.id} className="text-xs ml-2" style={{ color: 'var(--sda-text-secondary)' }}>
-                      - {pl.name} ({formatDate(pl.net)})
-                    </div>
-                  ))}
+      <Tabs
+        id="launch-tabs"
+        selectedTabId={activeTab}
+        onChange={(id) => setActiveTab(id as 'recent' | 'uncorrelated' | 'upcoming')}
+      >
+        <Tab
+          id="recent"
+          title={`Recent (${recentData?.total_launches || 0})`}
+          panel={
+            <div className="mt-2">
+              {feedErrors.recent ? renderUnavailable('recent') : null}
+              {recentData?.launches.map((lc, i) => (
+                <LaunchCard key={lc.launch.id || i} correlation={lc} />
+              ))}
+              {!feedErrors.recent && (!recentData?.launches || recentData.launches.length === 0) && (
+                <div className="text-sm" style={{ color: 'var(--sda-text-secondary)' }}>
+                  No recent launches found
                 </div>
               )}
-            </Card>
-          ))}
-          {!feedErrors.uncorrelated && (!uncorrelatedData?.objects || uncorrelatedData.objects.length === 0) && (
-            <Callout intent="success" icon="tick-circle">
-              All recent objects have been correlated with launches
-            </Callout>
-          )}
-        </div>
-      )}
-
-      {activeTab === 'upcoming' && (
-        <div>
-          {feedErrors.upcoming ? renderUnavailable('upcoming') : null}
-          {upcomingData?.launches.map((launch, i) => (
-            <UpcomingLaunchCard key={launch.id || i} launch={launch} />
-          ))}
-          {!feedErrors.upcoming && (!upcomingData?.launches || upcomingData.launches.length === 0) && (
-            <div className="text-sm" style={{ color: 'var(--sda-text-secondary)' }}>
-              No upcoming launches found
             </div>
-          )}
-        </div>
-      )}
+          }
+        />
+        <Tab
+          id="uncorrelated"
+          title={`Uncorrelated (${uncorrelatedData?.total || 0})`}
+          panel={
+            <div className="mt-2">
+              {feedErrors.uncorrelated ? renderUnavailable('uncorrelated') : null}
+              {uncorrelatedData?.objects.map((obj) => (
+                <Card
+                  key={obj.norad_id}
+                  className="mb-2 p-3"
+                  style={{ backgroundColor: 'var(--sda-bg-secondary)' }}
+                >
+                  <div className="flex justify-between items-center mb-1">
+                    <div className="flex items-center gap-2">
+                      <Icon icon="warning-sign" size={14} style={{ color: '#ff922b' }} />
+                      <span className="font-medium text-sm" style={{ color: 'var(--sda-text-primary)' }}>
+                        {obj.name}
+                      </span>
+                      <span className="text-xs" style={{ color: 'var(--sda-text-secondary)' }}>
+                        <OpenOnMapPopover noradId={obj.norad_id} name={obj.name} />
+                      </span>
+                    </div>
+                    <Tag intent="warning" minimal round>Unmatched</Tag>
+                  </div>
+                  <div className="flex gap-2 text-xs" style={{ color: 'var(--sda-text-secondary)' }}>
+                    {obj.epoch && <span>Epoch: {formatDate(obj.epoch)}</span>}
+                    {obj.orbit_params?.orbit_type !== undefined && obj.orbit_params?.orbit_type !== null && (
+                      <Tag minimal style={{ fontSize: '10px' }}>
+                        {String(obj.orbit_params.orbit_type)}
+                      </Tag>
+                    )}
+                  </div>
+                  {obj.possible_launches.length > 0 && (
+                    <div className="mt-2">
+                      <div className="text-xs" style={{ color: 'var(--sda-text-secondary)' }}>
+                        Possible launches:
+                      </div>
+                      {obj.possible_launches.map((pl) => (
+                        <div key={pl.id} className="text-xs ml-2" style={{ color: 'var(--sda-text-secondary)' }}>
+                          - {pl.name} ({formatDate(pl.net)})
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </Card>
+              ))}
+              {!feedErrors.uncorrelated && (!uncorrelatedData?.objects || uncorrelatedData.objects.length === 0) && (
+                <Callout intent="success" icon="tick-circle">
+                  All recent objects have been correlated with launches
+                </Callout>
+              )}
+            </div>
+          }
+        />
+        <Tab
+          id="upcoming"
+          title={`Upcoming (${upcomingData?.total || 0})`}
+          panel={
+            <div className="mt-2">
+              {feedErrors.upcoming ? renderUnavailable('upcoming') : null}
+              {upcomingData?.launches.map((launch, i) => (
+                <UpcomingLaunchCard key={launch.id || i} launch={launch} />
+              ))}
+              {!feedErrors.upcoming && (!upcomingData?.launches || upcomingData.launches.length === 0) && (
+                <div className="text-sm" style={{ color: 'var(--sda-text-secondary)' }}>
+                  No upcoming launches found
+                </div>
+              )}
+            </div>
+          }
+        />
+      </Tabs>
     </div>
   );
 }

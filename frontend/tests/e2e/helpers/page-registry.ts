@@ -81,6 +81,14 @@ export const PAGE_REGISTRY: PageInfo[] = [
     criticalApis: ['/api/launches', '/api/reentry', '/api/maneuvers'],
   },
   {
+    route: '/space-weather',
+    label: 'Space Weather',
+    type: 'standalone',
+    domain: 'intelligence',
+    expectedSelector: '[data-testid="space-weather-page"]',
+    criticalApis: ['/api/space-weather'],
+  },
+  {
     route: '/environment',
     label: 'Environment',
     type: 'consolidated',

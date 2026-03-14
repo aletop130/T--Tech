@@ -32,17 +32,12 @@ const navGroups: NavGroup[] = [
     ],
   },
   {
-    id: 'operations',
-    label: 'OPERATIONS',
-    items: [
-      { icon: 'flows', label: 'Operations', href: '/operations', colorVar: '--sda-accent-blue' },
-    ],
-  },
-  {
     id: 'intelligence',
     label: 'INTELLIGENCE',
     items: [
-      { icon: 'shield', label: 'Intelligence', href: '/intelligence', colorVar: '#ff6b6b' },
+      { icon: 'shield',    label: 'Intelligence',   href: '/intelligence',   colorVar: '#ff6b6b' },
+      { icon: 'satellite',  label: 'RF Spectrum',    href: '/rf-spectrum',    colorVar: '#a78bfa' },
+      { icon: 'flash',     label: 'Space Weather',  href: '/space-weather',  colorVar: '#f59e0b' },
     ],
   },
   {

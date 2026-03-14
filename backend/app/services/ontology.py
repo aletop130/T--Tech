@@ -268,9 +268,100 @@ class OntologyService:
         satellite = await self.get_satellite(satellite_id, tenant_id)
         if not satellite:
             raise NotFoundError("Satellite", satellite_id)
-        
+
         await self._delete(satellite, tenant_id, user_id)
-    
+
+    async def batch_delete_satellites(
+        self,
+        satellite_ids: list[str],
+        tenant_id: str,
+        user_id: Optional[str] = None,
+    ) -> dict:
+        """Delete satellites in bulk using direct SQL for performance.
+
+        Cleans up related rows (orbits, conjunctions, proximity events,
+        relations) before deleting the satellites themselves, avoiding FK
+        constraint violations.  Works in chunks to keep memory bounded.
+        """
+        from app.db.models.incidents import ProximityEvent
+
+        CHUNK = 50
+        deleted = 0
+        errors: list[str] = []
+
+        for i in range(0, len(satellite_ids), CHUNK):
+            chunk_ids = satellite_ids[i : i + CHUNK]
+            try:
+                # 1. Delete dependent rows that reference these satellites
+                await self.db.execute(
+                    delete(ObjectRelation).where(
+                        and_(
+                            ObjectRelation.tenant_id == tenant_id,
+                            or_(
+                                ObjectRelation.source_id.in_(chunk_ids),
+                                ObjectRelation.target_id.in_(chunk_ids),
+                            ),
+                        )
+                    )
+                )
+                await self.db.execute(
+                    delete(ConjunctionEvent).where(
+                        and_(
+                            ConjunctionEvent.tenant_id == tenant_id,
+                            or_(
+                                ConjunctionEvent.primary_object_id.in_(chunk_ids),
+                                ConjunctionEvent.secondary_object_id.in_(chunk_ids),
+                            ),
+                        )
+                    )
+                )
+                await self.db.execute(
+                    delete(ProximityEvent).where(
+                        and_(
+                            ProximityEvent.tenant_id == tenant_id,
+                            or_(
+                                ProximityEvent.primary_satellite_id.in_(chunk_ids),
+                                ProximityEvent.secondary_satellite_id.in_(chunk_ids),
+                            ),
+                        )
+                    )
+                )
+                # 2. Delete orbits
+                await self.db.execute(
+                    delete(Orbit).where(
+                        and_(
+                            Orbit.tenant_id == tenant_id,
+                            Orbit.satellite_id.in_(chunk_ids),
+                        )
+                    )
+                )
+                # 3. Delete satellites
+                result = await self.db.execute(
+                    delete(Satellite).where(
+                        and_(
+                            Satellite.tenant_id == tenant_id,
+                            Satellite.id.in_(chunk_ids),
+                        )
+                    )
+                )
+                deleted += result.rowcount
+                await self.db.flush()
+            except Exception as e:
+                errors.append(f"Chunk {i//CHUNK}: {str(e)}")
+
+        # Single audit entry for the whole batch
+        await self.audit.log(
+            action="batch_delete",
+            entity_type="satellites",
+            entity_id=f"batch({len(satellite_ids)})",
+            tenant_id=tenant_id,
+            user_id=user_id,
+            before={"satellite_ids": satellite_ids[:20], "total": len(satellite_ids)},
+        )
+        await self.db.commit()
+
+        return {"deleted": deleted, "errors": errors}
+
     # ============== Orbit Operations ==============
     
     async def create_orbit(

@@ -388,7 +388,7 @@ export const CelestrakBrowserDialog: React.FC<CelestrakBrowserDialogProps> = ({
     <Dialog
       isOpen={isOpen}
       onClose={handleClose}
-      title="CelesTrak Satellite Browser"
+      title="CelesTrak Browser"
       className="bp6-dark"
       style={{ width: 950, paddingBottom: 0 }}
     >

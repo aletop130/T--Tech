@@ -64,7 +64,7 @@ export function CreateIncidentDialog({
       onClose();
 
       // Navigate to incident
-      router.push(`/incidents`);
+      router.push('/operations?tab=incidents');
     } catch (err: any) {
       setError(err.message || 'Failed to create incident');
     } finally {

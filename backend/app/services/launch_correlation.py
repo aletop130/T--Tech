@@ -127,13 +127,13 @@ def _compute_correlation_confidence(
     score = 0.0
     weights_total = 0.0
 
-    # Date matching (weight: 0.5) - within 7 days
+    # Date matching (weight: 0.5) - within 3 days, object epoch must be AFTER launch
     if launch_date and object_epoch:
         ld = launch_date.replace(tzinfo=timezone.utc) if launch_date.tzinfo is None else launch_date
         oe = object_epoch.replace(tzinfo=timezone.utc) if object_epoch.tzinfo is None else object_epoch
-        delta_days = abs((oe - ld).total_seconds()) / 86400.0
-        if delta_days <= 7:
-            date_score = max(0, 1.0 - (delta_days / 7.0))
+        delta_days = (oe - ld).total_seconds() / 86400.0
+        if 0 <= delta_days <= 3:
+            date_score = max(0, 1.0 - (delta_days / 3.0))
             score += 0.5 * date_score
         weights_total += 0.5
 
@@ -275,7 +275,7 @@ class LaunchCorrelationService:
                     launch_country=launch.get("pad_country"),
                     object_country=sat.country,
                 )
-                if confidence >= 0.3:
+                if confidence >= 0.6:
                     correlated.append({
                         "norad_id": sat.norad_id,
                         "name": sat.name,

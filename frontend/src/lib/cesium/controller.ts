@@ -349,16 +349,29 @@ class CesiumControllerClass {
     if (entityId) {
       const entity = this.viewer.entities.getById(entityId);
       if (entity) {
-        this.viewer.flyTo(entity, {
-          duration,
-          offset: new Cesium.HeadingPitchRange(
-            Cesium.Math.toRadians(heading || 0),
-            Cesium.Math.toRadians(pitch || -45),
+        // Set trackedEntity so the camera orbits around the satellite
+        // (keeps it as the center of rotation when the user pans/rotates)
+        this.viewer.trackedEntity = entity;
+        completeFly();
+      } else if (longitude !== undefined && latitude !== undefined) {
+        // Entity not yet in viewer — fall back to coordinate-based flyTo
+        this.viewer.camera.flyTo({
+          destination: Cesium.Cartesian3.fromDegrees(
+            longitude,
+            latitude,
             altitude || 10000
           ),
-}); completeFly();
-        // Also select the entity to show info card
-        this.viewer.selectedEntity = entity;
+          orientation: {
+            heading: Cesium.Math.toRadians(heading || 0),
+            pitch: Cesium.Math.toRadians(pitch || -45),
+            roll: Cesium.Math.toRadians(roll || 0),
+          },
+          duration,
+        });
+        completeFly();
+      } else {
+        // Entity not found and no coordinates — reset flying state
+        this.isFlying = false;
       }
     } else if (longitude !== undefined && latitude !== undefined) {
       // For locations (not satellites), use top-down view (-90 pitch)
@@ -381,6 +394,7 @@ class CesiumControllerClass {
 
   private handleResetView(_payload: Record<string, unknown>, Cesium: CesiumModule): void {
     if (!this.viewer) return;
+    this.viewer.trackedEntity = undefined;
     this.viewer.selectedEntity = undefined;
     this.isFlying = true;
     this.viewer.camera.flyTo({
@@ -557,9 +571,10 @@ this.viewer.camera.flyTo({
     if (entityId) {
       const entity = this.viewer.entities.getById(entityId);
       if (entity) {
-        this.viewer.selectedEntity = entity;
+        this.viewer.trackedEntity = entity;
       }
     } else {
+      this.viewer.trackedEntity = undefined;
       this.viewer.selectedEntity = undefined;
     }
   }

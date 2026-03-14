@@ -7,8 +7,6 @@ import { AdversaryPanel } from '@/components/Adversary/AdversaryPanel';
 import { LaunchCorrelationPanel } from '@/components/Launch/LaunchCorrelationPanel';
 import { ReentryDashboard } from '@/components/Reentry/ReentryDashboard';
 import { ManeuverDetectionPanel } from '@/components/ManeuverAlertPanel/ManeuverDetectionPanel';
-import { SpaceWeatherPanel } from '@/components/SpaceWeather/SpaceWeatherPanel';
-import { RFSpectrumPanel } from '@/components/RFSpectrum/RFSpectrumPanel';
 
 export default function IntelligencePage() {
   return (
@@ -25,8 +23,6 @@ export default function IntelligencePage() {
         { id: 'launches',   title: 'Launches',      component: <LaunchCorrelationPanel /> },
         { id: 'reentry',    title: 'Reentry',       component: <ReentryDashboard /> },
         { id: 'maneuvers',  title: 'Maneuvers',     component: <ManeuverDetectionPanel /> },
-        { id: 'weather',    title: 'Space Weather', component: <SpaceWeatherPanel /> },
-        { id: 'rf',         title: 'RF Spectrum',   component: <RFSpectrumPanel /> },
       ]}
     />
   );

@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.models.ontology import Satellite, Orbit
 from app.core.logging import get_logger
 from app.services.intelligence_support import derive_orbit_metrics, is_hostile_asset, normalize_country
+from app.services.celestrack import ENEMY_SATELLITES
 
 logger = get_logger(__name__)
 
@@ -53,12 +54,22 @@ class AdversaryTrackingService:
                 continue
 
             if sat.id not in sat_map:
+                # Enrich country/operator from curated ENEMY_SATELLITES catalog
+                # when DB has no attribution
+                db_country = sat.country or "UNK"
+                db_operator = sat.operator
+                curated = ENEMY_SATELLITES.get(sat.norad_id, {})
+                if db_country in ("UNK", "Unknown", None, ""):
+                    db_country = curated.get("country", "UNK")
+                if not db_operator or db_operator == "Unknown":
+                    db_operator = curated.get("operator", db_operator)
+
                 sat_map[sat.id] = {
                     "satellite_id": sat.id,
                     "name": sat.name,
                     "norad_id": sat.norad_id,
-                    "country": sat.country or "UNK",
-                    "operator": sat.operator,
+                    "country": db_country,
+                    "operator": db_operator,
                     "object_type": sat.object_type or "PAYLOAD",
                     "altitude_km": 0.0,
                     "inclination_deg": 0.0,
@@ -116,6 +127,10 @@ class AdversaryTrackingService:
 
         sat, orbit = row
         country = sat.country or "UNK"
+        # Enrich from curated catalog when DB has no attribution
+        if country in ("UNK", "Unknown", None, ""):
+            curated = ENEMY_SATELLITES.get(sat.norad_id, {})
+            country = curated.get("country", "UNK")
         country_code = normalize_country(country)
         is_hostile = is_hostile_asset(
             norad_id=sat.norad_id,

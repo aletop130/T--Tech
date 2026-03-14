@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useState, useRef, useCallback, Suspense } from 'react';
+import { useEffect, useState, useRef, useCallback, Suspense, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import dynamic from 'next/dynamic';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Spinner, Tag, Icon, Button, Checkbox, Intent } from '@blueprintjs/core';
@@ -27,7 +28,6 @@ const GroundVehicleInfoCard = dynamic(() => import('@/components/CesiumMap/Groun
 const ConjunctionInfoCard = dynamic(() => import('@/components/CesiumMap/ConjunctionInfoCard').then(m => ({ default: m.ConjunctionInfoCard })), { ssr: false });
 const DebrisInstancedLayer = dynamic(() => import('@/components/CesiumMap/DebrisInstancedLayer').then(m => ({ default: m.DebrisInstancedLayer })), { ssr: false });
 const DebrisInfoCard = dynamic(() => import('@/components/CesiumMap/DebrisInfoCard').then(m => ({ default: m.DebrisInfoCard })), { ssr: false });
-const DebrisAddMenu = dynamic(() => import('@/components/CesiumMap/DebrisAddMenu').then(m => ({ default: m.DebrisAddMenu })), { ssr: false });
 const CelestrakBrowserDialog = dynamic(() => import('@/components/CesiumMap/CelestrakBrowserDialog').then(m => ({ default: m.CelestrakBrowserDialog })), { ssr: false });
 const OrbitalTrackLayer = dynamic(() => import('@/components/CesiumMap/OrbitalTrackLayer').then(m => ({ default: m.OrbitalTrackLayer })), { ssr: false });
 const MovingSatelliteMarker = dynamic(() => import('@/components/CesiumMap/MovingSatelliteMarker').then(m => ({ default: m.MovingSatelliteMarker })), { ssr: false });
@@ -97,6 +97,93 @@ const GROUP_COLORS = [
 const getGroupColor = (groupIndex: number): string =>
   GROUP_COLORS[groupIndex % GROUP_COLORS.length];
 
+/** Small portal-based tooltip that escapes overflow:hidden containers. */
+function GroupTooltip({ children, text }: { children: ReactNode; text: string }) {
+  const ref = useRef<HTMLSpanElement>(null);
+  const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
+
+  const show = useCallback(() => {
+    if (!ref.current) return;
+    const r = ref.current.getBoundingClientRect();
+    setPos({ x: r.right + 8, y: r.top + r.height / 2 });
+  }, []);
+
+  return (
+    <span ref={ref} onMouseEnter={show} onMouseLeave={() => setPos(null)} className="cursor-help">
+      {children}
+      {pos && createPortal(
+        <div
+          style={{
+            position: 'fixed',
+            left: pos.x,
+            top: pos.y,
+            transform: 'translateY(-50%)',
+            zIndex: 9999,
+            maxWidth: 280,
+            padding: '8px 12px',
+            borderRadius: 6,
+            backgroundColor: 'rgba(17,20,28,0.95)',
+            border: '1px solid rgba(255,255,255,0.1)',
+            boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
+            color: '#e2e8f0',
+            fontSize: 12,
+            lineHeight: 1.5,
+            pointerEvents: 'none',
+          }}
+        >
+          {text}
+        </div>,
+        document.body
+      )}
+    </span>
+  );
+}
+
+/** Descriptions shown on hover over satellite group names in the legend panel. */
+const GROUP_DESCRIPTIONS: Record<string, string> = {
+  // CelesTrak standard groups
+  'last-30-days':       'Objects launched in the last 30 days, tracked by CelesTrak.',
+  'stations':           'Crewed space stations and visiting vehicles (ISS, Tiangong, etc.).',
+  'visual':             'Brightest satellites visible to the naked eye.',
+  'active':             'All currently active/operational satellites.',
+  'analyst':            'Analyst-derived objects — orbits estimated from limited observations.',
+  'weather':            'Meteorological satellites for weather monitoring and forecasting.',
+  'noaa':               'NOAA polar-orbiting weather satellites (POES series).',
+  'goes':               'GOES geostationary weather satellites (NOAA/NASA).',
+  'resource':           'Earth observation satellites for resource monitoring.',
+  'sarsat':             'Search & Rescue satellite-aided tracking (COSPAS-SARSAT).',
+  'geo':                'Geostationary orbit satellites (~35,786 km altitude).',
+  'intelsat':           'Intelsat commercial communications constellation.',
+  'ses':                'SES commercial communications constellation.',
+  'starlink':           'SpaceX Starlink broadband internet mega-constellation.',
+  'oneweb':             'OneWeb broadband internet constellation.',
+  'iridium-NEXT':       'Iridium NEXT mobile communications constellation.',
+  'orbcomm':            'Orbcomm machine-to-machine communication satellites.',
+  'globalstar':         'Globalstar mobile satellite communications constellation.',
+  'amateur':            'Amateur radio (HAM) satellites.',
+  'gnss':               'Global Navigation Satellite Systems (GPS, GLONASS, Galileo, BeiDou).',
+  'gps-ops':            'U.S. GPS operational navigation satellites.',
+  'glo-ops':            'Russian GLONASS operational navigation satellites.',
+  'galileo':            'European Galileo navigation constellation.',
+  'beidou':             'Chinese BeiDou navigation constellation.',
+  'science':            'Space science and Earth observation research satellites.',
+  'geodetic':           'Geodetic satellites for precise Earth measurements.',
+  'engineering':        'Technology demonstration and engineering test satellites.',
+  'education':          'Educational and university-built satellites.',
+  'military':           'Known military and defense-related satellites.',
+  'cubesat':            'CubeSats — miniaturized satellites (typically 1–12 U).',
+  'radar':              'Radar calibration target objects.',
+  'other':              'Miscellaneous tracked objects.',
+  // Debris sub-groups
+  'cosmos-1408-debris': 'Debris from 2021 Russian ASAT test on COSMOS 1408.',
+  'fengyun-1c-debris':  'Debris from 2007 Chinese ASAT test on Fengyun 1C.',
+  'iridium-33-debris':  'Debris from 2009 Iridium 33 / COSMOS 2251 collision.',
+  'cosmos-2251-debris': 'Debris from 2009 COSMOS 2251 / Iridium 33 collision.',
+  // Auto-inferred groups
+  'debris':             'Space debris — defunct objects, fragments and rocket bodies.',
+  'contacts':           'Unidentified contacts — detected objects not yet correlated to a known catalog entry.',
+  'Uncategorized':      'Objects with no assigned category.',
+};
 
 function MapPageContent() {
   const router = useRouter();
@@ -122,8 +209,12 @@ function MapPageContent() {
   const [vehicleDisplayMode, setVehicleDisplayMode] = useState<'points' | '3d'>('points');
   const [showTerrain, setShowTerrain] = useState(false);
   const [terrainAvailable, setTerrainAvailable] = useState(false);
+  const [photorealistic3D, setPhotorealistic3D] = useState(false);
   const [isSimulationMode, setIsSimulationMode] = useState(false);
   const [showGroundTrack, setShowGroundTrack] = useState(true);
+
+  // Camera tracking state — name of the entity currently locked by the camera
+  const [trackingEntityName, setTrackingEntityName] = useState<string | null>(null);
 
   // Per-satellite and per-group visibility
   const [hiddenSatellites, setHiddenSatellites] = useState<Set<string>>(new Set());
@@ -135,10 +226,26 @@ function MapPageContent() {
   // Multi-select satellites for chat context
   const [pinnedSatelliteIds, setPinnedSatelliteIds] = useState<Set<string>>(new Set());
 
+  // Batch delete state
+  const [deleteProgress, setDeleteProgress] = useState<{ total: number; done: boolean } | null>(null);
+
   // Debris visualization state
   const [debris, setDebris] = useState<DebrisObject[]>([]);
   const [debrisPositions, setDebrisPositions] = useState<InstanceType<CesiumModule['Cartesian3']>[]>([]);
   const [showDebris, setShowDebris] = useState(true);
+
+  // Sync showDebris toggle with hiddenGroups so SatelliteLayer also hides debris points+orbits
+  useEffect(() => {
+    setHiddenGroups((prev) => {
+      const next = new Set(prev);
+      if (!showDebris) {
+        next.add('debris');
+      } else {
+        next.delete('debris');
+      }
+      return next;
+    });
+  }, [showDebris]);
   const [showCollisionHeatmap, setShowCollisionHeatmap] = useState(false);
   const [selectedDebris, setSelectedDebris] = useState<DebrisObject | null>(null);
   const [speed, setSpeed] = useState(1);
@@ -150,10 +257,12 @@ const [maneuverStartMs, setManeuverStartMs] = useState<number | undefined>(undef
   const elementsPanel = useResizablePanel({ defaultWidth: 288, minWidth: 200, maxWidth: 600, direction: 'right' });
   const chatPanel = useResizablePanel({ defaultWidth: 384, minWidth: 300, maxWidth: 700, direction: 'left' });
 
-  // Live clock
-  const [clockStr, setClockStr] = useState(() => new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+  // Live clock — initialize empty to avoid hydration mismatch (server vs client time)
+  const [clockStr, setClockStr] = useState('');
   useEffect(() => {
-    const t = setInterval(() => setClockStr(new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' })), 1000);
+    const fmt = () => new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    setClockStr(fmt());
+    const t = setInterval(() => setClockStr(fmt()), 1000);
     return () => clearInterval(t);
   }, []);
   const [orbitTrack, setOrbitTrack] = useState<OrbitTrackState | null>(null);
@@ -253,8 +362,18 @@ const DEBRIS_ORBIT_CLASSES = "LEO";
   const flyToSatellite = useCallback((sat: Satellite) => {
     if (!viewer) return;
     const entityId = `satellite-${sat.id}`;
-    cesiumController.dispatch({ type: 'cesium.flyTo', payload: { entityId } });
-  }, [viewer]);
+    // Include orbit coordinates as fallback in case entity isn't in viewer yet
+    const orbit = orbits.find((o) => o.satellite_id === sat.id);
+    const pos = orbit?.positions?.[0];
+    const payload: Record<string, unknown> = { entityId };
+    if (pos) {
+      payload.longitude = pos.lon;
+      payload.latitude = pos.lat;
+      payload.altitude = pos.alt * 1000;
+    }
+    cesiumController.dispatch({ type: 'cesium.flyTo', payload });
+    setTrackingEntityName(sat.name);
+  }, [viewer, orbits]);
 
   const flyToDebris = useCallback((debrisObj: DebrisObject) => {
     if (!viewer) return;
@@ -280,14 +399,65 @@ const DEBRIS_ORBIT_CLASSES = "LEO";
     });
   }, [viewer]);
 
-  // Handle highlight parameter from explorer
+  // Unlock camera tracking without moving the camera
+  const unlockTracking = useCallback(() => {
+    if (!viewer) return;
+    viewer.trackedEntity = undefined;
+    viewer.selectedEntity = undefined;
+    setTrackingEntityName(null);
+  }, [viewer]);
+
+  // Reset view to default Earth overview
+  const resetView = useCallback(async () => {
+    if (!viewer) return;
+    const Cesium = await getCesium();
+    viewer.trackedEntity = undefined;
+    viewer.selectedEntity = undefined;
+    setTrackingEntityName(null);
+    setSelectedSatellite(null);
+    viewer.camera.flyTo({
+      destination: Cesium.Cartesian3.fromDegrees(12.5, 42.0, 20_000_000),
+      orientation: {
+        heading: 0,
+        pitch: Cesium.Math.toRadians(-90),
+        roll: 0,
+      },
+      duration: 1.5,
+    });
+  }, [viewer]);
+
+  // Fly to a top-down view of a geographic region
+  const flyToRegion = useCallback(async (lon: number, lat: number, alt: number) => {
+    if (!viewer) return;
+    const Cesium = await getCesium();
+    viewer.trackedEntity = undefined;
+    viewer.selectedEntity = undefined;
+    setTrackingEntityName(null);
+    viewer.camera.flyTo({
+      destination: Cesium.Cartesian3.fromDegrees(lon, lat, alt),
+      orientation: {
+        heading: 0,
+        pitch: Cesium.Math.toRadians(-90),
+        roll: 0,
+      },
+      duration: 1.5,
+    });
+  }, [viewer]);
+
+  // Handle highlight parameter from explorer (by ID or NORAD ID)
   useEffect(() => {
+    if (satellites.length === 0 || !viewer) return;
+
     const highlightId = searchParams.get('highlight');
-    if (highlightId && satellites.length > 0 && viewer) {
+    if (highlightId) {
       const sat = satellites.find((s) => s.id === highlightId);
-      if (sat) {
-        flyToSatellite(sat);
-      }
+      if (sat) flyToSatellite(sat);
+    }
+
+    const highlightNorad = searchParams.get('highlight_norad');
+    if (highlightNorad) {
+      const sat = satellites.find((s) => s.norad_id === Number(highlightNorad));
+      if (sat) flyToSatellite(sat);
     }
   }, [searchParams, satellites, viewer]);
 
@@ -570,11 +740,11 @@ const loadDebris = async () => {
 
     try {
       const satrec = satelliteModule.twoline2satrec(tleLine1, tleLine2);
-      const numPoints = 100;
+      const numPoints = 180;
       const now = new Date();
       const radToDeg = (radians: number) => radians * (180 / Math.PI);
-      
-      // Generate positions for one full orbit
+
+      // Generate positions for ~2 full orbits (180 min covers 2× LEO period)
       for (let i = 0; i < numPoints; i++) {
         const time = new Date(now.getTime() + i * 60000); // Every minute
         const positionAndVelocity = satelliteModule.propagate(satrec, time);
@@ -650,21 +820,20 @@ const loadDebris = async () => {
       if (cesiumViewer.selectedEntityChanged && typeof cesiumViewer.selectedEntityChanged.addEventListener === 'function') {
         cesiumViewer.selectedEntityChanged.addEventListener((selectedEntity) => {
           if (selectedEntity && selectedEntity.position) {
-            // Check if entity has valid position before flying
+            // Check if entity has valid position before tracking
             try {
               const position = selectedEntity.position.getValue(cesiumViewer.clock.currentTime);
               if (position && Cesium.Cartesian3.equals(position, Cesium.Cartesian3.ZERO) === false) {
-                cesiumViewer.flyTo(selectedEntity, {
-                  duration: 2,
-                  offset: new Cesium.HeadingPitchRange(
-                    Cesium.Math.toRadians(0),
-                    Cesium.Math.toRadians(-90),
-                    10000
-                  )
-                });
+                // Use trackedEntity so the satellite becomes the center of rotation
+                // when the user orbits the camera with mouse/trackpad
+                cesiumViewer.trackedEntity = selectedEntity;
+                const eName = typeof selectedEntity.name === 'string'
+                  ? selectedEntity.name
+                  : selectedEntity.name?.getValue?.(cesiumViewer.clock.currentTime) ?? selectedEntity.id ?? null;
+                setTrackingEntityName(eName);
               }
             } catch (e) {
-              console.warn('Could not fly to selected entity:', e);
+              console.warn('Could not track selected entity:', e);
             }
 
             // Check if selected entity is a satellite and update selection state
@@ -676,6 +845,9 @@ const loadDebris = async () => {
               }
             }
           }
+          // Do NOT clear trackedEntity when clicking empty space —
+          // the user should use the explicit "Reset View" button instead.
+          // This prevents losing lock when dragging the mouse.
         });
       }
     }, []);
@@ -683,16 +855,6 @@ const loadDebris = async () => {
 
   return (
     <div className="h-full w-full relative overflow-hidden">
-
-          {showDebris && (
-            <DebrisInstancedLayer
-              viewer={viewer}
-              debris={debris}
-              maxDisplayObjects={2500}
-              refreshIntervalMs={15000}
-              showDebris={showDebris}
-            />
-          )}
       {/* Map - Full Background */}
       <div className="absolute inset-0 z-0">
         {loading ? (
@@ -704,6 +866,7 @@ const loadDebris = async () => {
             <CesiumViewer
               className="w-full h-full"
               onViewerReady={handleViewerReady}
+              photorealistic3D={photorealistic3D}
             />
 
             {/* Earth Layers */}
@@ -755,7 +918,7 @@ const loadDebris = async () => {
                     visible={showCollisionHeatmap}
                   />
                 )}
-                {!isSimulationMode && (
+                {!isSimulationMode && showDebris && (
                   <DebrisInstancedLayer
                     viewer={viewer}
                     debris={debris}
@@ -995,7 +1158,101 @@ const loadDebris = async () => {
                     labelElement={<span className="text-xs text-sda-text-secondary">Track</span>} />
                   <Checkbox checked={showCollisionHeatmap} onChange={(e) => setShowCollisionHeatmap(e.currentTarget.checked)}
                     labelElement={<span className="text-xs text-sda-text-secondary">Collision</span>} />
-                  <DebrisAddMenu debrisCount={debris.length} />
+                </div>
+              </div>
+
+              <div className="w-px h-6 bg-sda-border-default" />
+
+              {/* ── Group: Visualization ── */}
+              <div className="control-group" role="group" aria-label="Visualization mode">
+                <span className="control-group-label">Visualization</span>
+                <div className="flex items-center gap-2">
+                  <div className="flex items-center rounded overflow-hidden border border-sda-border-default">
+                    <button
+                      className={`control-seg-btn-sm ${!photorealistic3D ? 'control-seg-btn-active' : ''}`}
+                      onClick={() => setPhotorealistic3D(false)}
+                      title="Standard satellite imagery globe"
+                    >Globe</button>
+                    <button
+                      className={`control-seg-btn-sm ${photorealistic3D ? 'control-seg-btn-active' : ''}`}
+                      onClick={() => setPhotorealistic3D(true)}
+                      title="Google Photorealistic 3D Tiles — realistic buildings and terrain"
+                    >3D Photo</button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="w-px h-6 bg-sda-border-default" />
+
+              {/* ── Group: Views ── */}
+              <div className="control-group" role="group" aria-label="Camera views">
+                <span className="control-group-label">Views</span>
+                <div className="flex items-center gap-2">
+                  {trackingEntityName && (
+                    <Button
+                      icon="unlock"
+                      minimal
+                      small
+                      className="control-btn"
+                      onClick={unlockTracking}
+                      title="Unlock camera from satellite"
+                    >
+                      <span className="flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 rounded-full bg-sda-accent-cyan animate-pulse" />
+                        <span className="max-w-[100px] truncate">{trackingEntityName}</span>
+                      </span>
+                    </Button>
+                  )}
+                  <Button
+                    icon="globe"
+                    minimal
+                    small
+                    className="control-btn"
+                    onClick={resetView}
+                    title="Reset to Earth overview"
+                  >
+                    Reset
+                  </Button>
+                  <Button
+                    icon="path-search"
+                    minimal
+                    small
+                    className="control-btn"
+                    onClick={() => flyToRegion(12.8, 42.5, 1_800_000)}
+                    title="Italy view"
+                  >
+                    IT
+                  </Button>
+                  <Button
+                    icon="path-search"
+                    minimal
+                    small
+                    className="control-btn"
+                    onClick={() => flyToRegion(12.5, 50.0, 3_000_000)}
+                    title="Europe view"
+                  >
+                    EU
+                  </Button>
+                  <Button
+                    icon="path-search"
+                    minimal
+                    small
+                    className="control-btn"
+                    onClick={() => flyToRegion(-95.0, 38.0, 5_000_000)}
+                    title="North America view"
+                  >
+                    NA
+                  </Button>
+                  <Button
+                    icon="path-search"
+                    minimal
+                    small
+                    className="control-btn"
+                    onClick={() => flyToRegion(105.0, 35.0, 5_000_000)}
+                    title="Asia-Pacific view"
+                  >
+                    APAC
+                  </Button>
                 </div>
               </div>
             </>
@@ -1035,10 +1292,64 @@ const loadDebris = async () => {
             <div className="flex flex-col h-full">
               <>
                 <div className="p-3 border-b border-sda-border-default">
-                  <span className="text-sm font-semibold text-sda-text-primary flex items-center gap-2">
-                    <Icon icon="satellite" className="text-sda-accent-cyan" />
-                    Elements ({satellites.length})
-                  </span>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-semibold text-sda-text-primary flex items-center gap-2">
+                      <Icon icon="satellite" className="text-sda-accent-cyan" />
+                      Elements ({satellites.length})
+                    </span>
+                    {pinnedSatelliteIds.size > 0 && !deleteProgress && (
+                      <button
+                        title="Delete selected satellites"
+                        className="flex items-center gap-1 px-2 py-1 text-xs rounded bg-red-500/10 hover:bg-red-500/20 text-red-400 hover:text-red-300 border border-red-500/20 transition-colors"
+                        onClick={async () => {
+                          const count = pinnedSatelliteIds.size;
+                          if (!confirm(`Delete ${count} selected satellite${count > 1 ? 's' : ''}? This action cannot be undone.`)) return;
+                          const idsToDelete = [...pinnedSatelliteIds];
+                          setDeleteProgress({ total: count, done: false });
+                          try {
+                            const result = await api.batchDeleteSatellites(idsToDelete);
+                            // Update local state immediately
+                            const deletedSet = new Set(idsToDelete);
+                            setSatellites(prev => prev.filter(s => !deletedSet.has(s.id)));
+                            setPinnedSatelliteIds(new Set());
+                            if (selectedSatellite && deletedSet.has(selectedSatellite.id)) {
+                              setSelectedSatellite(null);
+                            }
+                            setDeleteProgress({ total: count, done: true });
+                            // Refresh all data to sync with server
+                            await loadData(true);
+                            if (result.errors.length > 0) {
+                              console.warn('Batch delete partial errors:', result.errors);
+                            }
+                          } catch (err) {
+                            console.error('Failed to delete satellites:', err);
+                            // Even on error, refresh to get accurate state
+                            await loadData(true);
+                          } finally {
+                            setTimeout(() => setDeleteProgress(null), 1200);
+                          }
+                        }}
+                      >
+                        <Icon icon="trash" size={12} />
+                        <span>Delete ({pinnedSatelliteIds.size})</span>
+                      </button>
+                    )}
+                    {deleteProgress && (
+                      <div className="flex items-center gap-2 px-2 py-1 text-xs rounded bg-red-500/10 border border-red-500/20 text-red-300">
+                        {deleteProgress.done ? (
+                          <>
+                            <Icon icon="tick-circle" size={12} className="text-green-400" />
+                            <span>Deleted {deleteProgress.total}</span>
+                          </>
+                        ) : (
+                          <>
+                            <Spinner size={12} />
+                            <span>Deleting {deleteProgress.total}...</span>
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </div>
                 <div className="flex-1 overflow-auto p-3">
                   {/* Satellites grouped by CelesTrak tag */}
@@ -1060,17 +1371,39 @@ const loadDebris = async () => {
                     const groupNames = Object.keys(grouped);
                     return groupNames.map((group, groupIdx) => {
                       const groupSats = grouped[group];
-                      const color = getGroupColor(groupIdx);
+                      const color = group === 'debris' ? '#f59e0b' : getGroupColor(groupIdx);
                       const isGroupHidden = hiddenGroups.has(group);
                       const isGroupOrbitsHidden = hiddenGroupOrbits.has(group);
+                      const allGroupPinned = groupSats.length > 0 && groupSats.every(s => pinnedSatelliteIds.has(s.id));
+                      const someGroupPinned = groupSats.some(s => pinnedSatelliteIds.has(s.id));
                       return (
                         <div key={group} className="mb-3">
                           <div className="flex items-center gap-2 mb-1">
+                            <input
+                              type="checkbox"
+                              checked={allGroupPinned}
+                              ref={(el) => { if (el) el.indeterminate = someGroupPinned && !allGroupPinned; }}
+                              title={allGroupPinned ? 'Deselect all in group' : 'Select all in group'}
+                              className="w-3 h-3 rounded accent-cyan-500 cursor-pointer flex-shrink-0"
+                              onChange={() => {
+                                setPinnedSatelliteIds(prev => {
+                                  const next = new Set(prev);
+                                  if (allGroupPinned) {
+                                    groupSats.forEach(s => next.delete(s.id));
+                                  } else {
+                                    groupSats.forEach(s => next.add(s.id));
+                                  }
+                                  return next;
+                                });
+                              }}
+                            />
                             <Icon icon="folder-close" size={14} style={{ color }} />
-                            <span className="text-sm font-semibold flex items-center gap-1" style={{ color }}>
-                              <span className="w-2 h-2 rounded-full" style={{ backgroundColor: color }}></span>
-                              {group}
-                            </span>
+                            <GroupTooltip text={GROUP_DESCRIPTIONS[group] || `Satellite group: ${group}`}>
+                              <span className="text-sm font-semibold flex items-center gap-1" style={{ color }}>
+                                <span className="w-2 h-2 rounded-full" style={{ backgroundColor: color }}></span>
+                                {group}
+                              </span>
+                            </GroupTooltip>
                             <div className="ml-auto flex items-center gap-1">
                               <button
                                 title={isGroupHidden ? 'Show group' : 'Hide group'}
@@ -1194,49 +1527,6 @@ const loadDebris = async () => {
                       );
                     });
                   })()}
-
-                   {/* Debris Folder */}
-                   <div>
-                     <div className="flex items-center gap-2 mb-1">
-                       <Icon icon="folder-close" className="text-amber-500" size={14} />
-                       <span className="text-sm font-semibold text-amber-500 flex items-center gap-1">
-                         <span className="w-2 h-2 rounded-full" style={{ backgroundColor: '#f59e0b' }}></span>
-                         Space Debris
-                       </span>
-                       <Tag minimal intent="warning" className="ml-auto">{debris.length}</Tag>
-                     </div>
-                     <div className="space-y-1 ml-4 border-l-2 border-amber-500 pl-2 max-h-60 overflow-auto">
-                       {[...debris]
-                         .sort((a, b) => a.altKm - b.altKm)
-                         .slice(0, expandedGroups.has('__debris__') ? debris.length : 10)
-                         .map((d) => (
-                           <div
-                             key={d.noradId}
-                             className={`p-2 text-sm hover:bg-sda-bg-tertiary rounded cursor-pointer ${selectedDebris?.noradId === d.noradId ? 'bg-sda-bg-tertiary' : ''}`}
-                             onClick={() => flyToDebris(d)}
-                           >
-                             <div className="flex items-center justify-between">
-                               <span className="font-medium">NORAD {d.noradId}</span>
-                               <Tag minimal intent="warning">{d.altKm.toFixed(1)} km</Tag>
-                             </div>
-                           </div>
-                         ))}
-                       {debris.length > 10 && (
-                         <button
-                           className="p-2 text-xs text-sda-accent-blue hover:text-sda-text-primary hover:bg-sda-bg-tertiary rounded w-full text-left cursor-pointer"
-                           onClick={() => setExpandedGroups(prev => {
-                             const next = new Set(prev);
-                             if (next.has('__debris__')) next.delete('__debris__'); else next.add('__debris__');
-                             return next;
-                           })}
-                         >
-                           {expandedGroups.has('__debris__')
-                             ? 'Show less'
-                             : `+${debris.length - 10} more`}
-                         </button>
-                       )}
-                     </div>
-                   </div>
 
                    {/* Ground Stations */}
                   <div className="mt-4 pt-4 border-t border-sda-border-default">

@@ -174,13 +174,25 @@ export interface RiskSnapshot {
   satellite_id: string;
   satellite_name?: string;
   risk_score: number;
+  risk_level?: string;
+  dominant_threat?: string;
   timestamp: number;
   components: Record<string, number>;
+}
+
+export interface FleetRiskSummary {
+  total: number;
+  critical: number;
+  high: number;
+  medium: number;
+  low: number;
+  average_risk: number;
 }
 
 export interface FleetRiskCurrent {
   satellites: RiskSnapshot[];
   computed_at: number;
+  summary?: FleetRiskSummary;
 }
 
 // --- Comms ---

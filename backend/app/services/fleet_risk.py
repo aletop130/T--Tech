@@ -17,6 +17,17 @@ from app.core.logging import get_logger
 logger = get_logger(__name__)
 
 
+def _risk_level(score: float) -> str:
+    """Classify risk score into severity level."""
+    if score >= 0.8:
+        return "critical"
+    if score >= 0.6:
+        return "high"
+    if score >= 0.3:
+        return "medium"
+    return "low"
+
+
 class FleetRiskService:
     """Aggregates risk from all threat modes per satellite."""
 
@@ -80,19 +91,41 @@ class FleetRiskService:
         now = time.time()
         satellites = []
         for sat_id, data in risk_map.items():
+            risk_score = round(data["risk"], 4)
+            level = _risk_level(risk_score)
+            # Identify the dominant threat component
+            comps = data["components"]
+            dominant = max(comps, key=comps.get) if comps else None
             satellites.append({
                 "satellite_id": sat_id,
                 "satellite_name": data.get("name", sat_id),
-                "risk_score": round(data["risk"], 4),
+                "risk_score": risk_score,
+                "risk_level": level,
+                "dominant_threat": dominant,
                 "timestamp": now,
-                "components": {k: round(v, 4) for k, v in data["components"].items()},
+                "components": {k: round(v, 4) for k, v in comps.items()},
             })
 
         satellites.sort(key=lambda s: -s["risk_score"])
 
+        # Compute summary statistics
+        levels = {"critical": 0, "high": 0, "medium": 0, "low": 0}
+        for s in satellites:
+            levels[s["risk_level"]] = levels.get(s["risk_level"], 0) + 1
+
+        avg_risk = round(sum(s["risk_score"] for s in satellites) / max(len(satellites), 1), 4)
+
         return {
             "satellites": satellites,
             "computed_at": now,
+            "summary": {
+                "total": len(satellites),
+                "critical": levels["critical"],
+                "high": levels["high"],
+                "medium": levels["medium"],
+                "low": levels["low"],
+                "average_risk": avg_risk,
+            },
         }
 
     async def get_satellite_timeline(

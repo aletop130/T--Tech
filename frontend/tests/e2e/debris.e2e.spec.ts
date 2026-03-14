@@ -48,10 +48,6 @@ test.skip('Debris visualization E2E', async ({ page }) => {
   const firstDebrisItem = page.locator('text=NORAD 12345');
   await expect(firstDebrisItem).toBeVisible();
 
-  // Verify the debris counter shows the correct count (2 objects)
-  const debrisCounter = page.locator('span:has-text("Debris:")');
-  await expect(debrisCounter).toContainText('Debris: 2');
-
   // Toggle debris visibility using the checkbox
   const debrisCheckbox = page.getByLabel('Debris');
   await expect(debrisCheckbox).toBeChecked();
