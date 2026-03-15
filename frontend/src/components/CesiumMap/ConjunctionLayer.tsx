@@ -62,7 +62,7 @@ export function ConjunctionLayer({
             clampToGround: false,
           },
           description: `
-            <div style="font-family: 'IBM Plex Sans', sans-serif;">
+            <div style="font-family: 'Google Sans', sans-serif;">
               <h3>Conjunction Alert</h3>
               <p><strong>Risk Level:</strong> ${conj.risk_level}</p>
               <p><strong>Miss Distance:</strong> ${conj.miss_distance_km.toFixed(2)} km</p>
@@ -80,7 +80,7 @@ export function ConjunctionLayer({
           position: midpoint,
           label: {
             text: `⚠ ${conj.risk_level.toUpperCase()}`,
-            font: '14px IBM Plex Sans',
+            font: '14px Google Sans',
             fillColor: Cesium.Color.RED,
             outlineColor: Cesium.Color.WHITE,
             outlineWidth: 3,

@@ -239,10 +239,10 @@ Rules:
 - For actor labels: if the user gives a name, use it. Otherwise generate a short descriptive name.
 - Location must be a place name (city, country, base name, sea, region). The system geocodes it.
 - For satellites, if the user mentions an altitude or orbit, set altitude_km. Otherwise default to 400.
-- For aircraft default speed_ms=250, ships default speed_ms=15, ground vehicles default speed_ms=20, missiles default speed_ms=800.
+- For aircraft default speed_ms=250, drones default speed_ms=85, ships default speed_ms=15, ground vehicles default speed_ms=20, missiles default speed_ms=800.
 - "tracking station" or "station" → actor_type "ground_station".
 - "defended zone" or "defense zone" → actor_type "defended_zone".
-- "drone" → actor_type "aircraft".
+- "drone" → actor_type "drone".
 - "convoy" → actor_type "ground_vehicle".
 
 Movement & heading:
@@ -273,10 +273,22 @@ Runtime control:
 - "pause" → control_simulation(action="pause").
 - "resume" → control_simulation(action="resume").
 
+Duration / time:
+- "run for 10 minutes" or "simulate 1 hour" or "duration 30 minutes" → control_simulation(action="set_duration", duration_seconds=N) where N is in seconds (e.g. 600 for 10 min, 3600 for 1 hour).
+- "run for 2 hours at 10x" → THREE calls: set_duration(7200) + set_speed(10) + start.
+- The simulation auto-pauses when the duration is reached.
+- Common conversions: 1 min = 60s, 5 min = 300s, 10 min = 600s, 30 min = 1800s, 1 hour = 3600s, 6 hours = 21600s, 12 hours = 43200s, 1 day = 86400s.
+
 Multiple actors:
 - "2 aircraft" or "3 ships" → create that many with numbered labels.
 - IMPORTANT: give each one a DIFFERENT nearby location so they don't stack.
   Example: "3 ships in the Adriatic" → one near Dubrovnik, one near Bari, one near Split.
+
+Ground planning overlays:
+- "objective at X" or "place marker at X" → place_marker. Infer marker_type from context (objective, rally_point, op, hq, checkpoint).
+- "attack axis from X to Y to Z" or "draw route from X to Y" → draw_route. Types: attack_axis, retreat_route, patrol_route, supply_route, phase_line.
+- "mark area at X, Y, Z" or "kill zone at X, Y, Z" or "area of operations covering X, Y, Z" → draw_area. Types: ao, kill_zone, safe_zone, restricted, objective_area. Min 3 vertices.
+- Default faction for overlays: "allied" if user says "our"/"friendly", "hostile" if enemy, else "neutral".
 
 Respond with tool calls ONLY. Do not add text. Every user intent = a tool call.
 """
@@ -294,7 +306,7 @@ SANDBOX_TOOLS: list[dict[str, Any]] = [
                         "type": "string",
                         "enum": [
                             "base", "ground_station", "defended_zone",
-                            "ground_vehicle", "aircraft", "ship",
+                            "ground_vehicle", "aircraft", "drone", "ship",
                             "satellite", "missile", "interceptor", "sensor",
                         ],
                     },
@@ -337,15 +349,16 @@ SANDBOX_TOOLS: list[dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "control_simulation",
-            "description": "Control the sandbox simulation (start, pause, resume, reset, set_speed).",
+            "description": "Control the sandbox simulation (start, pause, resume, reset, set_speed, set_duration).",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "action": {
                         "type": "string",
-                        "enum": ["start", "pause", "resume", "reset", "set_speed"],
+                        "enum": ["start", "pause", "resume", "reset", "set_speed", "set_duration"],
                     },
                     "speed_multiplier": {"type": "number", "description": "Speed multiplier (e.g. 10 for 10x)"},
+                    "duration_seconds": {"type": "number", "description": "Total simulation duration in seconds. The sim auto-pauses when this time is reached. E.g. 3600 for 1 hour, 300 for 5 minutes."},
                 },
                 "required": ["action"],
             },
@@ -413,6 +426,87 @@ SANDBOX_TOOLS: list[dict[str, Any]] = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "place_marker",
+            "description": "Place a tactical marker overlay at a location on the map.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "marker_type": {
+                        "type": "string",
+                        "enum": ["objective", "rally_point", "op", "hq", "checkpoint"],
+                        "description": "Type of tactical marker",
+                    },
+                    "label": {"type": "string", "description": "Name for the marker"},
+                    "location": {"type": "string", "description": "Place name to geocode"},
+                    "faction": {
+                        "type": "string",
+                        "enum": ["allied", "hostile", "neutral", "unknown"],
+                        "default": "neutral",
+                    },
+                },
+                "required": ["marker_type", "label", "location"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "draw_route",
+            "description": "Draw a tactical route / axis between waypoint locations on the map.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "route_type": {
+                        "type": "string",
+                        "enum": ["attack_axis", "retreat_route", "patrol_route", "supply_route", "phase_line"],
+                    },
+                    "label": {"type": "string", "description": "Name for the route"},
+                    "waypoints": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Ordered list of place names forming the route (min 2)",
+                    },
+                    "faction": {
+                        "type": "string",
+                        "enum": ["allied", "hostile", "neutral", "unknown"],
+                        "default": "neutral",
+                    },
+                },
+                "required": ["route_type", "label", "waypoints"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "draw_area",
+            "description": "Draw a tactical area polygon on the map bounded by vertex locations.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "area_type": {
+                        "type": "string",
+                        "enum": ["ao", "kill_zone", "safe_zone", "restricted", "objective_area"],
+                    },
+                    "label": {"type": "string", "description": "Name for the area"},
+                    "vertices": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Ordered list of place names forming polygon boundary (min 3)",
+                    },
+                    "faction": {
+                        "type": "string",
+                        "enum": ["allied", "hostile", "neutral", "unknown"],
+                        "default": "neutral",
+                    },
+                },
+                "required": ["area_type", "label", "vertices"],
+            },
+        },
+    },
 ]
 
 # Map actor_type from tool call → (actor_class, actor_type) for the DB
@@ -422,6 +516,7 @@ _TOOL_ACTOR_CLASS_MAP: dict[str, tuple[str, str]] = {
     "defended_zone": ("effect", "defended_zone"),
     "ground_vehicle": ("mobile_ground", "ground_vehicle"),
     "aircraft": ("air", "aircraft"),
+    "drone": ("air", "aircraft"),
     "ship": ("sea", "ship"),
     "satellite": ("orbital", "satellite"),
     "missile": ("weapon", "missile"),
@@ -487,6 +582,7 @@ class SandboxService:
             status="draft",
             is_saved=data.is_saved,
             initial_prompt=data.initial_prompt,
+            duration_seconds=data.duration_seconds,
             created_by=user_id,
             updated_by=user_id,
         )
@@ -608,17 +704,29 @@ class SandboxService:
             actor.visual_config = deepcopy(data.visual_config)
         if data.capabilities is not None:
             actor.capabilities = deepcopy(data.capabilities)
+        next_behavior = (
+            deepcopy(actor.behavior)
+            if isinstance(actor.behavior, dict) and actor.behavior
+            else {"type": "hold"}
+        )
         if data.behavior is not None:
-            actor.behavior = deepcopy(data.behavior)
+            next_behavior = deepcopy(data.behavior)
         if data.state is not None:
             normalized_state = self._normalize_actor_state(
                 actor.actor_class,
                 actor.actor_type,
                 data.state,
-                actor.behavior,
+                next_behavior,
             )
             actor.state = normalized_state
             actor.initial_state = deepcopy(normalized_state)
+            actor.behavior = deepcopy(next_behavior)
+        elif data.behavior is not None:
+            current_state = actor.state if isinstance(actor.state, dict) else {}
+            actor.behavior = self._normalize_actor_behavior(
+                current_state.get("position", {}),
+                next_behavior,
+            )
 
         actor.updated_by = user_id
         await self.db.flush()
@@ -712,6 +820,11 @@ class SandboxService:
                 raise ValidationError("time_multiplier is required for set_speed")
             session.time_multiplier = request.time_multiplier
             summary = f"Set sandbox speed to {request.time_multiplier}x"
+        elif request.action == "set_duration":
+            if request.duration_seconds is None:
+                raise ValidationError("duration_seconds is required for set_duration")
+            session.duration_seconds = request.duration_seconds
+            summary = f"Set sandbox duration to {request.duration_seconds}s"
         elif request.action == "reset":
             session.status = "draft"
             session.current_time_seconds = 0.0
@@ -746,19 +859,28 @@ class SandboxService:
             return await self.get_snapshot(session_id, tenant_id, user_id)
 
         effective_delta = request.delta_seconds * session.time_multiplier
-        session.current_time_seconds += effective_delta
+
+        # Clamp to duration if set
+        if session.duration_seconds and session.current_time_seconds + effective_delta >= session.duration_seconds:
+            effective_delta = max(0, session.duration_seconds - session.current_time_seconds)
+            session.current_time_seconds = session.duration_seconds
+            session.status = "paused"
+        else:
+            session.current_time_seconds += effective_delta
+
         session.updated_by = user_id
 
-        actors = await self._list_actors(session.id, tenant_id)
-        for actor in actors:
-            actor.state = self._advance_actor_state(
-                actor=actor,
-                state=deepcopy(actor.state),
-                delta_seconds=effective_delta,
-                session_time_seconds=session.current_time_seconds,
-                all_actors=actors,
-            )
-            actor.updated_by = user_id
+        if effective_delta > 0:
+            actors = await self._list_actors(session.id, tenant_id)
+            for actor in actors:
+                actor.state = self._advance_actor_state(
+                    actor=actor,
+                    state=deepcopy(actor.state),
+                    delta_seconds=effective_delta,
+                    session_time_seconds=session.current_time_seconds,
+                    all_actors=actors,
+                )
+                actor.updated_by = user_id
 
         await self.db.flush()
         return await self.get_snapshot(session_id, tenant_id, user_id)
@@ -1138,6 +1260,12 @@ class SandboxService:
                 all_locations.append(args["destination"])
             if tc.function.name == "patrol_actor":
                 all_locations.extend(args.get("waypoints", []))
+            if tc.function.name == "place_marker" and args.get("location"):
+                all_locations.append(args["location"])
+            if tc.function.name == "draw_route":
+                all_locations.extend(args.get("waypoints", []))
+            if tc.function.name == "draw_area":
+                all_locations.extend(args.get("vertices", []))
         if all_locations:
             await asyncio.gather(*[_geocode(loc) for loc in all_locations])
 
@@ -1209,6 +1337,30 @@ class SandboxService:
                     applied_commands.append(f"rename:{result}")
                     messages_parts.append(f"Session: {result}.")
 
+                elif func_name == "place_marker":
+                    result = await self._exec_place_marker(
+                        session=session, session_id=session_id,
+                        tenant_id=tenant_id, user_id=user_id, args=func_args,
+                    )
+                    applied_commands.append(f"place_marker:{result}")
+                    messages_parts.append(f"Placed marker: {result}.")
+
+                elif func_name == "draw_route":
+                    result = await self._exec_draw_route(
+                        session=session, session_id=session_id,
+                        tenant_id=tenant_id, user_id=user_id, args=func_args,
+                    )
+                    applied_commands.append(f"draw_route:{result}")
+                    messages_parts.append(f"Drew route: {result}.")
+
+                elif func_name == "draw_area":
+                    result = await self._exec_draw_area(
+                        session=session, session_id=session_id,
+                        tenant_id=tenant_id, user_id=user_id, args=func_args,
+                    )
+                    applied_commands.append(f"draw_area:{result}")
+                    messages_parts.append(f"Drew area: {result}.")
+
                 else:
                     errors.append(f"Unknown function: {func_name}")
 
@@ -1247,6 +1399,7 @@ class SandboxService:
         # Resolve class
         class_info = _TOOL_ACTOR_CLASS_MAP.get(actor_type, ("fixed_ground", actor_type))
         actor_class, db_actor_type = class_info
+        actor_subtype = "drone" if actor_type == "drone" else None
 
         # Geocode location + add small random spread (~0.3° ≈ 30km) to prevent stacking
         coords = await _geocode(location_name) if location_name else None
@@ -1275,10 +1428,12 @@ class SandboxService:
             }
             behavior = {"type": "orbit_keep"}
         else:
-            default_alt = 8500.0 if actor_class == "air" else 0.0
+            default_alt = 2500.0 if actor_subtype == "drone" else 8500.0 if actor_class == "air" else 0.0
             state = {"position": {"lat": lat, "lon": lon, "alt_m": default_alt}}
             if speed_ms is not None:
                 state["speed_ms"] = speed_ms
+            elif actor_subtype == "drone":
+                state["speed_ms"] = 85.0
             elif actor_class == "air":
                 state["speed_ms"] = 250.0
             elif actor_class == "sea":
@@ -1294,6 +1449,7 @@ class SandboxService:
         data = SandboxActorCreate(
             actor_class=actor_class,  # type: ignore[arg-type]
             actor_type=db_actor_type,
+            subtype=actor_subtype,
             faction=faction,  # type: ignore[arg-type]
             label=label,
             state=state,
@@ -1354,6 +1510,15 @@ class SandboxService:
                 SandboxSessionControlRequest(action="set_speed", time_multiplier=multiplier),
             )
             return f"speed:{multiplier:g}x"
+        elif action == "set_duration":
+            dur = args.get("duration_seconds")
+            if dur:
+                await self.control_session(
+                    session_id, tenant_id, user_id,
+                    SandboxSessionControlRequest(action="set_duration", duration_seconds=float(dur)),
+                )
+                return f"duration:{dur}s"
+            return "duration:unchanged"
         else:
             await self.control_session(
                 session_id, tenant_id, user_id,
@@ -1464,6 +1629,140 @@ class SandboxService:
         return ", ".join(parts) if parts else "no changes"
 
     # ------------------------------------------------------------------ #
+    #  Ground planning tool executors                                      #
+    # ------------------------------------------------------------------ #
+
+    async def _exec_place_marker(
+        self, session: SandboxSession, session_id: str,
+        tenant_id: str, user_id: str, args: dict,
+    ) -> str:
+        marker_type = args.get("marker_type", "objective")
+        label = args.get("label", "Marker")
+        location = args.get("location", "")
+        faction = args.get("faction", "neutral")
+
+        coords = await _geocode(location) if location else None
+        if not coords:
+            raise ValidationError(f"Could not geocode '{location}'")
+
+        item = SandboxScenarioItem(
+            session_id=session_id,
+            tenant_id=tenant_id,
+            item_type="overlay",
+            label=label,
+            source_type="tactical_marker",
+            payload={
+                "marker_type": marker_type,
+                "position": {"lat": coords[0], "lon": coords[1], "alt_m": 0},
+                "faction": faction,
+            },
+            created_by=user_id,
+            updated_by=user_id,
+        )
+        self.db.add(item)
+        await self.db.flush()
+        await self._log_command(
+            session=session,
+            command_type="tactical_marker_placed",
+            source="chat",
+            summary=f"Placed {marker_type} '{label}' at {location}",
+            payload={"item_id": str(item.id), "marker_type": marker_type},
+            user_id=user_id,
+        )
+        return f"{marker_type} '{label}' at {location}"
+
+    async def _exec_draw_route(
+        self, session: SandboxSession, session_id: str,
+        tenant_id: str, user_id: str, args: dict,
+    ) -> str:
+        route_type = args.get("route_type", "patrol_route")
+        label = args.get("label", "Route")
+        waypoint_names: list[str] = args.get("waypoints", [])
+        faction = args.get("faction", "neutral")
+
+        if len(waypoint_names) < 2:
+            raise ValidationError("draw_route requires at least 2 waypoints")
+
+        geo_results = await asyncio.gather(*[_geocode(wp) for wp in waypoint_names])
+        points: list[dict] = []
+        for i, coords in enumerate(geo_results):
+            if not coords:
+                raise ValidationError(f"Could not geocode waypoint '{waypoint_names[i]}'")
+            points.append({"lat": coords[0], "lon": coords[1], "alt_m": 0})
+
+        item = SandboxScenarioItem(
+            session_id=session_id,
+            tenant_id=tenant_id,
+            item_type="overlay",
+            label=label,
+            source_type="tactical_route",
+            payload={
+                "route_type": route_type,
+                "points": points,
+                "faction": faction,
+            },
+            created_by=user_id,
+            updated_by=user_id,
+        )
+        self.db.add(item)
+        await self.db.flush()
+        route_desc = " → ".join(waypoint_names)
+        await self._log_command(
+            session=session,
+            command_type="tactical_route_drawn",
+            source="chat",
+            summary=f"Drew {route_type} '{label}': {route_desc}",
+            payload={"item_id": str(item.id), "route_type": route_type},
+            user_id=user_id,
+        )
+        return f"{route_type} '{label}' ({route_desc})"
+
+    async def _exec_draw_area(
+        self, session: SandboxSession, session_id: str,
+        tenant_id: str, user_id: str, args: dict,
+    ) -> str:
+        area_type = args.get("area_type", "ao")
+        label = args.get("label", "Area")
+        vertex_names: list[str] = args.get("vertices", [])
+        faction = args.get("faction", "neutral")
+
+        if len(vertex_names) < 3:
+            raise ValidationError("draw_area requires at least 3 vertices")
+
+        geo_results = await asyncio.gather(*[_geocode(v) for v in vertex_names])
+        vertices: list[dict] = []
+        for i, coords in enumerate(geo_results):
+            if not coords:
+                raise ValidationError(f"Could not geocode vertex '{vertex_names[i]}'")
+            vertices.append({"lat": coords[0], "lon": coords[1], "alt_m": 0})
+
+        item = SandboxScenarioItem(
+            session_id=session_id,
+            tenant_id=tenant_id,
+            item_type="overlay",
+            label=label,
+            source_type="tactical_area",
+            payload={
+                "area_type": area_type,
+                "vertices": vertices,
+                "faction": faction,
+            },
+            created_by=user_id,
+            updated_by=user_id,
+        )
+        self.db.add(item)
+        await self.db.flush()
+        await self._log_command(
+            session=session,
+            command_type="tactical_area_drawn",
+            source="chat",
+            summary=f"Drew {area_type} '{label}'",
+            payload={"item_id": str(item.id), "area_type": area_type},
+            user_id=user_id,
+        )
+        return f"{area_type} '{label}' ({len(vertices)} vertices)"
+
+    # ------------------------------------------------------------------ #
     #  Regex fallback compiler (no LLM key)                                #
     # ------------------------------------------------------------------ #
 
@@ -1505,6 +1804,32 @@ class SandboxService:
                 snapshot=snapshot,
             )
 
+        # Duration (e.g. "run for 10 minutes", "duration 1 hour", "simulate 30 min")
+        dur_match = re.search(
+            r"(?:(?:run|simulate|duration)\s+(?:for\s+)?)?(\d+(?:\.\d+)?)\s*"
+            r"(seconds?|sec|s|minutes?|min|m|hours?|hr|h|days?|d)\b",
+            prompt_lower,
+        )
+        if dur_match and any(kw in prompt_lower for kw in ["duration", "run for", "simulate for", "simulate"]):
+            val = float(dur_match.group(1))
+            unit = dur_match.group(2).lower()
+            if unit.startswith("m"):
+                val *= 60
+            elif unit.startswith("h"):
+                val *= 3600
+            elif unit.startswith("d"):
+                val *= 86400
+            snapshot = await self.control_session(
+                session_id, tenant_id, user_id,
+                SandboxSessionControlRequest(action="set_duration", duration_seconds=val),
+            )
+            label = self._format_duration_label(val)
+            return SandboxChatResponse(
+                message=f"Simulation duration set to {label}.",
+                applied_commands=[f"set_duration:{val:g}"],
+                snapshot=snapshot,
+            )
+
         # Speed
         speed_match = re.search(r"\b(?:set\s+)?speed(?:\s+to)?\s+(\d+(?:\.\d+)?)x?\b", prompt_lower)
         if speed_match:
@@ -1518,6 +1843,35 @@ class SandboxService:
                 applied_commands=[f"set_speed:{multiplier:g}"],
                 snapshot=snapshot,
             )
+
+        # Move (coordinates)
+        coord_move = re.search(
+            r"\b(?:move|send|relocate)\s+(?P<label>.+?)\s+(?:to|toward|towards)\s+(?P<coords>-?\d+(?:\.\d+)?\s*,\s*-?\d+(?:\.\d+)?)",
+            prompt,
+            flags=re.IGNORECASE,
+        )
+        if coord_move:
+            coordinates = self._extract_coordinates(coord_move.group("coords"))
+            if coordinates:
+                actor = await self._find_actor_by_label(session.id, tenant_id, coord_move.group("label").strip())
+                target = {
+                    "lat": coordinates["lat"],
+                    "lon": coordinates["lon"],
+                    "alt_m": actor.state.get("position", {}).get("alt_m", 0),
+                }
+                actor.behavior = {
+                    "type": "move_to",
+                    "target": target,
+                    "speed_ms": actor.state.get("speed_ms", 250),
+                }
+                actor.updated_by = user_id
+                await self.db.flush()
+                snapshot = await self.get_snapshot(session_id, tenant_id, user_id)
+                return SandboxChatResponse(
+                    message=f"{actor.label} moving to {coordinates['lat']:.4f}, {coordinates['lon']:.4f}.",
+                    applied_commands=[f"move:{actor.label}"],
+                    snapshot=snapshot,
+                )
 
         # Move (NL)
         nl_move = re.search(
@@ -1718,6 +2072,7 @@ class SandboxService:
     ) -> SandboxActor:
         behavior = deepcopy(data.behavior) or {"type": "hold"}
         state = self._normalize_actor_state(data.actor_class, data.actor_type, data.state, behavior)
+        behavior = self._normalize_actor_behavior(state.get("position", {}), behavior)
         visual_config = self._build_visual_config(data.actor_type, data.faction, data.visual_config)
         return SandboxActor(
             session_id=session.id,
@@ -1737,6 +2092,26 @@ class SandboxService:
             created_by=user_id,
             updated_by=user_id,
         )
+
+    def _normalize_actor_behavior(
+        self,
+        position: dict[str, Any],
+        behavior: dict[str, Any],
+    ) -> dict[str, Any]:
+        normalized = deepcopy(behavior) or {"type": "hold"}
+
+        if "speed_ms" in normalized and normalized["speed_ms"] is not None:
+            normalized["speed_ms"] = max(0.0, float(normalized["speed_ms"]))
+
+        if normalized.get("type") in {"move_to", "approach_target"}:
+            target = deepcopy(normalized.get("target", {}))
+            if "lat" in target and "lon" in target:
+                target["lat"] = self._clamp_lat(float(target["lat"]))
+                target["lon"] = self._normalize_lon(float(target["lon"]))
+                target["alt_m"] = max(0.0, float(target.get("alt_m", position.get("alt_m", 0.0))))
+                normalized["target"] = target
+
+        return normalized
 
     def _normalize_actor_state(
         self,
@@ -1788,17 +2163,13 @@ class SandboxService:
                 orbit["mode"] = "pseudo"
             normalized["orbit"] = orbit
 
-        if behavior.get("type") == "move_to":
-            target = deepcopy(behavior.get("target", {}))
-            if "lat" in target and "lon" in target:
-                target["lat"] = self._clamp_lat(float(target["lat"]))
-                target["lon"] = self._normalize_lon(float(target["lon"]))
-                target["alt_m"] = max(0.0, float(target.get("alt_m", position["alt_m"])))
-                behavior["target"] = target
-
         if actor_type in {"ground_vehicle", "aircraft", "ship"}:
             normalized.setdefault("heading_deg", 0.0)
             normalized.setdefault("speed_ms", 0.0)
+
+        normalized_behavior = self._normalize_actor_behavior(normalized["position"], behavior)
+        behavior.clear()
+        behavior.update(normalized_behavior)
 
         return normalized
 
@@ -1959,17 +2330,17 @@ class SandboxService:
 
         if behavior_type == "approach_target":
             target_actor_id = behavior.get("target_actor_id")
-            if not target_actor_id or not all_actors:
-                return state
-            target_actor = None
-            for a in all_actors:
-                if a.id == target_actor_id:
-                    target_actor = a
-                    break
-            if not target_actor:
-                return state
-            target_state = target_actor.state if isinstance(target_actor.state, dict) else {}
-            target_pos = target_state.get("position", {})
+            target_pos = behavior.get("target") or {}
+            if target_actor_id and all_actors:
+                target_actor = None
+                for a in all_actors:
+                    if a.id == target_actor_id:
+                        target_actor = a
+                        break
+                if not target_actor:
+                    return state
+                target_state = target_actor.state if isinstance(target_actor.state, dict) else {}
+                target_pos = target_state.get("position", {})
             if "lat" not in target_pos or "lon" not in target_pos:
                 return state
             current = state.get("position", {})
@@ -1983,6 +2354,8 @@ class SandboxService:
             state["position"] = next_position
             state["speed_ms"] = speed_ms
             state["heading_deg"] = heading_deg
+            if arrived and not target_actor_id:
+                actor.behavior = {"type": "hold"}
             return state
 
         if behavior_type == "hold":
@@ -2016,6 +2389,7 @@ class SandboxService:
         inclination_value = self._extract_named_float(prompt, "inclination")
         raan_value = self._extract_named_float(prompt, "raan")
         anomaly_value = self._extract_named_float(prompt, "anomaly")
+        subtype = "drone" if matched_phrase == "drone" else None
 
         # Fallback: geocode a place name if no explicit lat/lon
         if not coordinates:
@@ -2072,17 +2446,20 @@ class SandboxService:
                 "position": {
                     "lat": coordinates["lat"],
                     "lon": coordinates["lon"],
-                    "alt_m": altitude_value["m"] if altitude_value else 0.0,
+                    "alt_m": altitude_value["m"] if altitude_value else 2500.0 if subtype == "drone" else 0.0,
                 }
             }
             if heading_value is not None:
                 state["heading_deg"] = heading_value
             if speed_value is not None:
                 state["speed_ms"] = speed_value
+            elif subtype == "drone":
+                state["speed_ms"] = 85.0
 
         return SandboxActorCreate(
             actor_class=actor_class,  # type: ignore[arg-type]
             actor_type=actor_type,
+            subtype=subtype,
             faction=faction,  # type: ignore[arg-type]
             label=label,
             state=state,
@@ -2090,6 +2467,17 @@ class SandboxService:
             capabilities=capabilities,
             provenance="agent",
         )
+
+    @staticmethod
+    def _format_duration_label(seconds: float) -> str:
+        """Human-readable duration label."""
+        if seconds >= 86400:
+            return f"{seconds / 86400:.1f} day{'s' if seconds >= 172800 else ''}"
+        if seconds >= 3600:
+            return f"{seconds / 3600:.1f} hour{'s' if seconds >= 7200 else ''}"
+        if seconds >= 60:
+            return f"{seconds / 60:.0f} min"
+        return f"{seconds:.0f}s"
 
     def _extract_faction(self, lower: str) -> str:
         if "hostile" in lower or "enemy" in lower or "adversary" in lower:

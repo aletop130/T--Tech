@@ -38,13 +38,15 @@ class SandboxSessionCreate(BaseSchema):
     description: Optional[str] = None
     initial_prompt: Optional[str] = None
     is_saved: bool = False
+    duration_seconds: Optional[float] = Field(None, gt=0, le=864000)
 
 
 class SandboxSessionControlRequest(BaseSchema):
     """Session runtime control request."""
 
-    action: Literal["start", "pause", "resume", "reset", "set_speed"]
+    action: Literal["start", "pause", "resume", "reset", "set_speed", "set_duration"]
     time_multiplier: Optional[float] = Field(None, gt=0, le=1000)
+    duration_seconds: Optional[float] = Field(None, gt=0, le=864000)
 
 
 class SandboxTickRequest(BaseSchema):
@@ -126,6 +128,7 @@ class SandboxSessionRead(BaseSchema):
     initial_prompt: Optional[str] = None
     current_time_seconds: float
     time_multiplier: float
+    duration_seconds: Optional[float] = None
     created_at: datetime
     updated_at: datetime
 

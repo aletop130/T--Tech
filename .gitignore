@@ -1,10 +1,45 @@
+# Python
 .venv/
-.env
 __pycache__/
-.next/
+*.pyc
+.coverage
+
+# Node
 node_modules/
-opencode.json
+.next/
+
+# Environment
+.env
+.env.local
+
+# Editor / AI tool configs
+.opencode/
 .ralph/
+.playwright/
+.claude/
+opencode.json
+
+# OS / temp
+.DS_Store
+*.swp
+*.swo
+
+# Screenshots & loose images
+*.png
+*.jpg
+*.jpeg
+!frontend/public/**
+
+# Test artifacts
+test-login.mjs
+bun.lock
+package-lock.json
+
+# Secrets / certs
+*.key
+*.csr
+*.pem
+.wrangler/
+
+# Legacy
 hackeurope-2026/
-image.png
-image copy.png

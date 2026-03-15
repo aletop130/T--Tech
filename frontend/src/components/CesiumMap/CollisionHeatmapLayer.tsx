@@ -151,7 +151,7 @@ export function CollisionHeatmapLayer({ viewer, visible }: CollisionHeatmapLayer
         position: Cesium.Cartesian3.fromDegrees(0, 45, midRadiusM - EARTH_RADIUS_M),
         label: {
           text: `${band.altitude_min_km}-${band.altitude_max_km}km\n${riskLabel(band.risk_score)} (${band.event_count})`,
-          font: '13px IBM Plex Mono',
+          font: '13px Google Sans Code',
           fillColor: band.risk_score >= 50 ? Cesium.Color.RED : Cesium.Color.fromCssColorString('#88ccff'),
           outlineColor: Cesium.Color.BLACK,
           outlineWidth: 2,
@@ -161,10 +161,10 @@ export function CollisionHeatmapLayer({ viewer, visible }: CollisionHeatmapLayer
           pixelOffset: new Cesium.Cartesian2(5, 0),
           scaleByDistance: new Cesium.NearFarScalar(1e6, 1.0, 5e7, 0.3),
           translucencyByDistance: new Cesium.NearFarScalar(1e6, 1.0, 8e7, 0.0),
-          disableDepthTestDistance: Number.POSITIVE_INFINITY,
+          disableDepthTestDistance: 0,
         },
         description: `
-          <div style="font-family: 'IBM Plex Sans', sans-serif; padding: 8px;">
+          <div style="font-family: 'Google Sans', sans-serif; padding: 8px;">
             <h3 style="margin:0 0 8px">Collision Risk: ${band.altitude_min_km}-${band.altitude_max_km} km</h3>
             <p><strong>Risk Level:</strong> ${riskLabel(band.risk_score)}</p>
             <p><strong>Risk Score:</strong> ${band.risk_score.toFixed(1)}/100</p>

@@ -101,7 +101,11 @@ class SandboxApiClient extends ApiClient {
 
   async controlSession(
     sessionId: string,
-    data: { action: 'start' | 'pause' | 'resume' | 'reset' | 'set_speed'; time_multiplier?: number },
+    data: {
+      action: 'start' | 'pause' | 'resume' | 'reset' | 'set_speed' | 'set_duration';
+      time_multiplier?: number;
+      duration_seconds?: number;
+    },
   ): Promise<SandboxSnapshot> {
     return this.post<SandboxSnapshot>(`/api/v1/sandbox/sessions/${sessionId}/control`, data);
   }

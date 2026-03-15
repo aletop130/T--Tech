@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     )
     
     # Application
-    APP_NAME: str = "SDA Platform"
+    APP_NAME: str = "Horus"
     APP_VERSION: str = "0.1.0"
     DEBUG: bool = False
     SECRET_KEY: str = "change-me-in-production"
@@ -57,6 +57,20 @@ class Settings(BaseSettings):
     # CelesTrack
     CELESTRACK_BASE_URL: str = "https://celestrak.org/NORAD/elements"
     TLE_CACHE_HOURS: int = 6
+
+    # N2YO
+    N2YO_API_KEY: Optional[str] = None
+
+    # Space-Track (USSPACECOM)
+    SPACETRACK_USER: Optional[str] = None
+    SPACETRACK_PASS: Optional[str] = None
+
+    # Copernicus Data Space
+    COPERNICUS_CLIENT_ID: Optional[str] = None
+    COPERNICUS_CLIENT_SECRET: Optional[str] = None
+
+    # ESA DISCOS
+    ESA_DISCOS_TOKEN: Optional[str] = None
 
     # Bayesian Threat Scoring
     BAYESIAN_PRIOR_ADVERSARIAL: float = 0.9

@@ -1140,24 +1140,84 @@ export class ApiClient {
     return response.blob();
   }
 
-  async getSystemReport(): Promise<{
-    timestamp: string;
-    tenant_id: string;
-    database: { status: string; satellites_total: number; satellites_active: number };
-    incidents: { total: number; open: number; critical: number };
-    redis: { status: string };
-    system: Record<string, unknown>;
-  }> {
-    return this._fetch('/api/v1/admin/system/report');
-  }
-
   async getAdminStats(): Promise<{
     satellites: number;
     open_incidents: number;
     incidents_24h: number;
     audit_logs_24h: number;
+    ground_stations: number;
+    orbits: number;
+    conjunctions: number;
+    ingestion_runs_24h: number;
   }> {
     return this._fetch('/api/v1/admin/stats');
+  }
+
+  async getServiceHealth(): Promise<{
+    services: Array<{ name: string; status: string; latency_ms: number; detail: string | null }>;
+    overall: string;
+  }> {
+    return this._fetch('/api/v1/admin/health/services');
+  }
+
+  async getSettings(): Promise<{
+    ai_features: boolean;
+    auto_conjunction_analysis: boolean;
+    space_weather_alerts: boolean;
+    tenant_name: string;
+  }> {
+    return this._fetch('/api/v1/admin/settings');
+  }
+
+  async updateSettings(settings: Partial<{
+    ai_features: boolean;
+    auto_conjunction_analysis: boolean;
+    space_weather_alerts: boolean;
+    tenant_name: string;
+  }>): Promise<{ success: boolean; settings: Record<string, unknown> }> {
+    return this._fetch('/api/v1/admin/settings', {
+      method: 'PUT',
+      body: JSON.stringify(settings),
+    });
+  }
+
+  async getIngestionRuns(params?: { page?: number; page_size?: number }): Promise<{
+    items: Array<{
+      id: string;
+      source_type: string;
+      source_name: string;
+      status: string;
+      records_total: number;
+      records_processed: number;
+      records_failed: number;
+      created_at: string;
+      completed_at: string | null;
+    }>;
+    total: number;
+    page: number;
+    page_size: number;
+  }> {
+    const searchParams = new URLSearchParams();
+    if (params?.page) searchParams.set('page', params.page.toString());
+    if (params?.page_size) searchParams.set('page_size', params.page_size.toString());
+    return this._fetch(`/api/v1/ingestion/runs?${searchParams}`);
+  }
+
+  async processIngestionRun(runId: string, sourceType: string): Promise<unknown> {
+    return this._fetch(`/api/v1/ingestion/process/${sourceType}/${runId}`, {
+      method: 'POST',
+    });
+  }
+
+  async getIngestionStats(): Promise<{
+    total_runs: number;
+    completed_runs: number;
+    failed_runs: number;
+    total_records_processed: number;
+    avg_pass_rate: number;
+    by_source_type: Record<string, number>;
+  }> {
+    return this._fetch('/api/v1/ingestion/stats');
   }
 
   // ========== Threat Detection Endpoints ==========
@@ -1482,6 +1542,21 @@ export class ApiClient {
 
   async getHealth(): Promise<{ status: string; version: string; timestamp: string; services: Record<string, string> }> {
     return this._fetch('/health');
+  }
+
+  // ========== Italy Big Brother Endpoints ==========
+  async getItalySatellites(includeTransmitters = false): Promise<ItalyBigBrotherResponse> {
+    const params = new URLSearchParams();
+    if (includeTransmitters) params.set('include_transmitters', 'true');
+    return this._fetch(`/api/v1/italy-bigbrother/satellites-over-italy?${params}`);
+  }
+
+  async getItalySatelliteDependencies(noradId: number): Promise<SatelliteDependencyDetail> {
+    return this._fetch(`/api/v1/italy-bigbrother/satellite/${noradId}/dependencies`);
+  }
+
+  async getItalyStats(): Promise<ItalyBigBrotherStats> {
+    return this._fetch('/api/v1/italy-bigbrother/stats');
   }
 }
 
@@ -2287,6 +2362,74 @@ export interface CountryDashboardDetail {
 export interface TopOperatorsResponse {
   operators: OperatorSummary[];
   total: number;
+}
+
+// ========== Italy Big Brother Types ==========
+
+export interface ItalyServiceDependency {
+  category: string;
+  icon: string;
+  name: string;
+  description: string;
+  criticality: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
+  italian_users: number;
+  provider: string;
+  geographic_coverage: string;
+  source_note?: string;
+}
+
+export interface SatelliteTransmitter {
+  description?: string;
+  alive: boolean;
+  type?: string;
+  downlink_low?: number;
+  downlink_high?: number;
+  mode?: string;
+  band?: string;
+  service?: string;
+}
+
+export interface SatelliteOverItaly {
+  norad_id: number;
+  name: string;
+  operator?: string;
+  country_code?: string;
+  constellation?: string;
+  orbit_type: string;
+  latitude: number;
+  longitude: number;
+  altitude: number;
+  inclination?: number;
+  footprint_radius_km: number;
+  over_italy: boolean;
+  is_italian: boolean;
+  is_critical: boolean;
+  italian_services: ItalyServiceDependency[];
+  total_italian_beneficiaries: number;
+  critical_services_count: number;
+  transmitters: SatelliteTransmitter[];
+}
+
+export interface ItalyBigBrotherStats {
+  total_satellites_over_italy: number;
+  italian_satellites: number;
+  by_category: Record<string, number>;
+  total_beneficiaries: number;
+  critical_satellites: number;
+  timestamp: string;
+}
+
+export interface SatelliteDependencyDetail {
+  norad_id: number;
+  name: string;
+  services: ItalyServiceDependency[];
+  total_beneficiaries: number;
+}
+
+export interface ItalyBigBrotherResponse {
+  satellites: SatelliteOverItaly[];
+  stats: ItalyBigBrotherStats;
+  timestamp: string;
 }
 
 // ========== Collision Heatmap Types ==========

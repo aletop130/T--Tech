@@ -35,8 +35,8 @@ module.exports = {
         },
       },
       fontFamily: {
-        sans: ['var(--font-ibm-plex-sans)', 'IBM Plex Sans', 'system-ui', 'sans-serif'],
-        mono: ['var(--font-ibm-plex-mono)', 'IBM Plex Mono', 'monospace'],
+        sans: ['"Google Sans"', 'system-ui', 'sans-serif'],
+        mono: ['"Google Sans Code"', 'monospace'],
         code: ['"Google Sans Code"', 'monospace'],
       },
     },

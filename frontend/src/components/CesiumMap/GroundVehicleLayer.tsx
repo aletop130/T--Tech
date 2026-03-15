@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { getCesium, type CesiumModule } from '@/lib/cesium/loader';
 import { PositionReport } from '@/lib/api';
+import { getEntityIcon } from '@/lib/cesium/entity-icons';
 
 interface GroundVehicleLayerProps {
   viewer: InstanceType<CesiumModule['Viewer']> | null;
@@ -54,16 +55,16 @@ export function GroundVehicleLayer({
         id: `vehicle-${vehicle.entity_id}`,
         name: vehicle.entity_id,
         position: position,
-        point: {
-          pixelSize: 8,
-          color: Cesium.Color.ORANGE,
-          outlineColor: Cesium.Color.WHITE,
-          outlineWidth: 2,
+        billboard: {
+          image: getEntityIcon('vehicle', '#f97316'),
+          width: 16,
+          height: 16,
           heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
+          disableDepthTestDistance: Number.POSITIVE_INFINITY,
         },
         label: {
           text: vehicle.entity_id,
-          font: '10px IBM Plex Sans',
+          font: '10px Google Sans',
           fillColor: Cesium.Color.ORANGE,
           outlineColor: Cesium.Color.BLACK,
           outlineWidth: 2,
@@ -73,7 +74,7 @@ export function GroundVehicleLayer({
           show: show,
         },
         description: `
-          <div style="font-family: 'IBM Plex Sans', sans-serif;">
+          <div style="font-family: 'Google Sans', sans-serif;">
             <h3>${vehicle.entity_id}</h3>
             <p><strong>Type:</strong> Ground Vehicle</p>
             <p><strong>Position:</strong> ${vehicle.latitude.toFixed(4)}°, ${vehicle.longitude.toFixed(4)}°</p>

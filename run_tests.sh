@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-echo "=== SDA Platform Test Suite ==="
+echo "=== Horus Test Suite ==="
 
 # Rebuild images (only backend and frontend needed for tests)
 echo "Rebuilding backend and frontend images..."

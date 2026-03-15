@@ -239,10 +239,10 @@ async def _seed_initial_data():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan handler."""
-    logger.info("Starting SDA Platform", version=settings.APP_VERSION)
+    logger.info("Starting Horus", version=settings.APP_VERSION)
     await _seed_initial_data()
     yield
-    logger.info("Shutting down SDA Platform")
+    logger.info("Shutting down Horus")
 
 
 app = FastAPI(

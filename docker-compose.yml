@@ -186,14 +186,8 @@ services:
       else
         echo "Dependencies unchanged, skipping install.";
       fi &&
-      if [ "$$FRONTEND_MODE" = "dev" ]; then
-        bun run dev;
-      else
-        bun run build &&
-        cp -r .next/static .next/standalone/.next/static &&
-        cp -r public .next/standalone/public &&
-        node .next/standalone/server.js;
-      fi
+      bun run build &&
+      bun run start
       '
 
 volumes:

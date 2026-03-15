@@ -142,7 +142,7 @@ function KpiCard({
   value: string; unit?: string; label: string; sublabel: string; subColor: string; large?: boolean;
 }) {
   return (
-    <div className="flex flex-col items-center text-center px-2 py-3 rounded-lg border border-sda-border-default bg-sda-bg-secondary min-w-0">
+    <div className="flex flex-col items-center text-center px-2 py-3 border border-sda-border-default bg-sda-bg-secondary min-w-0">
       <div className="flex items-baseline gap-1">
         <span className={`font-bold text-sda-text-primary ${large ? 'text-3xl' : 'text-2xl'}`}>{value}</span>
         {unit && <span className="text-xs text-sda-text-secondary font-medium">{unit}</span>}
@@ -165,7 +165,7 @@ function KpGaugeBar({ value, trendPoints }: { value: number; trendPoints: KpTren
   ];
 
   return (
-    <div className="rounded-lg border border-sda-border-default bg-sda-bg-secondary p-4">
+    <div className="border border-sda-border-default bg-sda-bg-secondary p-4">
       <div className="text-sm font-semibold text-sda-text-primary mb-3">
         Kp Index &mdash; gauge e trend 24h
       </div>
@@ -190,16 +190,16 @@ function KpGaugeBar({ value, trendPoints }: { value: number; trendPoints: KpTren
       </div>
 
       {/* Gradient gauge */}
-      <div className="relative h-4 rounded-full overflow-visible">
+      <div className="relative h-4 overflow-visible">
         <div
-          className="h-full rounded-full"
+          className="h-full"
           style={{
             background: 'linear-gradient(to right, #3fb950 0%, #84cc16 20%, #d29922 35%, #f59e0b 45%, #f97316 56%, #f85149 70%, #dc2626 85%, #991b1b 100%)',
           }}
         />
         {/* Position marker */}
         <div
-          className="absolute top-1/2 w-3 h-6 rounded-sm border-2 border-sda-text-primary bg-sda-bg-primary"
+          className="absolute top-1/2 w-3 h-6 border-2 border-sda-text-primary bg-sda-bg-primary"
           style={{ left: `${pct}%`, transform: 'translate(-50%, -50%)' }}
         />
       </div>
@@ -217,7 +217,7 @@ function KpGaugeBar({ value, trendPoints }: { value: number; trendPoints: KpTren
             {trendPoints.map((p, i) => {
               const h = Math.max(2, (p.kp / 9) * 28);
               return (
-                <div key={i} className="flex-1 rounded-t" style={{
+                <div key={i} className="flex-1" style={{
                   height: h,
                   backgroundColor: kpColor(p.kp),
                   opacity: 0.9,
@@ -254,7 +254,7 @@ function SolarWindPanel({ sw }: { sw: SolarWindData | null }) {
   ];
 
   return (
-    <div className="rounded-lg border border-sda-border-default bg-sda-bg-secondary p-4">
+    <div className="border border-sda-border-default bg-sda-bg-secondary p-4">
       <div className="flex items-center justify-between mb-3">
         <span className="text-sm font-semibold text-sda-text-primary">Parametri solar wind</span>
         <span className="text-[10px] text-sda-text-secondary font-medium">DSCOVR/ACE</span>
@@ -265,9 +265,9 @@ function SolarWindPanel({ sw }: { sw: SolarWindData | null }) {
             <span className="text-xs text-sda-text-secondary">{r.label}</span>
             <div className="flex items-center gap-2">
               {r.pct > 0 && (
-                <div className="w-16 h-1.5 rounded-full bg-sda-bg-elevated overflow-hidden">
+                <div className="w-16 h-1.5 bg-sda-bg-elevated overflow-hidden">
                   <div
-                    className="h-full rounded-full"
+                    className="h-full"
                     style={{
                       width: `${r.pct}%`,
                       backgroundColor: r.pct > 70 ? '#f85149' : r.pct > 40 ? '#d29922' : '#3fb950',
@@ -285,7 +285,7 @@ function SolarWindPanel({ sw }: { sw: SolarWindData | null }) {
 
       {/* Bz interpretation callout */}
       {bz != null && bz < -5 && (
-        <div className="mt-3 rounded-md px-3 py-2 text-[11px] leading-snug"
+        <div className="mt-3 px-3 py-2 text-[11px] leading-snug"
           style={{ backgroundColor: 'rgba(210, 153, 34, 0.15)', border: '1px solid rgba(210, 153, 34, 0.4)', color: '#d29922' }}
         >
           Bz negativo ({bz.toFixed(0)} nT) indica accoppiamento attivo con magnetosfera
@@ -298,7 +298,7 @@ function SolarWindPanel({ sw }: { sw: SolarWindData | null }) {
 
 function ImpactMatrixPanel({ rows }: { rows: ImpactRow[] }) {
   return (
-    <div className="rounded-lg border border-sda-border-default bg-sda-bg-secondary p-4">
+    <div className="border border-sda-border-default bg-sda-bg-secondary p-4">
       <div className="text-sm font-semibold text-sda-text-primary mb-3">Impatto operativo per sistema</div>
       <table className="w-full text-xs">
         <thead>
@@ -328,7 +328,7 @@ function DragMonitorPanel({ kp, satellites }: { kp: number; satellites: DragImpa
   const active = kp >= 4;
 
   return (
-    <div className="rounded-lg border border-sda-border-default bg-sda-bg-secondary p-4">
+    <div className="border border-sda-border-default bg-sda-bg-secondary p-4">
       <div className="flex items-center justify-between mb-2">
         <span className="text-sm font-semibold text-sda-text-primary">LEO &mdash; drag risk monitor</span>
         {active && (
@@ -364,9 +364,9 @@ function DragMonitorPanel({ kp, satellites }: { kp: number; satellites: DragImpa
             <div key={sat.norad_id} className="flex items-center gap-3">
               <span className="text-xs font-semibold text-sda-text-primary w-20 truncate">{sat.name}</span>
               <span className="text-[10px] text-sda-text-secondary w-14 text-right font-mono">{sat.altitude_km.toFixed(0)} km</span>
-              <div className="flex-1 h-2 rounded-full bg-sda-bg-elevated overflow-hidden">
+              <div className="flex-1 h-2 bg-sda-bg-elevated overflow-hidden">
                 <div
-                  className="h-full rounded-full transition-all"
+                  className="h-full transition-all"
                   style={{
                     width: `${Math.min(100, sat.estimated_drag_increase_pct * 5)}%`,
                     backgroundColor: sat.estimated_drag_increase_pct > 10 ? '#f85149' : sat.estimated_drag_increase_pct > 5 ? '#f97316' : '#d29922',
@@ -447,7 +447,7 @@ function SatelliteWeatherLookup() {
   });
 
   return (
-    <div className="rounded-lg border border-sda-border-default bg-sda-bg-secondary p-4">
+    <div className="border border-sda-border-default bg-sda-bg-secondary p-4">
       <div className="flex items-center gap-2 mb-3">
         <Icon icon="satellite" size={14} className="text-sda-text-secondary" />
         <span className="text-sm font-semibold text-sda-text-primary">
@@ -479,7 +479,7 @@ function SatelliteWeatherLookup() {
                 return (
                   <div
                     key={s.id}
-                    className="flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer transition-colors"
+                    className="flex items-center gap-2 px-2 py-1.5 cursor-pointer transition-colors"
                     style={{
                       backgroundColor: isSelected ? 'var(--sda-bg-tertiary)' : 'transparent',
                       borderLeft: isSelected ? '2px solid var(--sda-accent-cyan)' : '2px solid transparent',
@@ -520,7 +520,7 @@ function SatelliteWeatherLookup() {
             </div>
           )}
           {analysisError && (
-            <div className="text-xs p-3 rounded" style={{ backgroundColor: 'rgba(248,81,73,0.1)', color: '#f85149' }}>
+            <div className="text-xs p-3" style={{ backgroundColor: 'rgba(248,81,73,0.1)', color: '#f85149' }}>
               {analysisError}
             </div>
           )}
@@ -544,7 +544,7 @@ function SatelliteWeatherLookup() {
               </div>
 
               {/* Vulnerability score */}
-              <div className="flex items-center gap-3 p-2.5 rounded-lg" style={{ backgroundColor: 'var(--sda-bg-tertiary)' }}>
+              <div className="flex items-center gap-3 p-2.5" style={{ backgroundColor: 'var(--sda-bg-tertiary)' }}>
                 <div className="text-center">
                   <div className="text-2xl font-bold font-mono" style={{ color: VULN_COLORS[analysis.vulnerability_level] || '#6b7280' }}>
                     {analysis.vulnerability_score.toFixed(0)}
@@ -552,8 +552,8 @@ function SatelliteWeatherLookup() {
                   <div className="text-[9px] text-sda-text-secondary uppercase tracking-wider">score</div>
                 </div>
                 <div className="flex-1">
-                  <div className="h-2 rounded-full bg-sda-bg-elevated overflow-hidden">
-                    <div className="h-full rounded-full transition-all" style={{
+                  <div className="h-2 bg-sda-bg-elevated overflow-hidden">
+                    <div className="h-full transition-all" style={{
                       width: `${analysis.vulnerability_score}%`,
                       backgroundColor: VULN_COLORS[analysis.vulnerability_level] || '#6b7280',
                     }} />
@@ -600,7 +600,7 @@ function SatelliteWeatherLookup() {
 
               {/* Recommendations */}
               {analysis.recommendations.length > 0 && (
-                <div className="rounded-md p-2.5" style={{ backgroundColor: 'rgba(47,129,247,0.08)', border: '1px solid rgba(47,129,247,0.2)' }}>
+                <div className="p-2.5" style={{ backgroundColor: 'rgba(47,129,247,0.08)', border: '1px solid rgba(47,129,247,0.2)' }}>
                   <div className="text-[10px] font-semibold text-[#2f81f7] uppercase tracking-wider mb-1.5">Raccomandazioni</div>
                   <ul className="space-y-1">
                     {analysis.recommendations.map((r, i) => (
@@ -626,7 +626,7 @@ function AlertCard({ alert }: { alert: ParsedAlert }) {
 
   return (
     <div
-      className="rounded-lg p-3 border-l-4 border border-sda-border-default"
+      className="p-3 border-l-4 border border-sda-border-default"
       style={{ backgroundColor: 'var(--sda-bg-tertiary)', borderLeftColor: accentColor }}
     >
       <div className="flex items-start justify-between mb-1.5">
@@ -634,7 +634,7 @@ function AlertCard({ alert }: { alert: ParsedAlert }) {
           {alert.product_id} &mdash; {alert.title}
         </div>
         <span
-          className="text-[10px] font-bold px-1.5 py-0.5 rounded shrink-0"
+          className="text-[10px] font-bold px-1.5 py-0.5 shrink-0"
           style={{ backgroundColor: accentColor, color: '#fff' }}
         >
           {alert.alert_type}
@@ -653,7 +653,7 @@ function AlertCard({ alert }: { alert: ParsedAlert }) {
 
 function ParsedAlertsPanel({ alerts, rawCount }: { alerts: ParsedAlert[]; rawCount: number }) {
   return (
-    <div className="rounded-lg border border-sda-border-default bg-sda-bg-secondary p-4">
+    <div className="border border-sda-border-default bg-sda-bg-secondary p-4">
       <div className="flex items-center justify-between mb-3">
         <span className="text-sm font-semibold text-sda-text-primary">NOAA Alerts parsati</span>
         <span className="text-[10px] text-sda-text-secondary font-medium">{rawCount} messaggi</span>
@@ -718,7 +718,7 @@ export function SpaceWeatherPanel() {
 
   if (error && !data) {
     return (
-      <div className="rounded-lg p-4 text-sm"
+      <div className="p-4 text-sm"
         style={{ backgroundColor: 'rgba(248, 81, 73, 0.1)', border: '1px solid rgba(248, 81, 73, 0.3)', color: '#f85149' }}
       >
         {error}
@@ -749,7 +749,7 @@ export function SpaceWeatherPanel() {
         <div className="flex items-center gap-3 flex-wrap">
           {cond.storm_level !== 'none' && (
             <span
-              className="px-3 py-1 rounded-full text-xs font-bold text-white"
+              className="px-3 py-1 text-xs font-bold text-white"
               style={{ backgroundColor: storm.color }}
             >
               {storm.label}

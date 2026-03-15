@@ -19,6 +19,7 @@ class SandboxSession(Base, AuditMixin):
     initial_prompt = Column(Text, nullable=True)
     current_time_seconds = Column(Float, nullable=False, default=0.0)
     time_multiplier = Column(Float, nullable=False, default=1.0)
+    duration_seconds = Column(Float, nullable=True)
 
     actors = relationship(
         "SandboxActor",

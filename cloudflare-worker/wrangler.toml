@@ -1,0 +1,11 @@
+name = "horus-tech-proxy"
+main = "src/index.ts"
+compatibility_date = "2024-12-01"
+
+[vars]
+ORIGIN_HOST = "212.35.216.85"
+
+routes = [
+  { pattern = "horustechsystems.com/*", zone_name = "horustechsystems.com" },
+  { pattern = "www.horustechsystems.com/*", zone_name = "horustechsystems.com" }
+]

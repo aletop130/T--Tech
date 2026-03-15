@@ -6,7 +6,7 @@ from fastapi.responses import JSONResponse
 
 
 class SDAException(Exception):
-    """Base exception for SDA Platform."""
+    """Base exception for Horus."""
     
     def __init__(
         self,

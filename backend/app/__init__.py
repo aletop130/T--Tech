@@ -1,2 +1,2 @@
-# SDA Platform Backend
+# Horus Backend
 

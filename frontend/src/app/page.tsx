@@ -20,10 +20,15 @@ export default function Home() {
   }, [router]);
 
   return (
-    <div className="flex h-screen items-center justify-center">
-      <div className="text-center">
+    <div className="flex h-screen items-center justify-center bg-sda-bg-primary">
+      <div className="text-center flex flex-col items-center">
+        <img
+          src="/omniscient-logo.svg"
+          alt="Horus logo"
+          className="h-24 w-24 mb-6 animate-pulse"
+        />
         <div className="mb-4 text-4xl font-bold text-sda-accent-cyan">
-          SDA Platform
+          Horus
         </div>
         <div className="text-sda-text-secondary">Loading...</div>
       </div>

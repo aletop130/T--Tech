@@ -62,7 +62,7 @@ export function SatelliteCoverageLayer({ viewer }: SatelliteCoverageLayerProps) 
             height: 0,
           },
           description: `
-            <div style="font-family: 'IBM Plex Sans', sans-serif;">
+            <div style="font-family: 'Google Sans', sans-serif;">
               <h3>${satellite.name} Coverage</h3>
               <p><strong>Radius:</strong> ${satellite.footprintRadiusKm.toFixed(0)} km</p>
               <p><strong>Area:</strong> ${satellite.footprintAreaKm2?.toFixed(0) || 'N/A'} km²</p>

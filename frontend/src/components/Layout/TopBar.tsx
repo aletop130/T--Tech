@@ -102,10 +102,28 @@ export function TopBar() {
         </Popover>
       </div>
 
-      {/* Status Indicator */}
-      <div className="flex items-center gap-1.5 text-xs">
-        <span className="w-1.5 h-1.5 rounded-full bg-sda-accent-green animate-pulse" />
-        <span className="text-sda-text-secondary">Nominal</span>
+      {/* Spacer */}
+      <div className="flex-1" />
+
+      {/* HORUS branding + status */}
+      <div className="flex items-center gap-3 mr-2">
+        <div className="flex items-center gap-2">
+          <img
+            src="/omniscient-logo.svg"
+            alt="Horus logo"
+            className="h-5 w-5 object-contain"
+            style={{ filter: 'brightness(0) invert(1)' }}
+          />
+          <span className="font-sans text-[13px] font-bold uppercase tracking-[0.15em] text-white">
+            HORUS
+          </span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <span className="w-1.5 h-1.5 bg-sda-accent-green animate-pulse" />
+          <span className="font-code text-[10px] uppercase tracking-wider text-zinc-400">
+            STATUS NOMINAL
+          </span>
+        </div>
       </div>
 
       {/* Settings */}
@@ -113,4 +131,3 @@ export function TopBar() {
     </header>
   );
 }
-

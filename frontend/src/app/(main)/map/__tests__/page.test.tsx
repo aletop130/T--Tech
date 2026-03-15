@@ -109,6 +109,7 @@ vi.mock('@/components/CesiumMap/PlanetInfoBox', () => ({ PlanetInfoBox: (props: 
 vi.mock('@/components/Chat/AgentChat', () => ({
   AgentChat: (props: any) => (
     <div data-testid="agent-chat">
+      <div data-testid="agent-chat-prompts">{JSON.stringify(props.quickPrompts ?? [])}</div>
       <button
         data-testid="agent-chat-sim-start"
         onClick={() =>
@@ -244,6 +245,24 @@ describe('Map page integration – debris features', () => {
     expect(slider).toHaveValue('2');
     expect(window.__DETOUR_SPEED__).toBe(5);
     expect(screen.getByText('5x')).toBeInTheDocument();
+  });
+
+  it('removes the Fly to ISS quick prompt from the map chat', async () => {
+    const mockData = {
+      timeUtc: '2026-01-01T00:00:00Z',
+      objects: [],
+    };
+    getDebris.mockResolvedValueOnce(mockData);
+
+    render(<MapPage />);
+
+    const promptText = screen.getByTestId('agent-chat-prompts').textContent ?? '';
+
+    expect(promptText).toContain('Mostrami la minaccia più critica');
+    expect(promptText).toContain('Tour della costellazione');
+    expect(promptText).toContain('Briefing situazione');
+    expect(promptText).toContain('Analizza le congiunzioni attive');
+    expect(promptText).not.toContain('Fly to ISS');
   });
 
   it('starts SAR simulation when chat emits simulation control command', async () => {

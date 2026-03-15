@@ -2,7 +2,7 @@
 
 This monkey‑patch replaces the ``psycopg2.extras.HstoreAdapter.get_oids`` function
 with a dummy implementation that returns placeholder OIDs. The real OIDs are
-not required for the operation of the SDA platform – the function is only used
+not required for the operation of the Horus platform – the function is only used
 by SQLAlchemy's ``on_connect`` hook to register the HSTORE type. In environments
 where the ``get_oids`` query fails (e.g., due to a transaction abort during the
 initial connection), the dummy implementation prevents the exception and allows

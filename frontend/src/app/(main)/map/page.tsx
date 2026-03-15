@@ -4,15 +4,14 @@ import { useEffect, useState, useRef, useCallback, Suspense, type ReactNode } fr
 import { createPortal } from 'react-dom';
 import dynamic from 'next/dynamic';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Spinner, Tag, Icon, Button, Checkbox, Intent } from '@blueprintjs/core';
+import { Spinner, Tag, Icon, Button, Checkbox } from '@blueprintjs/core';
 import { api, GroundStation, Satellite, ConjunctionEvent, PositionReport } from '@/lib/api';
-import { getDebris, getOrbit } from '@/lib/api/debris';
+import { getDebris } from '@/lib/api/debris';
 import { getCesium, type CesiumModule } from '@/lib/cesium/loader';
 import type { DebrisObject, OrbitTrackState } from '@/lib/types/debris';
 import { AgentChat } from '@/components/Chat/AgentChat';
 import { CompactAlertsButton } from '@/components/ProximityAlertPanel/CompactAlertsButton';
 import { cesiumController } from '@/lib/cesium/controller';
-import { useItalyDefenseSimulation } from '@/lib/simulation/useItalyDefenseSimulation';
 import { useResizablePanel } from '@/hooks/useResizablePanel';
 
 // Dynamic imports for heavy CesiumMap components (no SSR)
@@ -31,17 +30,9 @@ const DebrisInfoCard = dynamic(() => import('@/components/CesiumMap/DebrisInfoCa
 const CelestrakBrowserDialog = dynamic(() => import('@/components/CesiumMap/CelestrakBrowserDialog').then(m => ({ default: m.CelestrakBrowserDialog })), { ssr: false });
 const OrbitalTrackLayer = dynamic(() => import('@/components/CesiumMap/OrbitalTrackLayer').then(m => ({ default: m.OrbitalTrackLayer })), { ssr: false });
 const MovingSatelliteMarker = dynamic(() => import('@/components/CesiumMap/MovingSatelliteMarker').then(m => ({ default: m.MovingSatelliteMarker })), { ssr: false });
-const SimulatedSatelliteLayer = dynamic(() => import('@/components/CesiumMap/SimulatedSatelliteLayer').then(m => ({ default: m.SimulatedSatelliteLayer })), { ssr: false });
-const MilitarySymbolLayer = dynamic(() => import('@/components/CesiumMap/MilitarySymbolLayer').then(m => ({ default: m.MilitarySymbolLayer })), { ssr: false });
-const DefenseDomeLayer = dynamic(() => import('@/components/CesiumMap/DefenseDomeLayer').then(m => ({ default: m.DefenseDomeLayer })), { ssr: false });
-const MissileTrajectoryLayer = dynamic(() => import('@/components/CesiumMap/MissileTrajectoryLayer').then(m => ({ default: m.MissileTrajectoryLayer })), { ssr: false });
-const SatelliteCoverageConeLayer = dynamic(() => import('@/components/CesiumMap/SatelliteCoverageConeLayer').then(m => ({ default: m.SatelliteCoverageConeLayer })), { ssr: false });
-const ASATTrajectoryLayer = dynamic(() => import('@/components/CesiumMap/ASATTrajectoryLayer').then(m => ({ default: m.ASATTrajectoryLayer })), { ssr: false });
-const HostileSatelliteLayer = dynamic(() => import('@/components/CesiumMap/HostileSatelliteLayer').then(m => ({ default: m.HostileSatelliteLayer })), { ssr: false });
-const ItalyDefenseHUD = dynamic(() => import('@/components/Simulation/ItalyDefenseHUD').then(m => ({ default: m.ItalyDefenseHUD })), { ssr: false });
-const ItalyDefenseNarrative = dynamic(() => import('@/components/Simulation/ItalyDefenseNarrative').then(m => ({ default: m.ItalyDefenseNarrative })), { ssr: false });
 const GroundTrackLayer = dynamic(() => import('@/components/CesiumMap/GroundTrackLayer').then(m => ({ default: m.GroundTrackLayer })), { ssr: false });
 const CollisionHeatmapLayer = dynamic(() => import('@/components/CesiumMap/CollisionHeatmapLayer').then(m => ({ default: m.CollisionHeatmapLayer })), { ssr: false });
+const ItalySatelliteLayer = dynamic(() => import('@/components/CesiumMap/ItalySatelliteLayer').then(m => ({ default: m.ItalySatelliteLayer })), { ssr: false });
 
 declare global {
   interface Window {
@@ -185,6 +176,13 @@ const GROUP_DESCRIPTIONS: Record<string, string> = {
   'Uncategorized':      'Objects with no assigned category.',
 };
 
+const MAP_CHAT_QUICK_PROMPTS = [
+  'Mostrami la minaccia più critica',
+  'Tour della costellazione',
+  'Briefing situazione',
+  'Analizza le congiunzioni attive',
+];
+
 function MapPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -210,7 +208,6 @@ function MapPageContent() {
   const [showTerrain, setShowTerrain] = useState(false);
   const [terrainAvailable, setTerrainAvailable] = useState(false);
   const [photorealistic3D, setPhotorealistic3D] = useState(false);
-  const [isSimulationMode, setIsSimulationMode] = useState(false);
   const [showGroundTrack, setShowGroundTrack] = useState(true);
 
   // Camera tracking state — name of the entity currently locked by the camera
@@ -233,6 +230,7 @@ function MapPageContent() {
   const [debris, setDebris] = useState<DebrisObject[]>([]);
   const [debrisPositions, setDebrisPositions] = useState<InstanceType<CesiumModule['Cartesian3']>[]>([]);
   const [showDebris, setShowDebris] = useState(true);
+  const [showItalySats, setShowItalySats] = useState(false);
 
   // Sync showDebris toggle with hiddenGroups so SatelliteLayer also hides debris points+orbits
   useEffect(() => {
@@ -282,34 +280,6 @@ const DEBRIS_REFRESH_MS = 15_000;
 const DISPLAY_OBJECT_LIMIT = 2500;
 const DEBRIS_ORBIT_CLASSES = "LEO";
   
-  // Italy Defense Simulation hook
-  const {
-    time: simTime,
-    isPlaying: simIsPlaying,
-    isComplete: simIsComplete,
-    isPaused: simIsPaused,
-    currentStep: simCurrentStep,
-    currentPhase: simCurrentPhase,
-    keyEvents: simKeyEvents,
-    totalDuration: simTotalDuration,
-    bases: simBases,
-    missiles: simMissiles,
-    interceptors: simInterceptors,
-    satellites: simSatellites,
-    groundUnits: simGroundUnits,
-    score: simScore,
-    asatMissiles: simASATMissiles,
-    hostileSatellites: simHostileSatellites,
-    defenseModifier: simDefenseModifier,
-    togglePlayPause: simTogglePlayPause,
-    resetSimulation: simReset,
-    startSimulation: simStart,
-    nextStep: simNextStep,
-    prevStep: simPrevStep,
-    freeCameraMode: simFreeCameraMode,
-    toggleFreeCameraMode: simToggleFreeCameraMode,
-  } = useItalyDefenseSimulation(viewer, isSimulationMode);
-
   const handleChatSimulationControl = useCallback(
     (command: { action: string; mode?: string; prompt?: string }) => {
       if (command.action === 'open_sandbox') {
@@ -323,20 +293,8 @@ const DEBRIS_ORBIT_CLASSES = "LEO";
         router.push(`/sandbox${sandboxParams.toString() ? `?${sandboxParams.toString()}` : ''}`);
         return;
       }
-
-      if (command.action !== 'start_italy_defense' && command.action !== 'start_sar_simulation') {
-        return;
-      }
-
-      const shouldEnterSimulation =
-        !command.mode
-        || command.mode === 'enter_simulation_mode'
-        || command.mode === 'enter_and_start';
-      if (shouldEnterSimulation && !isSimulationMode) {
-        setIsSimulationMode(true);
-      }
     },
-    [isSimulationMode, pinnedSatelliteIds, router]
+    [pinnedSatelliteIds, router]
   );
   
   const satellitePositionsRef = useRef<Map<string, InstanceType<CesiumModule['Cartesian3']>>>(new Map());
@@ -611,7 +569,6 @@ useEffect(() => {
 
 const loadDebris = async () => {
       if (isDebrisLoadingRef.current) return;
-      if (isSimulationMode) return; // pause during simulation
       isDebrisLoadingRef.current = true;
       try {
         const response = await getDebris(DISPLAY_OBJECT_LIMIT, DEBRIS_ORBIT_CLASSES);
@@ -656,7 +613,7 @@ const loadDebris = async () => {
       if (interval) clearInterval(interval);
       abortController.abort();
     };
-}, [isSimulationMode]);
+}, []);
 
   useEffect(() => {
     const handler = () => {
@@ -686,16 +643,6 @@ const loadDebris = async () => {
           } else {
             setOrbitTrack(null);
           }
-         } else if (selectedDebris) {
-           if (isSimulationMode) {
-             const response = await getOrbit(selectedDebris.noradId);
-             const Cesium = await getCesium();
-             const points = response.points.map((p) => Cesium.Cartesian3.fromDegrees(p.lon, p.lat, p.altKm * 1000));
-             const timeStartMs = new Date(response.timeStartUtc).getTime();
-             setOrbitTrack({ points, timeStartMs, stepSec: response.stepSec });
-           } else {
-             setOrbitTrack(null);
-           }
          } else {
           setOrbitTrack(null);
         }
@@ -871,8 +818,7 @@ const loadDebris = async () => {
 
             {/* Earth Layers */}
               <>
-                {!isSimulationMode && (
-                  <SatelliteLayer
+                <SatelliteLayer
                     viewer={viewer}
                     satellites={satellites}
                     orbits={orbits}
@@ -882,43 +828,38 @@ const loadDebris = async () => {
                     hiddenGroups={hiddenGroups}
                     hiddenGroupOrbits={hiddenGroupOrbits}
                     selectedSatelliteIds={pinnedSatelliteIds}
-                  />
-                )}
-                {!isSimulationMode && (
-                  <GroundStationLayer
+                />
+                <GroundStationLayer
                     viewer={viewer}
                     stations={groundStations}
                     showCoverage={showCoverage}
-                  />
-                )}
-                {!isSimulationMode && showGroundVehicles && vehicleDisplayMode === 'points' && (
+                />
+                {showGroundVehicles && vehicleDisplayMode === 'points' && (
                   <GroundVehicleLayer
                     viewer={viewer}
                     vehicles={groundVehicles}
                     show={showGroundVehicles}
                   />
                 )}
-                {!isSimulationMode && showGroundVehicles && vehicleDisplayMode === '3d' && (
+                {showGroundVehicles && vehicleDisplayMode === '3d' && (
                   <MilitaryVehicleLayer
                     viewer={viewer}
                     vehicles={groundVehicles}
                     show={showGroundVehicles}
                   />
                 )}
-                {!isSimulationMode && showConjunctions && (
+                {showConjunctions && (
                   <ConjunctionLayer
                     viewer={viewer}
                     conjunctions={conjunctions}
                     satellitePositions={satellitePositionsRef.current}
                   />
                 )}
-                {!isSimulationMode && (
-                  <CollisionHeatmapLayer
+                <CollisionHeatmapLayer
                     viewer={viewer}
                     visible={showCollisionHeatmap}
-                  />
-                )}
-                {!isSimulationMode && showDebris && (
+                />
+                {showDebris && (
                   <DebrisInstancedLayer
                     viewer={viewer}
                     debris={debris}
@@ -927,6 +868,7 @@ const loadDebris = async () => {
                     showDebris={showDebris}
                   />
                 )}
+                <ItalySatelliteLayer viewer={viewer} show={showItalySats} />
                 {selectedSatellite && (
                   <SatelliteInfoCard
                     satellite={selectedSatellite}
@@ -960,101 +902,22 @@ const loadDebris = async () => {
                     onManeuver={() => setManeuverStartMs(Date.now())}
                   />
                 )}
-                {orbitTrack && viewer && ((selectedDebris && isSimulationMode) || (selectedSatellite && !isSimulationMode)) && (
+                {orbitTrack && viewer && selectedSatellite && (
                   <>
                     <OrbitalTrackLayer viewer={viewer} orbitTrack={orbitTrack} maneuverStartMs={maneuverStartMs} />
                     <MovingSatelliteMarker viewer={viewer} orbitTrack={orbitTrack} maneuverStartMs={maneuverStartMs} />
                   </>
                 )}
-                {!isSimulationMode && (
-                  <GroundTrackLayer
+                <GroundTrackLayer
                     viewer={viewer}
                     selectedSatelliteNoradId={selectedSatellite?.norad_id ?? null}
                     visible={showGroundTrack}
                     selectedStation={selectedStation}
-                  />
-                )}
+                />
 
-                {/* Italy Defense Simulation Layers */}
-                {isSimulationMode && (
-                  <>
-                    <SimulatedSatelliteLayer
-                      viewer={viewer}
-                      satellites={simSatellites.map(sat => ({
-                        id: sat.id,
-                        name: sat.name,
-                        type: sat.type,
-                        position: sat.currentPosition || sat.initialPosition,
-                        status: sat.status as 'online' | 'degraded' | 'maneuvering' | 'offline',
-                        fuelPercent: sat.fuelPercent,
-                        affiliation: sat.affiliation as 'allied' | 'hostile' | 'neutral' | undefined,
-                      }))}
-                      showManeuvers={true}
-                      showDataLinks={true}
-                      simulationTime={simTime}
-                    />
-                    <MilitarySymbolLayer
-                      viewer={viewer}
-                      units={simGroundUnits.map(unit => ({
-                        id: unit.id,
-                        name: unit.name,
-                        sidc: unit.sidc,
-                        position: (unit as any).position || unit.initialPosition,
-                        affiliation: unit.affiliation,
-                        status: unit.status,
-                      }))}
-                    />
-                    <DefenseDomeLayer
-                      viewer={viewer}
-                      bases={simBases}
-                      simulationTime={simTime}
-                    />
-                    <MissileTrajectoryLayer
-                      viewer={viewer}
-                      missiles={simMissiles}
-                      interceptors={simInterceptors}
-                      simulationTime={simTime}
-                    />
-                    <SatelliteCoverageConeLayer
-                      viewer={viewer}
-                      satellites={simSatellites}
-                      simulationTime={simTime}
-                    />
-                    <ASATTrajectoryLayer
-                      viewer={viewer}
-                      asatMissiles={simASATMissiles}
-                      simulationTime={simTime}
-                    />
-                    <HostileSatelliteLayer
-                      viewer={viewer}
-                      hostileSatellites={simHostileSatellites}
-                      satellites={simSatellites}
-                      simulationTime={simTime}
-                    />
-                  </>
-                )}
               </>
           </div>
         )}
-      </div>
-
-      {/* Simulation Mode Button - Top Left */}
-      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20">
-        <Button
-          intent={isSimulationMode ? Intent.DANGER : Intent.SUCCESS}
-          onClick={() => {
-            if (isSimulationMode) {
-              simReset();
-              setIsSimulationMode(false);
-            } else {
-              setIsSimulationMode(true);
-            }
-          }}
-          icon={isSimulationMode ? 'cross' : 'play'}
-          large
-        >
-          {isSimulationMode ? 'Exit Simulation' : 'Start Simulation'}
-        </Button>
       </div>
 
       {/* ═══ Global Status & Control Bar (Astro UXDS-inspired) ═══ */}
@@ -1115,8 +978,6 @@ const loadDebris = async () => {
             </div>
           </div>
 
-          {!isSimulationMode && (
-            <>
               <div className="w-px h-6 bg-sda-border-default" />
 
               {/* ── Group: Layers ── */}
@@ -1158,6 +1019,8 @@ const loadDebris = async () => {
                     labelElement={<span className="text-xs text-sda-text-secondary">Track</span>} />
                   <Checkbox checked={showCollisionHeatmap} onChange={(e) => setShowCollisionHeatmap(e.currentTarget.checked)}
                     labelElement={<span className="text-xs text-sda-text-secondary">Collision</span>} />
+                  <Checkbox checked={showItalySats} onChange={(e) => setShowItalySats(e.currentTarget.checked)}
+                    labelElement={<span className="text-xs text-sda-text-secondary">IT Coverage</span>} />
                 </div>
               </div>
 
@@ -1255,13 +1118,11 @@ const loadDebris = async () => {
                   </Button>
                 </div>
               </div>
-            </>
-          )}
         </div>
       </div>
 
       {/* Speed Control Overlay */}
-<div className="absolute bottom-4 left-4 z-20 glass-panel rounded-md px-3 py-2 flex items-center gap-2">
+<div className="absolute bottom-2 z-20 glass-panel rounded-sm px-3 py-2 flex items-center gap-2" style={{ left: 'calc(288px + 1.5rem)' }}>
   <span className="text-xs text-white font-medium">SPD</span>
   <input
     type="range"
@@ -1283,13 +1144,13 @@ const loadDebris = async () => {
   <span className={`text-xs font-medium ${speed > 1 ? 'text-yellow-300' : 'text-white'}`}>{speed}x</span>
 </div>
 {/* Panels Container */}
-      <div className="absolute inset-0 z-10 pointer-events-none">
+      <div className="absolute inset-0 z-10 pointer-events-none" style={{ height: '100%' }}>
         {/* Left Panel - Elements */}
-        {!isSimulationMode && (
-          <div className="absolute left-4 top-[88px] bottom-4 pointer-events-auto bg-sda-bg-secondary/60 backdrop-blur-sm rounded-lg border border-sda-border-default px-4 py-2 shadow-lg flex flex-col overflow-hidden" style={{ width: elementsPanel.width }}>
+          <div className="absolute left-2 top-[96px] bottom-2 pointer-events-auto flex flex-col" style={{ width: elementsPanel.width }}>
+            <div className="relative flex-1 min-h-0 bg-sda-bg-secondary/80 backdrop-blur-md rounded-sm border border-sda-border-default shadow-lg flex flex-col overflow-hidden map-panel-accent">
             {/* Resize handle - right edge */}
             <div className="resize-handle resize-handle-right" onMouseDown={elementsPanel.onMouseDown} />
-            <div className="flex flex-col h-full">
+            <div className="flex flex-col h-full min-h-0">
               <>
                 <div className="p-3 border-b border-sda-border-default">
                   <div className="flex items-center justify-between">
@@ -1641,13 +1502,13 @@ const loadDebris = async () => {
                 </div>
               </>
           </div>
+          </div>
         </div>
-        )}
 
         {/* Right Panel - AI Chat */}
-        <div className="absolute right-4 top-[88px] bottom-4 pointer-events-auto flex flex-col gap-4" style={{ width: chatPanel.width }}>
+        <div className="absolute right-2 top-[96px] bottom-2 pointer-events-auto flex flex-col gap-2" style={{ width: chatPanel.width }}>
           {/* AI Chat Panel */}
-          <div className="relative flex-[2] bg-sda-bg-secondary/90 backdrop-blur-md rounded-lg border border-sda-border-default px-4 py-2 shadow-lg flex flex-col overflow-hidden min-h-0">
+          <div className="relative flex-[2] bg-sda-bg-secondary/80 backdrop-blur-md rounded-sm border border-sda-border-default shadow-lg flex flex-col overflow-hidden min-h-0 map-panel-accent">
             {/* Resize handle - left edge */}
             <div className="resize-handle resize-handle-left" onMouseDown={chatPanel.onMouseDown} />
             <div className="flex items-center justify-between p-2 border-b border-sda-border-default">
@@ -1660,6 +1521,7 @@ const loadDebris = async () => {
               <AgentChat
                 useStreaming={true}
                 onSimulationControl={handleChatSimulationControl}
+                quickPrompts={MAP_CHAT_QUICK_PROMPTS}
                 contextSatellites={satellites
                   .filter(s => pinnedSatelliteIds.has(s.id))
                   .map(s => ({ id: s.id, name: s.name, norad_id: s.norad_id, object_type: s.object_type, country: s.country, operator: s.operator, tags: s.tags }))}
@@ -1669,33 +1531,6 @@ const loadDebris = async () => {
           </div>
         </div>
 
-        {/* Left Panel - Italy Defense HUD (Simulation Mode Only) */}
-        {isSimulationMode && (
-          <ItalyDefenseHUD
-            simulationTime={simTime}
-            totalDuration={simTotalDuration}
-            currentPhase={simCurrentPhase}
-            keyEvents={simKeyEvents}
-            bases={simBases}
-            satellites={simSatellites}
-            score={simScore}
-            isPlaying={simIsPlaying}
-            isComplete={simIsComplete}
-            isPaused={simIsPaused}
-            onPlayPause={simTogglePlayPause}
-            onReset={() => {
-              simReset();
-              setIsSimulationMode(false);
-            }}
-            onNextStep={simNextStep}
-            onPrevStep={simPrevStep}
-            freeCameraMode={simFreeCameraMode}
-            onToggleFreeCameraMode={simToggleFreeCameraMode}
-            asatMissiles={simASATMissiles}
-            hostileSatellites={simHostileSatellites}
-            defenseModifier={simDefenseModifier}
-          />
-        )}
       </div>
 
       {/* CelesTrak Browser Dialog */}
@@ -1705,44 +1540,6 @@ const loadDebris = async () => {
         onFetched={() => loadData(true)}
       />
 
-      {/* Italy Defense Simulation UI */}
-      {isSimulationMode && (
-        <>
-          {/* Start Mission Button - Only show when simulation hasn't started */}
-          {!simIsPlaying && !simIsComplete && simTime === 0 && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-              <div className="bg-slate-900 border border-red-500 rounded-lg p-8 max-w-lg text-center shadow-2xl">
-                <h2 className="text-2xl font-bold text-red-400 mb-2">OPERATION SCUDO D'ITALIA</h2>
-                <p className="text-sm text-cyan-400 mb-4 font-mono">ITALY MISSILE DEFENSE SIMULATION</p>
-                <p className="text-slate-300 mb-6">
-                  Intelligence reports confirm imminent multi-domain attack from Iran targeting Italian military installations and allied satellite constellation.
-                  NATO integrated air defense network must intercept incoming ballistic missiles while defending the satellite
-                  constellation from ASAT kinetic kill vehicles, co-orbital hostile satellites, electronic warfare, and cyber attacks.
-                </p>
-                <div className="space-y-2 text-sm text-slate-400 mb-6">
-                  <p>Ground: 8 ballistic missiles (Shahab-3, Emad, Khorramshahr)</p>
-                  <p>Space: 3 ASAT missiles, 3 co-orbital threats, 3 EW attacks, 2 cyber attacks</p>
-                  <p>Defense: 8 NATO/Italian bases + 6 allied satellites</p>
-                  <p>Duration: 15 min sim time (1 min real-time at 15x)</p>
-                </div>
-                <Button
-                  intent={Intent.DANGER}
-                  large
-                  onClick={simStart}
-                  icon="shield"
-                  className="px-8 py-3 text-lg font-bold"
-                >
-                  ACTIVATE DEFENSE
-                </Button>
-              </div>
-            </div>
-          )}
-          <ItalyDefenseNarrative
-            simulationTime={simTime}
-            isPlaying={simIsPlaying}
-          />
-        </>
-      )}
     </div>
   );
 }

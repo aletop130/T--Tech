@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 
 import { getCesium, type CesiumModule } from '@/lib/cesium/loader';
 import type { SandboxActor } from '@/lib/store/sandbox';
+import { getEntityIcon, inferActorIcon } from '@/lib/cesium/entity-icons';
 
 const FACTION_COLORS: Record<string, string> = {
   allied: '#22d3ee',
@@ -17,11 +18,17 @@ function actorColor(actor: SandboxActor): string {
   return FACTION_COLORS[actor.faction] ?? '#fbbf24';
 }
 
+function actorPointSize(actor: SandboxActor, isSelected: boolean): number {
+  const baseSize = actor.subtype === 'drone' ? 8 : 10;
+  return isSelected ? baseSize + 4 : baseSize;
+}
+
 interface SandboxActorLayerProps {
   viewer: InstanceType<CesiumModule['Viewer']> | null;
   actors: SandboxActor[];
   selectedActorId?: string | null;
   onSelectActor?: (actorId: string | null) => void;
+  selectionEnabled?: boolean;
 }
 
 export function SandboxActorLayer({
@@ -29,6 +36,7 @@ export function SandboxActorLayer({
   actors,
   selectedActorId,
   onSelectActor,
+  selectionEnabled = true,
 }: SandboxActorLayerProps) {
   const cleanupRef = useRef<(() => void) | null>(null);
   const [Cesium, setCesium] = useState<CesiumModule | null>(null);
@@ -39,7 +47,7 @@ export function SandboxActorLayer({
 
   // Click-to-select handler
   useEffect(() => {
-    if (!viewer || !Cesium || !onSelectActor) return;
+    if (!viewer || !Cesium || !onSelectActor || !selectionEnabled) return;
 
     const handler = new Cesium.ScreenSpaceEventHandler(viewer.canvas);
     handler.setInputAction((movement: { position?: { x: number; y: number } }) => {
@@ -60,7 +68,7 @@ export function SandboxActorLayer({
     }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
 
     return () => { handler.destroy(); };
-  }, [Cesium, viewer, onSelectActor]);
+  }, [Cesium, viewer, onSelectActor, selectionEnabled]);
 
   // Render entities
   useEffect(() => {
@@ -79,23 +87,25 @@ export function SandboxActorLayer({
       const color = Cesium.Color.fromCssColorString(cssColor);
       const isSelected = actor.id === selectedActorId;
 
+      const iconType = inferActorIcon(actor.actor_class, actor.actor_type, actor.subtype);
+      const iconSize = isSelected ? 32 : 24;
       viewer.entities.add({
         id: actorId,
         name: actor.label,
         position: Cesium.Cartesian3.fromDegrees(lon, lat, alt),
-        point: {
-          pixelSize: isSelected ? 14 : 10,
-          color,
-          outlineColor: isSelected ? Cesium.Color.WHITE : Cesium.Color.BLACK,
-          outlineWidth: isSelected ? 3 : 2,
+        billboard: {
+          image: getEntityIcon(iconType, cssColor),
+          width: iconSize,
+          height: iconSize,
           heightReference:
             actor.actor_class === 'orbital'
               ? Cesium.HeightReference.NONE
               : Cesium.HeightReference.CLAMP_TO_GROUND,
+          disableDepthTestDistance: Number.POSITIVE_INFINITY,
         },
         label: {
           text: actor.label,
-          font: isSelected ? 'bold 13px IBM Plex Sans' : '12px IBM Plex Sans',
+          font: isSelected ? 'bold 13px Google Sans' : '12px Google Sans',
           fillColor: color,
           outlineColor: Cesium.Color.BLACK,
           outlineWidth: 3,

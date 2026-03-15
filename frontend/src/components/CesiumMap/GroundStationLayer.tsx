@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { getCesium, type CesiumModule } from '@/lib/cesium/loader';
 import { GroundStation } from '@/lib/api';
+import { getEntityIcon } from '@/lib/cesium/entity-icons';
 
 interface GroundStationLayerProps {
   viewer: InstanceType<CesiumModule['Viewer']> | null;
@@ -52,22 +53,21 @@ export function GroundStationLayer({
         0
       );
 
+      const stationColor = station.is_operational ? '#22c55e' : '#ef4444';
       const stationEntity = viewer.entities.add({
         id: `station-${station.id}`,
         name: station.name,
         position: position,
-        point: {
-          pixelSize: 10,
-          color: station.is_operational
-            ? Cesium.Color.GREEN
-            : Cesium.Color.RED,
-          outlineColor: Cesium.Color.WHITE,
-          outlineWidth: 2,
+        billboard: {
+          image: getEntityIcon('ground_station', stationColor),
+          width: 28,
+          height: 28,
           heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
+          disableDepthTestDistance: Number.POSITIVE_INFINITY,
         },
         label: {
           text: station.name,
-          font: '12px IBM Plex Sans',
+          font: '12px Google Sans',
           fillColor: Cesium.Color.WHITE,
           outlineColor: Cesium.Color.BLACK,
           outlineWidth: 2,
@@ -77,7 +77,7 @@ export function GroundStationLayer({
           show: false,
         },
         description: `
-          <div style="font-family: 'IBM Plex Sans', sans-serif;">
+          <div style="font-family: 'Google Sans', sans-serif;">
             <h3>${station.name}</h3>
             <p><strong>Code:</strong> ${station.code || 'N/A'}</p>
             <p><strong>Location:</strong> ${station.latitude.toFixed(4)}°, ${station.longitude.toFixed(4)}°</p>

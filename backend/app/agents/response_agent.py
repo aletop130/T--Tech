@@ -14,7 +14,7 @@ from app.agents.base_agent import BaseAgent, ProgressCallback
 
 logger = logging.getLogger(__name__)
 
-SYSTEM_PROMPT = """You are a SPACE DEFENSE RESPONSE COMMANDER operating in the SDA Platform.
+SYSTEM_PROMPT = """You are a SPACE DEFENSE RESPONSE COMMANDER operating in the Horus platform.
 
 A satellite's threat score has crossed the critical threshold. You must research the threat, evaluate response options, and recommend the best course of action.
 

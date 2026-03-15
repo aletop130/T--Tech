@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { getCesium, type CesiumModule } from '@/lib/cesium/loader';
 import { Satellite } from '@/lib/api';
+import { getEntityIcon } from '@/lib/cesium/entity-icons';
 
 // Same palette as map/page.tsx — kept in sync
 const GROUP_COLORS = [
@@ -169,20 +170,22 @@ export function SatelliteLayer({
         }
 
         const currentPos = positions[0];
+        const iconType = isDebris ? 'debris' as const : 'satellite' as const;
+        const iconSize = isDebris ? (isSelected ? 18 : 14) : (isSelected ? 36 : 28);
         const satEntity = viewer.entities.add({
           id: satelliteId,
           name: sat.name,
           position: currentPos,
-          point: {
-            pixelSize: isDebris ? (isSelected ? 6 : 4) : (isSelected ? 12 : 8),
-            color: pointColor,
-            outlineColor: isSelected ? Cesium.Color.WHITE : Cesium.Color.WHITE,
-            outlineWidth: isDebris ? 0 : (isSelected ? 3 : 2),
+          billboard: {
+            image: getEntityIcon(iconType, colorHex),
+            width: iconSize,
+            height: iconSize,
             heightReference: Cesium.HeightReference.NONE,
+            disableDepthTestDistance: 0,
           },
           label: {
             text: sat.name,
-            font: isSelected ? '13px IBM Plex Sans' : '12px IBM Plex Sans',
+            font: isSelected ? '13px Google Sans' : '12px Google Sans',
             fillColor: Cesium.Color.WHITE,
             outlineColor: Cesium.Color.BLACK,
             outlineWidth: 2,
@@ -192,7 +195,7 @@ export function SatelliteLayer({
             show: isSelected,
           },
           description: `
-            <div style="font-family: 'IBM Plex Sans', sans-serif;">
+            <div style="font-family: 'Google Sans', sans-serif;">
               <h3>${sat.name}</h3>
               <p><strong>NORAD ID:</strong> ${sat.norad_id}</p>
               <p><strong>Type:</strong> ${sat.object_type}</p>

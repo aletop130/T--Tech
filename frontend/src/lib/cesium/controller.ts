@@ -1922,7 +1922,7 @@ this.viewer.camera.flyTo({
       },
       label: {
         text: name,
-        font: '12px IBM Plex Sans',
+        font: '12px Google Sans',
         fillColor: color,
         outlineColor: this.Cesium.Color.BLACK,
         outlineWidth: 2,
@@ -1970,7 +1970,7 @@ this.viewer.camera.flyTo({
       },
       label: {
         text: name,
-        font: '11px IBM Plex Sans',
+        font: '11px Google Sans',
         fillColor: color,
         outlineColor: this.Cesium.Color.BLACK,
         outlineWidth: 2,
@@ -2029,7 +2029,7 @@ this.viewer.camera.flyTo({
       },
       label: {
         text: name,
-        font: '10px IBM Plex Sans',
+        font: '10px Google Sans',
         fillColor: color,
         outlineColor: this.Cesium.Color.BLACK,
         outlineWidth: 2,

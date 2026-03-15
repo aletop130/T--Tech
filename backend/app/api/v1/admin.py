@@ -1,4 +1,7 @@
 """Admin API endpoints for system maintenance and management."""
+import asyncio
+import json
+import time
 from typing import Annotated, Optional
 from datetime import datetime
 from io import StringIO
@@ -12,6 +15,7 @@ from app.api.deps import get_current_user, get_db, require_role
 from app.core.security import TokenData
 from app.core.config import settings
 from app.core.exceptions import SDAException
+from app.db.base import engine
 
 router = APIRouter()
 
@@ -47,14 +51,14 @@ async def run_database_vacuum(
     """Run PostgreSQL VACUUM ANALYZE as background task."""
     async def vacuum_task():
         try:
-            # Note: VACUUM cannot run inside a transaction block
-            # We need to use autocommit mode
-            from app.db.base import engine
-            async with engine.begin() as conn:
+            # VACUUM cannot run inside a transaction block.
+            # Use AUTOCOMMIT isolation level.
+            async with engine.connect() as conn:
+                await conn.execution_options(isolation_level="AUTOCOMMIT")
                 await conn.execute(text("VACUUM ANALYZE"))
         except Exception as e:
             print(f"Vacuum task failed: {e}")
-    
+
     background_tasks.add_task(vacuum_task)
     return {
         "success": True,
@@ -72,20 +76,20 @@ async def export_audit_logs(
 ):
     """Export audit logs as CSV or JSON."""
     from app.db.models.audit import AuditEvent
-    
+
     # Build query using SQLAlchemy 2.0 style
     stmt = select(AuditEvent).where(AuditEvent.tenant_id == user.tenant_id)
-    
+
     if start_date:
         stmt = stmt.where(AuditEvent.timestamp >= start_date)
     if end_date:
         stmt = stmt.where(AuditEvent.timestamp <= end_date)
-    
+
     stmt = stmt.order_by(AuditEvent.timestamp.desc())
-    
+
     result = await db.execute(stmt)
     logs = result.scalars().all()
-    
+
     if format == "json":
         data = [{
             "id": log.id,
@@ -97,105 +101,23 @@ async def export_audit_logs(
             "created_at": log.timestamp.isoformat() if log.timestamp else None,
         } for log in logs]
         return JSONResponse(content=data)
-    
+
     # CSV format
     output = StringIO()
     output.write("id,action,entity_type,entity_id,user_id,details,created_at\n")
-    
+
     for log in logs:
         details = str(log.extra_data or "").replace('"', '""').replace("\n", " ")
         timestamp = log.timestamp.isoformat() if log.timestamp else ""
         output.write(f'"{log.id}","{log.action}","{log.entity_type}","{log.entity_id}","{log.user_id}","{details}","{timestamp}"\n')
-    
+
     output.seek(0)
-    
+
     return StreamingResponse(
         iter([output.getvalue()]),
         media_type="text/csv",
         headers={"Content-Disposition": f"attachment; filename=audit_logs_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"}
     )
-
-
-@router.get("/system/report")
-async def download_system_report(
-    user: Annotated[TokenData, Depends(require_role('admin'))],
-    db: Annotated[AsyncSession, Depends(get_db)],
-):
-    """Generate comprehensive system health report."""
-    try:
-        import psutil
-        psutil_available = True
-    except ImportError:
-        psutil_available = False
-    
-    # Database stats
-    db_result = await db.execute(text("""
-        SELECT 
-            COUNT(*) as total_satellites,
-            COUNT(CASE WHEN is_active THEN 1 END) as active_satellites
-        FROM satellites
-        WHERE tenant_id = :tenant_id
-    """), {"tenant_id": user.tenant_id})
-    db_stats = db_result.fetchone()
-    
-    # Incident stats
-    incident_result = await db.execute(text("""
-        SELECT 
-            COUNT(*) as total,
-            COUNT(CASE WHEN status = 'OPEN' THEN 1 END) as open_count,
-            COUNT(CASE WHEN severity = 'critical' THEN 1 END) as critical_count
-        FROM incidents
-        WHERE tenant_id = :tenant_id
-    """), {"tenant_id": user.tenant_id})
-    incident_stats = incident_result.fetchone()
-    
-    # Redis health check
-    redis_status = "healthy"
-    try:
-        import redis.asyncio as redis
-        redis_client = redis.from_url(settings.REDIS_URL or "redis://localhost:6379")
-        await redis_client.ping()
-        await redis_client.close()
-    except Exception:
-        redis_status = "unhealthy"
-    
-    # System resources
-    system_info = {}
-    if psutil_available:
-        memory = psutil.virtual_memory()
-        disk = psutil.disk_usage('/')
-        system_info = {
-            "cpu_percent": psutil.cpu_percent(interval=1),
-            "memory_percent": memory.percent,
-            "memory_available_gb": round(memory.available / (1024**3), 2),
-            "disk_percent": disk.percent,
-            "disk_free_gb": round(disk.free / (1024**3), 2),
-        }
-    else:
-        system_info = {
-            "note": "psutil not available - install for system metrics"
-        }
-    
-    report = {
-        "timestamp": datetime.utcnow().isoformat(),
-        "tenant_id": user.tenant_id,
-        "database": {
-            "status": "healthy",
-            "satellites_total": db_stats.total_satellites if db_stats else 0,
-            "satellites_active": db_stats.active_satellites if db_stats else 0,
-        },
-        "incidents": {
-            "total": incident_stats.total if incident_stats else 0,
-            "open": incident_stats.open_count if incident_stats else 0,
-            "critical": incident_stats.critical_count if incident_stats else 0,
-        },
-        "redis": {
-            "status": redis_status,
-        },
-        "system": system_info,
-    }
-    
-    return JSONResponse(content=report)
 
 
 @router.get("/stats")
@@ -210,7 +132,7 @@ async def get_admin_stats(
         {"tenant_id": user.tenant_id}
     )
     satellites_count = satellites_result.scalar() or 0
-    
+
     # Open incidents
     open_incidents_result = await db.execute(
         select(func.count()).select_from(text("incidents"))
@@ -218,7 +140,7 @@ async def get_admin_stats(
         {"tenant_id": user.tenant_id}
     )
     open_incidents = open_incidents_result.scalar() or 0
-    
+
     # Incidents in last 24h
     incidents_24h_result = await db.execute(
         select(func.count()).select_from(text("incidents"))
@@ -226,7 +148,7 @@ async def get_admin_stats(
         {"tenant_id": user.tenant_id}
     )
     incidents_24h = incidents_24h_result.scalar() or 0
-    
+
     # Audit logs in last 24h
     audit_24h_result = await db.execute(
         select(func.count()).select_from(text("audit_events"))
@@ -234,10 +156,219 @@ async def get_admin_stats(
         {"tenant_id": user.tenant_id}
     )
     audit_24h = audit_24h_result.scalar() or 0
-    
+
+    # Ground stations count
+    ground_stations_result = await db.execute(
+        select(func.count()).select_from(text("ground_stations")).where(text("tenant_id = :tenant_id")),
+        {"tenant_id": user.tenant_id}
+    )
+    ground_stations_count = ground_stations_result.scalar() or 0
+
+    # Orbits count
+    orbits_result = await db.execute(
+        select(func.count()).select_from(text("orbits")).where(text("tenant_id = :tenant_id")),
+        {"tenant_id": user.tenant_id}
+    )
+    orbits_count = orbits_result.scalar() or 0
+
+    # Conjunctions count
+    conjunctions_result = await db.execute(
+        select(func.count()).select_from(text("conjunction_events")).where(text("tenant_id = :tenant_id")),
+        {"tenant_id": user.tenant_id}
+    )
+    conjunctions_count = conjunctions_result.scalar() or 0
+
+    # Ingestion runs in last 24h
+    ingestion_24h_result = await db.execute(
+        select(func.count()).select_from(text("ingestion_runs"))
+        .where(text("tenant_id = :tenant_id AND created_at > NOW() - INTERVAL '24 hours'")),
+        {"tenant_id": user.tenant_id}
+    )
+    ingestion_runs_24h = ingestion_24h_result.scalar() or 0
+
     return {
         "satellites": satellites_count,
         "open_incidents": open_incidents,
         "incidents_24h": incidents_24h,
         "audit_logs_24h": audit_24h,
+        "ground_stations": ground_stations_count,
+        "orbits": orbits_count,
+        "conjunctions": conjunctions_count,
+        "ingestion_runs_24h": ingestion_runs_24h,
     }
+
+
+@router.get("/health/services")
+async def get_service_health(
+    user: Annotated[TokenData, Depends(require_role('admin'))],
+):
+    """Check real health of all backend services."""
+
+    async def _check_database() -> dict:
+        start = time.monotonic()
+        try:
+            async with engine.connect() as conn:
+                await asyncio.wait_for(
+                    conn.execute(text("SELECT 1")),
+                    timeout=5.0,
+                )
+            latency = (time.monotonic() - start) * 1000
+            return {"name": "Database", "status": "healthy", "latency_ms": round(latency, 2), "detail": None}
+        except Exception as e:
+            latency = (time.monotonic() - start) * 1000
+            return {"name": "Database", "status": "unhealthy", "latency_ms": round(latency, 2), "detail": str(e)}
+
+    async def _check_redis() -> dict:
+        start = time.monotonic()
+        try:
+            import redis.asyncio as redis
+            client = redis.from_url(
+                settings.REDIS_URL or "redis://localhost:6379",
+                decode_responses=True,
+            )
+            await asyncio.wait_for(client.ping(), timeout=5.0)
+            await client.close()
+            latency = (time.monotonic() - start) * 1000
+            return {"name": "Redis Cache", "status": "healthy", "latency_ms": round(latency, 2), "detail": None}
+        except Exception as e:
+            latency = (time.monotonic() - start) * 1000
+            return {"name": "Redis Cache", "status": "unhealthy", "latency_ms": round(latency, 2), "detail": str(e)}
+
+    async def _check_minio() -> dict:
+        start = time.monotonic()
+        try:
+            from minio import Minio
+            client = Minio(
+                settings.MINIO_ENDPOINT,
+                access_key=settings.MINIO_ACCESS_KEY,
+                secret_key=settings.MINIO_SECRET_KEY,
+                secure=settings.MINIO_SECURE,
+            )
+            # list_buckets is synchronous in the minio library, run in executor
+            loop = asyncio.get_event_loop()
+            await asyncio.wait_for(
+                loop.run_in_executor(None, client.list_buckets),
+                timeout=5.0,
+            )
+            latency = (time.monotonic() - start) * 1000
+            return {"name": "MinIO Storage", "status": "healthy", "latency_ms": round(latency, 2), "detail": None}
+        except Exception as e:
+            latency = (time.monotonic() - start) * 1000
+            return {"name": "MinIO Storage", "status": "unhealthy", "latency_ms": round(latency, 2), "detail": str(e)}
+
+    async def _check_ai_service() -> dict:
+        start = time.monotonic()
+        try:
+            if not settings.REGOLO_API_KEY:
+                latency = (time.monotonic() - start) * 1000
+                return {"name": "AI Service", "status": "unavailable", "latency_ms": round(latency, 2), "detail": "API key not configured"}
+
+            import httpx
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                resp = await client.get(settings.REGOLO_BASE_URL)
+                latency = (time.monotonic() - start) * 1000
+                if resp.status_code < 500:
+                    return {"name": "AI Service", "status": "healthy", "latency_ms": round(latency, 2), "detail": None}
+                else:
+                    return {"name": "AI Service", "status": "degraded", "latency_ms": round(latency, 2), "detail": f"HTTP {resp.status_code}"}
+        except Exception as e:
+            latency = (time.monotonic() - start) * 1000
+            return {"name": "AI Service", "status": "degraded", "latency_ms": round(latency, 2), "detail": str(e)}
+
+    # Run all checks concurrently
+    results = await asyncio.gather(
+        _check_database(),
+        _check_redis(),
+        _check_minio(),
+        _check_ai_service(),
+    )
+
+    services = list(results)
+
+    # Determine overall status
+    statuses = [s["status"] for s in services]
+    if all(s == "healthy" for s in statuses):
+        overall = "healthy"
+    elif any(s == "unhealthy" for s in statuses):
+        overall = "unhealthy"
+    else:
+        overall = "degraded"
+
+    return {"services": services, "overall": overall}
+
+
+@router.get("/settings")
+async def get_tenant_settings(
+    user: Annotated[TokenData, Depends(require_role('admin'))],
+):
+    """Get tenant settings from Redis."""
+    defaults = {
+        "ai_features": True,
+        "auto_conjunction_analysis": True,
+        "space_weather_alerts": True,
+        "tenant_name": "Default Tenant",
+    }
+
+    try:
+        import redis.asyncio as redis
+        client = redis.from_url(
+            settings.REDIS_URL or "redis://localhost:6379",
+            decode_responses=True,
+        )
+        raw = await client.get(f"tenant_settings:{user.tenant_id}")
+        await client.close()
+
+        if raw:
+            stored = json.loads(raw)
+            # Merge defaults with stored (stored takes priority)
+            merged = {**defaults, **stored}
+            return merged
+    except Exception:
+        pass
+
+    return defaults
+
+
+@router.put("/settings")
+async def update_tenant_settings(
+    user: Annotated[TokenData, Depends(require_role('admin'))],
+    body: dict,
+):
+    """Save tenant settings to Redis. Accepts any subset of setting keys."""
+    allowed_keys = {"ai_features", "auto_conjunction_analysis", "space_weather_alerts", "tenant_name"}
+    defaults = {
+        "ai_features": True,
+        "auto_conjunction_analysis": True,
+        "space_weather_alerts": True,
+        "tenant_name": "Default Tenant",
+    }
+
+    try:
+        import redis.asyncio as redis
+        client = redis.from_url(
+            settings.REDIS_URL or "redis://localhost:6379",
+            decode_responses=True,
+        )
+        key = f"tenant_settings:{user.tenant_id}"
+
+        # Load existing settings
+        raw = await client.get(key)
+        existing = json.loads(raw) if raw else {}
+
+        # Merge defaults -> existing -> new values (only allowed keys)
+        merged = {**defaults, **existing}
+        for k, v in body.items():
+            if k in allowed_keys:
+                merged[k] = v
+
+        await client.set(key, json.dumps(merged))
+        await client.close()
+
+        return {"success": True, "settings": merged}
+    except Exception as e:
+        raise SDAException(
+            status_code=500,
+            error_type="settings-error",
+            title="Settings Error",
+            detail=f"Failed to update settings: {str(e)}",
+        )

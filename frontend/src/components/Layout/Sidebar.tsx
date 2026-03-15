@@ -38,6 +38,7 @@ const navGroups: NavGroup[] = [
       { icon: 'shield',    label: 'Intelligence',   href: '/intelligence',   colorVar: '#ff6b6b' },
       { icon: 'satellite',  label: 'RF Spectrum',    href: '/rf-spectrum',    colorVar: '#a78bfa' },
       { icon: 'flash',     label: 'Space Weather',  href: '/space-weather',  colorVar: '#f59e0b' },
+      { icon: 'flag',      label: 'Italian Monitor', href: '/italy',          colorVar: '#22c55e' },
     ],
   },
   {
@@ -62,13 +63,21 @@ export function Sidebar() {
       )}
     >
       {/* Logo */}
-      <div className="flex items-center justify-center h-16 px-4">
+      <div className="flex items-center justify-center px-4 py-3 border-b border-sda-border-default">
         <div className="flex items-center justify-center w-full">
-          <img
-            src={sidebarCollapsed ? "/logotelespazioSOLOLOGO.svg" : "/logotelespazioscritta.svg"}
-            alt="Telespazio logo"
-            className={sidebarCollapsed ? "h-8 w-auto object-contain" : "max-h-10 w-auto object-contain"}
-          />
+          {sidebarCollapsed ? (
+            <img
+              src="/logotelespazioSOLOLOGO.svg"
+              alt="Telespazio logo"
+              className="h-8 w-auto object-contain"
+            />
+          ) : (
+            <img
+              src="/logotelespazioscritta.svg"
+              alt="Telespazio logo"
+              className="max-h-8 w-auto object-contain"
+            />
+          )}
         </div>
       </div>
 
@@ -92,22 +101,23 @@ export function Sidebar() {
 
               {/* Items */}
               {(!isCollapsed || sidebarCollapsed) && (
-                <ul className="px-2">
+                <ul>
                   {group.items.map((item) => {
                     const isActive = pathname.startsWith(item.href);
                     return (
-                      <li key={item.href}>
+                      <li key={item.href} className="w-full">
                         <Tooltip
                           content={item.label}
                           position="right"
                           disabled={!sidebarCollapsed}
+                          fill
                         >
                           <Link
                             href={item.href}
                             className={classNames(
-                              'flex items-center gap-3 px-3 py-2 rounded-md transition-colors',
-                              'hover:bg-sda-bg-tertiary',
-                              isActive ? 'bg-sda-bg-tertiary' : ''
+                              'flex items-center gap-3 w-full px-4 py-2 transition-colors outline-none focus:outline-none',
+                              'hover:bg-[rgba(255,255,255,0.04)]',
+                              isActive ? 'bg-[rgba(255,255,255,0.035)]' : ''
                             )}
                             style={{ color: 'var(--sda-text-primary)' }}
                           >

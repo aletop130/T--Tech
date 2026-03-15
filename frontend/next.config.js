@@ -2,7 +2,6 @@ const path = require('path');
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  output: 'standalone',
   reactStrictMode: true,
   turbopack: {
     root: path.resolve(__dirname),
@@ -84,12 +83,16 @@ const nextConfig = {
   },
   async rewrites() {
     const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://backend:8000';
-    return [
-      {
-        source: '/api/:path*',
-        destination: `${backendUrl}/api/:path*`,
-      },
-    ];
+    return {
+      beforeFiles: [],
+      afterFiles: [],
+      fallback: [
+        {
+          source: '/api/:path*',
+          destination: `${backendUrl}/api/:path*`,
+        },
+      ],
+    };
   },
   async redirects() {
     return [

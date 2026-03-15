@@ -153,7 +153,7 @@ export function GroundTrackLayer({
             },
             label: {
               text: 'Sub-Satellite Point',
-              font: '11px IBM Plex Sans',
+              font: '11px Google Sans',
               fillColor: Cesium.Color.fromCssColorString('#22d3ee'),
               outlineColor: Cesium.Color.BLACK,
               outlineWidth: 2,
@@ -221,7 +221,7 @@ export function GroundTrackLayer({
               },
               label: {
                 text: `Pass ${idx + 1}: ${timeLabel} | ${durMin}m | ${pass.max_elevation_deg.toFixed(0)}°`,
-                font: '11px IBM Plex Sans',
+                font: '11px Google Sans',
                 fillColor: Cesium.Color.fromCssColorString('#a5f3fc'),
                 outlineColor: Cesium.Color.BLACK,
                 outlineWidth: 2,

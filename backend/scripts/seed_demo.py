@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Seed demo data for SDA Platform."""
+"""Seed demo data for Horus."""
 import asyncio
 import json
 import random

@@ -28,9 +28,11 @@ export function SatelliteModelViewer() {
       camera-controls=""
       camera-orbit="30deg 70deg auto"
       field-of-view="32deg"
-      exposure={1.4}
-      shadow-intensity={0}
-      environment-image="neutral"
+      exposure={2.2}
+      shadow-intensity={0.3}
+      shadow-softness={0.8}
+      environment-image="legacy"
+      tone-mapping="commerce"
       style={{
         width: '100%',
         height: '100%',

@@ -19,6 +19,15 @@ from app.schemas.ingestion import (
 router = APIRouter()
 
 
+@router.get("/stats", response_model=IngestionStats)
+async def get_ingestion_stats(
+    user: Annotated[TokenData, Depends(get_current_user)],
+    service: Annotated[IngestionService, Depends(get_ingestion_service)],
+):
+    """Get ingestion statistics."""
+    return await service.get_stats(user.tenant_id)
+
+
 @router.get("/runs", response_model=PaginatedResponse[IngestionRunResponse])
 async def list_ingestion_runs(
     user: Annotated[TokenData, Depends(get_current_user)],

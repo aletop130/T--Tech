@@ -2,17 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { Tag, Spinner, Icon } from '@blueprintjs/core';
-import { TooltipProvider } from '@/components/ui/tooltip';
-import { RotateCcwIcon, WrenchIcon, ChevronDownIcon, ChevronRightIcon, ZapIcon, InfoIcon, AlertTriangleIcon, ShieldIcon, ShieldAlertIcon, PauseIcon, BrainIcon, MapPinIcon } from 'lucide-react';
-import {
-  PromptInput,
-  PromptInputBody,
-  PromptInputTextarea,
-  PromptInputFooter,
-  PromptInputTools,
-  PromptInputSubmit,
-  type PromptInputMessage,
-} from '@/components/ai-elements/prompt-input';
+import { RotateCcwIcon, WrenchIcon, ChevronDownIcon, ChevronRightIcon, ZapIcon, InfoIcon, AlertTriangleIcon, ShieldIcon, ShieldAlertIcon, PauseIcon, BrainIcon, MapPinIcon, SendIcon } from 'lucide-react';
 import {
   Conversation,
   ConversationContent,
@@ -66,6 +56,7 @@ interface AgentChatProps {
   initialMessages?: ChatDisplayMessage[];
   useStreaming?: boolean;
   onSimulationControl?: (command: SimulationControlCommand) => void;
+  quickPrompts?: string[];
   /** Satellites pinned by the user as context for the chat */
   contextSatellites?: ChatSatelliteContext[];
   /** Called when user removes a satellite from the context chips */
@@ -145,7 +136,7 @@ const NARRATION_STYLES: Record<string, { bg: string; border: string; icon: any }
 
 // ── Quick Prompts ──
 
-const quickPrompts = [
+const DEFAULT_QUICK_PROMPTS = [
   'Mostrami la minaccia più critica',
   'Tour della costellazione',
   'Briefing situazione',
@@ -219,6 +210,7 @@ export function AgentChat({
   initialMessages = [],
   useStreaming = true,
   onSimulationControl,
+  quickPrompts = DEFAULT_QUICK_PROMPTS,
   contextSatellites = [],
   onRemoveContextSatellite,
 }: AgentChatProps) {
@@ -243,6 +235,9 @@ export function AgentChat({
   };
   const sessionRef = useRef<string>(generateSessionId());
   const mapSessionRef = useRef<string>(generateSessionId());
+
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const [activeAgents, setActiveAgents] = useState<AgentState[]>([]);
   const [memoryUsage, setMemoryUsage] = useState(0);
@@ -281,6 +276,23 @@ export function AgentChat({
       sseClientRef.current?.close();
     };
   }, []);
+
+  // Auto-scroll to bottom when messages change
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages, streamingText]);
+
+  // Auto-resize textarea
+  const resizeTextarea = useCallback(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${Math.min(el.scrollHeight, 128)}px`;
+  }, []);
+
+  useEffect(() => {
+    resizeTextarea();
+  }, [input, resizeTextarea]);
 
   // ── Main send handler: route platform ops to orchestrator, exploration to AEGIS ──
 
@@ -482,10 +494,12 @@ export function AgentChat({
     useStreaming,
   ]);
 
-  const handlePromptSubmit = useCallback((message: PromptInputMessage) => {
-    if (!message.text?.trim()) return;
-    handleSendText(message.text);
-  }, [handleSendText]);
+  const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSendText(input);
+    }
+  }, [handleSendText, input]);
 
   const toggleActions = (messageId: string) => {
     setExpandedActions((prev) => {
@@ -525,10 +539,7 @@ export function AgentChat({
     setAgentPause(null);
   }, []);
 
-  const chatStatus = isLoading ? (streamingText ? 'streaming' as const : 'submitted' as const) : ('ready' as const);
-
   return (
-    <TooltipProvider>
       <div className="flex flex-col h-full">
         {/* Compact status bar */}
         <div className="flex items-center justify-between px-3 py-2 border-b border-sda-border-default/30">
@@ -723,12 +734,14 @@ export function AgentChat({
                 onPipelineCancelled={() => console.log('Pipeline cancelled')}
               />
             )}
+
+            <div ref={messagesEndRef} />
           </ConversationContent>
           <ConversationScrollButton />
         </Conversation>
 
-        {/* ai-elements PromptInput */}
-        <div className="border-t border-sda-border-default/30 [&_[data-slot=input-group]]:border-0 [&_[data-slot=input-group]]:shadow-none [&_[data-slot=input-group]]:ring-0 [&_[data-slot=input-group]]:outline-none [&_*:focus]:outline-none [&_*:focus]:ring-0 [&_*:focus]:border-0 [&_*:focus-visible]:outline-none [&_*:focus-visible]:ring-0 [&_*:focus-within]:outline-none [&_*:focus-within]:ring-0">
+        {/* Chat input */}
+        <div className="border-t border-sda-border-default/30">
           {/* Satellite context chips */}
           {contextSatellites.length > 0 && (
             <div className="flex flex-wrap gap-1.5 px-3 pt-2 pb-1">
@@ -751,28 +764,28 @@ export function AgentChat({
               ))}
             </div>
           )}
-          <PromptInput onSubmit={handlePromptSubmit} className="!rounded-none !border-0 !outline-none !ring-0 !shadow-none focus-within:!border-0 focus-within:!ring-0 focus-within:!outline-none focus-within:!shadow-none">
-            <PromptInputBody>
-              <PromptInputTextarea
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                placeholder="Chiedi ad AEGIS di controllare la mappa..."
-                className="!min-h-10 !max-h-32 !text-sm !bg-transparent !border-0 !ring-0 !outline-none !shadow-none focus:!ring-0 focus:!outline-none focus:!border-0 focus:!shadow-none focus-visible:!ring-0 focus-visible:!outline-none text-sda-text-primary placeholder:text-sda-text-muted"
-              />
-            </PromptInputBody>
-            <PromptInputFooter className="!py-1.5 !px-2">
-              <PromptInputTools>
-                <span className="text-[10px] text-sda-text-muted">Enter to send</span>
-              </PromptInputTools>
-              <PromptInputSubmit
-                disabled={!input.trim() || isLoading}
-                status={chatStatus}
-                className="!h-7 !w-7 !bg-sda-accent-cyan hover:!bg-sda-accent-cyan/80 !text-black !rounded-md"
-              />
-            </PromptInputFooter>
-          </PromptInput>
+          <div className="flex items-end gap-2 px-3 py-2">
+            <textarea
+              ref={textareaRef}
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder="Chiedi ad AEGIS..."
+              rows={1}
+              className="flex-1 resize-none bg-transparent text-sm text-sda-text-primary placeholder:text-sda-text-muted border-0 outline-none min-h-[36px] max-h-[128px] py-2 leading-5"
+            />
+            <button
+              onClick={() => handleSendText(input)}
+              disabled={!input.trim() || isLoading}
+              className="flex-shrink-0 h-8 w-8 flex items-center justify-center rounded bg-sda-accent-cyan text-black disabled:opacity-30 disabled:cursor-not-allowed hover:bg-sda-accent-cyan/80 transition-colors"
+            >
+              {isLoading ? <Spinner size={14} /> : <SendIcon size={14} />}
+            </button>
+          </div>
+          <div className="px-3 pb-1.5">
+            <span className="text-[10px] text-sda-text-muted">Enter to send · Shift+Enter for new line</span>
+          </div>
         </div>
       </div>
-    </TooltipProvider>
   );
 }

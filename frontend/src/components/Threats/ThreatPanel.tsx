@@ -33,6 +33,34 @@ function SeverityTag({ severity }: { severity: string }) {
   );
 }
 
+function DetailRow({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div className="flex justify-between py-1" style={{ borderBottom: '1px solid var(--sda-border)' }}>
+      <span className="text-xs" style={{ color: 'var(--sda-text-secondary)' }}>{label}</span>
+      <span className="text-xs font-mono" style={{ color: 'var(--sda-text-primary)' }}>{value}</span>
+    </div>
+  );
+}
+
+function PositionInfo({ pos, label }: { pos: { lat: number; lon: number; altKm: number }; label: string }) {
+  return (
+    <div className="mt-1">
+      <div className="text-xs font-medium mb-1" style={{ color: 'var(--sda-text-secondary)' }}>{label}</div>
+      <div className="grid grid-cols-3 gap-2">
+        <div className="text-xs" style={{ color: 'var(--sda-text-primary)' }}>
+          <span style={{ color: 'var(--sda-text-secondary)' }}>Lat:</span> {pos.lat.toFixed(3)}°
+        </div>
+        <div className="text-xs" style={{ color: 'var(--sda-text-primary)' }}>
+          <span style={{ color: 'var(--sda-text-secondary)' }}>Lon:</span> {pos.lon.toFixed(3)}°
+        </div>
+        <div className="text-xs" style={{ color: 'var(--sda-text-primary)' }}>
+          <span style={{ color: 'var(--sda-text-secondary)' }}>Alt:</span> {pos.altKm.toFixed(1)} km
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function ThreatPanel() {
   const [proximity, setProximity] = useState<ProximityThreat[]>([]);
   const [signal, setSignal] = useState<SignalThreat[]>([]);
@@ -43,6 +71,7 @@ export function ThreatPanel() {
   const [error, setError] = useState<string | null>(null);
   const [feedErrors, setFeedErrors] = useState<Partial<Record<ThreatFeedKey, string>>>({});
   const [activeTab, setActiveTab] = useState('proximity');
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const fetchThreats = useCallback(async () => {
     try {
@@ -168,7 +197,13 @@ export function ThreatPanel() {
         <Tab id="proximity" title={`Proximity (${proximity.length})`} panel={
           <div className="space-y-2 mt-2">
             {proximity.map(t => (
-              <Card key={t.id} className="p-3" style={{ backgroundColor: 'var(--sda-bg-secondary)' }}>
+              <Card
+                key={t.id}
+                className="p-3 cursor-pointer"
+                style={{ backgroundColor: 'var(--sda-bg-secondary)' }}
+                interactive
+                onClick={() => setExpandedId(expandedId === t.id ? null : t.id)}
+              >
                 <div className="flex justify-between items-start">
                   <div>
                     <div className="font-medium" style={{ color: 'var(--sda-text-primary)' }}>
@@ -185,6 +220,18 @@ export function ThreatPanel() {
                     <SeverityTag severity={t.severity} />
                   </div>
                 </div>
+                {expandedId === t.id && (
+                  <div className="mt-3 pt-3" style={{ borderTop: '1px solid var(--sda-border)' }}>
+                    <DetailRow label="Miss Distance" value={`${t.missDistanceKm} km`} />
+                    <DetailRow label="Approach Velocity" value={`${t.approachVelocityKms} km/s`} />
+                    <DetailRow label="Time to Closest Approach" value={`${t.tcaInMinutes} min`} />
+                    <DetailRow label="Approach Pattern" value={t.approachPattern} />
+                    <DetailRow label="Sun Hiding Detected" value={t.sunHidingDetected ? 'YES — possible evasion' : 'No'} />
+                    <DetailRow label="Confidence" value={`${(t.confidence * 100).toFixed(1)}%`} />
+                    <PositionInfo pos={t.primaryPosition} label="Foreign Object Position" />
+                    <PositionInfo pos={t.secondaryPosition} label="Target Asset Position" />
+                  </div>
+                )}
               </Card>
             ))}
             {proximity.length === 0 && renderFeedFallback('proximity', 'No proximity threats detected')}
@@ -193,7 +240,13 @@ export function ThreatPanel() {
         <Tab id="signal" title={`Signal (${signal.length})`} panel={
           <div className="space-y-2 mt-2">
             {signal.map(t => (
-              <Card key={t.id} className="p-3" style={{ backgroundColor: 'var(--sda-bg-secondary)' }}>
+              <Card
+                key={t.id}
+                className="p-3 cursor-pointer"
+                style={{ backgroundColor: 'var(--sda-bg-secondary)' }}
+                interactive
+                onClick={() => setExpandedId(expandedId === t.id ? null : t.id)}
+              >
                 <div className="flex justify-between items-start">
                   <div>
                     <div className="font-medium" style={{ color: 'var(--sda-text-primary)' }}>
@@ -205,6 +258,17 @@ export function ThreatPanel() {
                   </div>
                   <SeverityTag severity={t.severity} />
                 </div>
+                {expandedId === t.id && (
+                  <div className="mt-3 pt-3" style={{ borderTop: '1px solid var(--sda-border)' }}>
+                    <DetailRow label="Interception Probability" value={`${(t.interceptionProbability * 100).toFixed(1)}%`} />
+                    <DetailRow label="Signal Path Angle" value={`${t.signalPathAngleDeg.toFixed(2)}°`} />
+                    <DetailRow label="Comm Windows at Risk" value={`${t.commWindowsAtRisk} / ${t.totalCommWindows}`} />
+                    <DetailRow label="Ground Station" value={t.groundStationName} />
+                    <DetailRow label="Time to Closest Approach" value={`${t.tcaInMinutes} min`} />
+                    <DetailRow label="Confidence" value={`${(t.confidence * 100).toFixed(1)}%`} />
+                    <PositionInfo pos={t.position} label="Interceptor Position" />
+                  </div>
+                )}
               </Card>
             ))}
             {signal.length === 0 && renderFeedFallback('signal', 'No signal threats detected')}
@@ -213,7 +277,13 @@ export function ThreatPanel() {
         <Tab id="anomaly" title={`Anomaly (${anomaly.length})`} panel={
           <div className="space-y-2 mt-2">
             {anomaly.map(t => (
-              <Card key={t.id} className="p-3" style={{ backgroundColor: 'var(--sda-bg-secondary)' }}>
+              <Card
+                key={t.id}
+                className="p-3 cursor-pointer"
+                style={{ backgroundColor: 'var(--sda-bg-secondary)' }}
+                interactive
+                onClick={() => setExpandedId(expandedId === t.id ? null : t.id)}
+              >
                 <div className="flex justify-between items-start">
                   <div>
                     <div className="font-medium" style={{ color: 'var(--sda-text-primary)' }}>
@@ -225,6 +295,21 @@ export function ThreatPanel() {
                   </div>
                   <SeverityTag severity={t.severity} />
                 </div>
+                {expandedId === t.id && (
+                  <div className="mt-3 pt-3" style={{ borderTop: '1px solid var(--sda-border)' }}>
+                    <DetailRow label="Anomaly Type" value={t.anomalyType} />
+                    <DetailRow label="Baseline Deviation" value={`${(t.baselineDeviation * 100).toFixed(1)}%`} />
+                    <DetailRow label="Confidence" value={`${(t.confidence * 100).toFixed(1)}%`} />
+                    <DetailRow label="Detected At" value={new Date(t.detectedAt).toLocaleString()} />
+                    <div className="mt-2">
+                      <div className="text-xs font-medium mb-1" style={{ color: 'var(--sda-text-secondary)' }}>Description</div>
+                      <div className="text-xs p-2" style={{ color: 'var(--sda-text-primary)', backgroundColor: 'var(--sda-bg-primary)' }}>
+                        {t.description}
+                      </div>
+                    </div>
+                    <PositionInfo pos={t.position} label="Satellite Position" />
+                  </div>
+                )}
               </Card>
             ))}
             {anomaly.length === 0 && renderFeedFallback('anomaly', 'No anomalies detected')}
@@ -233,7 +318,13 @@ export function ThreatPanel() {
         <Tab id="orbital" title={`Orbital (${orbital.length})`} panel={
           <div className="space-y-2 mt-2">
             {orbital.map(t => (
-              <Card key={t.id} className="p-3" style={{ backgroundColor: 'var(--sda-bg-secondary)' }}>
+              <Card
+                key={t.id}
+                className="p-3 cursor-pointer"
+                style={{ backgroundColor: 'var(--sda-bg-secondary)' }}
+                interactive
+                onClick={() => setExpandedId(expandedId === t.id ? null : t.id)}
+              >
                 <div className="flex justify-between items-start">
                   <div>
                     <div className="font-medium" style={{ color: 'var(--sda-text-primary)' }}>
@@ -245,6 +336,36 @@ export function ThreatPanel() {
                   </div>
                   <SeverityTag severity={t.severity} />
                 </div>
+                {expandedId === t.id && (
+                  <div className="mt-3 pt-3" style={{ borderTop: '1px solid var(--sda-border)' }}>
+                    <DetailRow label="Divergence Score" value={t.divergenceScore.toFixed(4)} />
+                    <DetailRow label="Pattern" value={t.pattern} />
+                    <DetailRow label="Inclination Diff" value={`${t.inclinationDiffDeg.toFixed(2)}°`} />
+                    <DetailRow label="Altitude Diff" value={`${t.altitudeDiffKm.toFixed(1)} km`} />
+                    <DetailRow label="Confidence" value={`${(t.confidence * 100).toFixed(1)}%`} />
+                    <div className="mt-2 grid grid-cols-2 gap-3">
+                      <div>
+                        <div className="text-xs font-medium mb-1" style={{ color: 'var(--sda-text-secondary)' }}>Foreign Orbit</div>
+                        <div className="text-xs" style={{ color: 'var(--sda-text-primary)' }}>
+                          Alt: {t.foreignOrbit.altitudeKm.toFixed(0)} km | Inc: {t.foreignOrbit.inclinationDeg.toFixed(1)}°
+                        </div>
+                        <div className="text-xs" style={{ color: 'var(--sda-text-primary)' }}>
+                          Period: {t.foreignOrbit.periodMin.toFixed(1)} min | Vel: {t.foreignOrbit.velocityKms.toFixed(2)} km/s
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-xs font-medium mb-1" style={{ color: 'var(--sda-text-secondary)' }}>Target Orbit</div>
+                        <div className="text-xs" style={{ color: 'var(--sda-text-primary)' }}>
+                          Alt: {t.targetOrbit.altitudeKm.toFixed(0)} km | Inc: {t.targetOrbit.inclinationDeg.toFixed(1)}°
+                        </div>
+                        <div className="text-xs" style={{ color: 'var(--sda-text-primary)' }}>
+                          Period: {t.targetOrbit.periodMin.toFixed(1)} min | Vel: {t.targetOrbit.velocityKms.toFixed(2)} km/s
+                        </div>
+                      </div>
+                    </div>
+                    <PositionInfo pos={t.position} label="Current Position" />
+                  </div>
+                )}
               </Card>
             ))}
             {orbital.length === 0 && renderFeedFallback('orbital', 'No orbital similarity threats')}
@@ -253,7 +374,13 @@ export function ThreatPanel() {
         <Tab id="geoloiter" title={`GEO Loiter (${geoLoiter.length})`} panel={
           <div className="space-y-2 mt-2">
             {geoLoiter.map(t => (
-              <Card key={t.id} className="p-3" style={{ backgroundColor: 'var(--sda-bg-secondary)' }}>
+              <Card
+                key={t.id}
+                className="p-3 cursor-pointer"
+                style={{ backgroundColor: 'var(--sda-bg-secondary)' }}
+                interactive
+                onClick={() => setExpandedId(expandedId === t.id ? null : t.id)}
+              >
                 <div className="flex justify-between items-start">
                   <div>
                     <div className="font-medium" style={{ color: 'var(--sda-text-primary)' }}>
@@ -265,6 +392,29 @@ export function ThreatPanel() {
                   </div>
                   <SeverityTag severity={t.severity} />
                 </div>
+                {expandedId === t.id && (
+                  <div className="mt-3 pt-3" style={{ borderTop: '1px solid var(--sda-border)' }}>
+                    <DetailRow label="NORAD ID" value={t.noradId} />
+                    <DetailRow label="Country" value={t.countryCode} />
+                    <DetailRow label="Orbit Type" value={t.orbitType} />
+                    <DetailRow label="Subsatellite Longitude" value={`${t.subsatelliteLonDeg.toFixed(2)}°`} />
+                    <DetailRow label="Subsatellite Latitude" value={`${t.subsatelliteLatDeg.toFixed(2)}°`} />
+                    <DetailRow label="Altitude" value={`${t.altitudeKm.toFixed(1)} km`} />
+                    <DetailRow label="Dwell Fraction" value={`${(t.dwellFractionOverUs * 100).toFixed(1)}%`} />
+                    <DetailRow label="Threat Score" value={`${(t.threatScore * 100).toFixed(1)}%`} />
+                    <DetailRow label="Confidence" value={`${(t.confidence * 100).toFixed(1)}%`} />
+                    <DetailRow label="Detected At" value={new Date(t.detectedAt).toLocaleString()} />
+                    {t.description && (
+                      <div className="mt-2">
+                        <div className="text-xs font-medium mb-1" style={{ color: 'var(--sda-text-secondary)' }}>Description</div>
+                        <div className="text-xs p-2" style={{ color: 'var(--sda-text-primary)', backgroundColor: 'var(--sda-bg-primary)' }}>
+                          {t.description}
+                        </div>
+                      </div>
+                    )}
+                    <PositionInfo pos={t.position} label="Current Position" />
+                  </div>
+                )}
               </Card>
             ))}
             {geoLoiter.length === 0 && renderFeedFallback('geoloiter', 'No GEO loiter threats')}

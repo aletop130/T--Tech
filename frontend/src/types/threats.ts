@@ -1,6 +1,6 @@
 /**
  * Type definitions for all threat-related data structures.
- * Ported from ORBITAL SHIELD types, adapted for SDA Platform.
+ * Ported from ORBITAL SHIELD types, adapted for Horus.
  */
 
 export interface Position3D {

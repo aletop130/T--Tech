@@ -181,9 +181,67 @@ class IngestionService:
         
         result = await self.db.execute(stmt)
         runs = list(result.scalars().all())
-        
+
         return runs, total
-    
+
+    async def get_stats(self, tenant_id: str) -> dict:
+        """Get ingestion statistics for a tenant."""
+        from app.db.models.ingestion import DataQualityCheck
+
+        base_cond = IngestionRun.tenant_id == tenant_id
+
+        # Total runs
+        total_runs = await self.db.scalar(
+            select(func.count()).select_from(IngestionRun).where(base_cond)
+        ) or 0
+
+        # Completed runs
+        completed_runs = await self.db.scalar(
+            select(func.count()).select_from(IngestionRun).where(
+                and_(base_cond, IngestionRun.status == IngestionStatus.COMPLETED)
+            )
+        ) or 0
+
+        # Failed runs
+        failed_runs = await self.db.scalar(
+            select(func.count()).select_from(IngestionRun).where(
+                and_(base_cond, IngestionRun.status == IngestionStatus.FAILED)
+            )
+        ) or 0
+
+        # Total records processed
+        total_records_processed = await self.db.scalar(
+            select(func.coalesce(func.sum(IngestionRun.records_processed), 0))
+            .where(base_cond)
+        ) or 0
+
+        # Average pass rate from quality checks
+        avg_pass_rate_result = await self.db.scalar(
+            select(func.coalesce(func.avg(DataQualityCheck.pass_rate), 0.0))
+            .where(DataQualityCheck.tenant_id == tenant_id)
+        )
+        avg_pass_rate = float(avg_pass_rate_result or 0.0)
+
+        # By source type
+        source_type_rows = await self.db.execute(
+            select(IngestionRun.source_type, func.count())
+            .where(base_cond)
+            .group_by(IngestionRun.source_type)
+        )
+        by_source_type = {
+            str(row[0].value) if hasattr(row[0], 'value') else str(row[0]): row[1]
+            for row in source_type_rows.all()
+        }
+
+        return {
+            "total_runs": total_runs,
+            "completed_runs": completed_runs,
+            "failed_runs": failed_runs,
+            "total_records_processed": total_records_processed,
+            "avg_pass_rate": round(avg_pass_rate, 4),
+            "by_source_type": by_source_type,
+        }
+
     async def upload_file(
         self,
         file_data: bytes,

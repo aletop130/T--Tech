@@ -69,7 +69,7 @@ export function MilitaryVehicleLayer({
           outlineColor: Cesium.Color.BLACK.withAlpha(0.5),
         },
         description: `
-          <div style="font-family: 'IBM Plex Sans', sans-serif;">
+          <div style="font-family: 'Google Sans', sans-serif;">
             <h3>${vehicle.entity_id}</h3>
             <p><strong>Type:</strong> ${vehicleConfig.name}</p>
             <p><strong>Position:</strong> ${vehicle.latitude.toFixed(4)}°, ${vehicle.longitude.toFixed(4)}°</p>
@@ -127,7 +127,7 @@ export function MilitaryVehicleLayer({
         ),
         label: {
           text: vehicle.entity_id,
-          font: 'bold 12px IBM Plex Sans',
+          font: 'bold 12px Google Sans',
           fillColor: getFactionColor(Cesium, vehicle.entity_id),
           outlineColor: Cesium.Color.BLACK,
           outlineWidth: 2,

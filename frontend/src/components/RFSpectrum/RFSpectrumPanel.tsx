@@ -2,15 +2,12 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import {
-  Card,
   Tag,
   Spinner,
   Tabs,
   Tab,
-  Button,
   Callout,
   HTMLTable,
-  InputGroup,
   HTMLSelect,
   Icon,
 } from '@blueprintjs/core';
@@ -115,25 +112,24 @@ function SpaceWeatherStripBar({ sw }: { sw: SpaceWeatherStrip }) {
 
   return (
     <div
-      className="rounded-lg p-3 mb-4"
+      className="plt-panel p-3 mb-3"
       style={{
-        background: 'linear-gradient(135deg, rgba(15,23,42,0.95) 0%, rgba(30,41,59,0.95) 100%)',
-        border: `1px solid ${sw.hf_blackout || sw.polar_cap_absorption ? '#ef4444' : 'var(--sda-border-default)'}`,
+        borderColor: sw.hf_blackout || sw.polar_cap_absorption ? '#ef4444' : undefined,
         boxShadow: sw.hf_blackout ? '0 0 12px rgba(239,68,68,0.3)' : 'none',
       }}
     >
       {/* Alert banners */}
       {sw.hf_blackout && (
-        <div className="flex items-center gap-2 mb-2 px-2 py-1 rounded text-xs font-semibold"
-          style={{ backgroundColor: 'rgba(239,68,68,0.15)', color: '#ef4444' }}>
+        <div className="flex items-center gap-2 mb-2 px-2 py-1 rounded-[2px] text-[10px] font-mono font-semibold uppercase tracking-wider"
+          style={{ backgroundColor: '#f8514915', color: '#f85149', border: '1px solid #f8514930' }}>
           <Icon icon="warning-sign" size={12} />
           HF RADIO BLACKOUT IN EFFECT
           {sw.xray_class && <span>— {sw.xray_class}-class flare</span>}
         </div>
       )}
       {sw.polar_cap_absorption && (
-        <div className="flex items-center gap-2 mb-2 px-2 py-1 rounded text-xs font-semibold"
-          style={{ backgroundColor: 'rgba(249,115,22,0.15)', color: '#f97316' }}>
+        <div className="flex items-center gap-2 mb-2 px-2 py-1 rounded-[2px] text-[10px] font-mono font-semibold uppercase tracking-wider"
+          style={{ backgroundColor: 'rgba(249,115,22,0.1)', color: '#f97316', border: '1px solid rgba(249,115,22,0.2)' }}>
           <Icon icon="warning-sign" size={12} />
           POLAR CAP ABSORPTION — Proton flux {sw.proton_flux?.toFixed(0)} pfu
         </div>
@@ -142,13 +138,13 @@ function SpaceWeatherStripBar({ sw }: { sw: SpaceWeatherStrip }) {
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
         {/* Kp Index */}
         <div className="text-center">
-          <div className="text-[10px] uppercase tracking-wider mb-1" style={{ color: 'var(--sda-text-secondary)' }}>
+          <div className="text-[10px] uppercase tracking-wider mb-1" style={{ color: '#555' }}>
             Kp Index
           </div>
           <div className="text-xl font-bold font-mono" style={{ color: kpColor }}>
             {sw.kp_index.toFixed(1)}
           </div>
-          <div className="h-1.5 rounded-full mt-1 overflow-hidden" style={{ backgroundColor: '#1e293b' }}>
+          <div className="h-1.5 rounded-full mt-1 overflow-hidden" style={{ backgroundColor: '#111' }}>
             <div className="h-full rounded-full transition-all" style={{
               width: `${(sw.kp_index / 9) * 100}%`,
               backgroundColor: kpColor,
@@ -158,7 +154,7 @@ function SpaceWeatherStripBar({ sw }: { sw: SpaceWeatherStrip }) {
 
         {/* F10.7 */}
         <div className="text-center">
-          <div className="text-[10px] uppercase tracking-wider mb-1" style={{ color: 'var(--sda-text-secondary)' }}>
+          <div className="text-[10px] uppercase tracking-wider mb-1" style={{ color: '#555' }}>
             F10.7 Flux
           </div>
           <div className="text-xl font-bold font-mono" style={{ color: f107Color }}>
@@ -169,7 +165,7 @@ function SpaceWeatherStripBar({ sw }: { sw: SpaceWeatherStrip }) {
 
         {/* X-ray flux */}
         <div className="text-center">
-          <div className="text-[10px] uppercase tracking-wider mb-1" style={{ color: 'var(--sda-text-secondary)' }}>
+          <div className="text-[10px] uppercase tracking-wider mb-1" style={{ color: '#555' }}>
             X-Ray
           </div>
           <div className="text-xl font-bold font-mono" style={{
@@ -179,14 +175,14 @@ function SpaceWeatherStripBar({ sw }: { sw: SpaceWeatherStrip }) {
           }}>
             {sw.xray_class || '--'}
           </div>
-          <div className="text-[10px] font-mono" style={{ color: 'var(--sda-text-secondary)' }}>
+          <div className="text-[10px] font-mono" style={{ color: '#555' }}>
             {sw.xray_flux ? sw.xray_flux.toExponential(1) : '--'} W/m²
           </div>
         </div>
 
         {/* Proton flux */}
         <div className="text-center">
-          <div className="text-[10px] uppercase tracking-wider mb-1" style={{ color: 'var(--sda-text-secondary)' }}>
+          <div className="text-[10px] uppercase tracking-wider mb-1" style={{ color: '#555' }}>
             Proton &gt;10MeV
           </div>
           <div className="text-xl font-bold font-mono" style={{
@@ -195,12 +191,12 @@ function SpaceWeatherStripBar({ sw }: { sw: SpaceWeatherStrip }) {
           }}>
             {sw.proton_flux?.toFixed(1) || '--'}
           </div>
-          <div className="text-[10px]" style={{ color: 'var(--sda-text-secondary)' }}>pfu</div>
+          <div className="text-[10px]" style={{ color: '#555' }}>pfu</div>
         </div>
 
         {/* Storm Level */}
         <div className="text-center">
-          <div className="text-[10px] uppercase tracking-wider mb-1" style={{ color: 'var(--sda-text-secondary)' }}>
+          <div className="text-[10px] uppercase tracking-wider mb-1" style={{ color: '#555' }}>
             Storm
           </div>
           <div className="text-sm font-bold" style={{
@@ -214,14 +210,14 @@ function SpaceWeatherStripBar({ sw }: { sw: SpaceWeatherStrip }) {
                   sw.storm_level === 'strong' ? 'G3' :
                     sw.storm_level === 'severe' ? 'G4' : 'G5'}
           </div>
-          <div className="text-[10px] capitalize" style={{ color: 'var(--sda-text-secondary)' }}>
+          <div className="text-[10px] capitalize" style={{ color: '#555' }}>
             {sw.storm_level}
           </div>
         </div>
 
         {/* Alert Level */}
         <div className="text-center">
-          <div className="text-[10px] uppercase tracking-wider mb-1" style={{ color: 'var(--sda-text-secondary)' }}>
+          <div className="text-[10px] uppercase tracking-wider mb-1" style={{ color: '#555' }}>
             Alert
           </div>
           <div className="flex items-center justify-center gap-2">
@@ -253,10 +249,10 @@ function BandStatusCard({ band }: { band: BandOperationalStatus }) {
 
   return (
     <div
-      className="rounded-lg p-3 relative overflow-hidden"
+      className="plt-panel p-3 relative overflow-hidden"
       style={{
-        backgroundColor: 'var(--sda-bg-tertiary)',
-        borderLeft: `3px solid ${statusColor}`,
+        backgroundColor: '#0a0a0a',
+        borderLeft: `3px solid ${bandColor}`,
       }}
     >
       {/* Degradation overlay */}
@@ -273,26 +269,21 @@ function BandStatusCard({ band }: { band: BandOperationalStatus }) {
         <div className="flex items-center justify-between mb-1.5">
           <div className="flex items-center gap-2">
             <BandTag band={band.band_name} />
-            <span className="text-[10px] font-mono" style={{ color: 'var(--sda-text-secondary)' }}>
+            <span className="text-[10px] font-mono" style={{ color: '#555' }}>
               {band.frequency_range}
             </span>
           </div>
-          <Tag
-            minimal
-            style={{
-              backgroundColor: `${statusColor}20`,
-              color: statusColor,
-              fontWeight: 700,
-              fontSize: '10px',
-              letterSpacing: '0.05em',
-            }}
-          >
+          <span className="plt-badge" style={{
+            backgroundColor: `${statusColor}18`,
+            color: statusColor,
+            borderColor: `${statusColor}30`,
+          }}>
             {STATUS_LABELS[band.status] || band.status.toUpperCase()}
-          </Tag>
+          </span>
         </div>
 
         {/* Stats row */}
-        <div className="flex items-center gap-3 text-[10px] mb-1" style={{ color: 'var(--sda-text-secondary)' }}>
+        <div className="flex items-center gap-3 text-[10px] mb-1" style={{ color: '#555' }}>
           <span>{band.satellite_count} sats</span>
           <span>{band.transmitter_count} tx</span>
           {band.degradation_pct > 0 && (
@@ -305,7 +296,7 @@ function BandStatusCard({ band }: { band: BandOperationalStatus }) {
         {/* Reason */}
         {band.reason && (
           <div className="text-[11px] mt-1" style={{
-            color: band.status === 'operational' ? 'var(--sda-text-secondary)' : statusColor
+            color: band.status === 'operational' ? '#555' : statusColor
           }}>
             {band.reason}
           </div>
@@ -342,13 +333,10 @@ function ScintillationPanel({ regions }: { regions: ScintillationRegion[] }) {
   };
 
   return (
-    <div
-      className="rounded-lg p-3"
-      style={{ backgroundColor: 'var(--sda-bg-tertiary)' }}
-    >
-      <div className="flex items-center gap-2 mb-3">
-        <Icon icon="pulse" size={14} color="var(--sda-text-secondary)" />
-        <span className="text-xs font-semibold" style={{ color: 'var(--sda-text-primary)' }}>
+    <div className="plt-panel p-3">
+      <div className="flex items-center gap-2 mb-3 pb-2 border-b border-[#1a1a1a]">
+        <Icon icon="pulse" size={14} color="#555" />
+        <span className="text-xs font-semibold text-[#e0e0e0] uppercase tracking-wider">
           UHF Scintillation Index (S4)
         </span>
       </div>
@@ -358,13 +346,13 @@ function ScintillationPanel({ regions }: { regions: ScintillationRegion[] }) {
           const barWidth = Math.min(100, (r.s4_index / 1.0) * 100);
           return (
             <div key={r.region}>
-              <div className="text-[10px] uppercase tracking-wider mb-1" style={{ color: 'var(--sda-text-secondary)' }}>
+              <div className="text-[10px] uppercase tracking-wider mb-1" style={{ color: '#555' }}>
                 {REGION_LABELS[r.region] || r.region}
               </div>
               <div className="text-lg font-bold font-mono" style={{ color }}>
                 {r.s4_index.toFixed(2)}
               </div>
-              <div className="h-1 rounded-full mt-1 overflow-hidden" style={{ backgroundColor: '#1e293b' }}>
+              <div className="h-1 rounded-full mt-1 overflow-hidden" style={{ backgroundColor: '#111' }}>
                 <div className="h-full rounded-full transition-all" style={{
                   width: `${barWidth}%`,
                   backgroundColor: color,
@@ -401,13 +389,10 @@ function ForecastTimeline({ forecasts }: { forecasts: BandForecast[] }) {
   if (!forecasts.length) return null;
 
   return (
-    <div
-      className="rounded-lg p-3"
-      style={{ backgroundColor: 'var(--sda-bg-tertiary)' }}
-    >
-      <div className="flex items-center gap-2 mb-3">
-        <Icon icon="timeline-events" size={14} color="var(--sda-text-secondary)" />
-        <span className="text-xs font-semibold" style={{ color: 'var(--sda-text-primary)' }}>
+    <div className="plt-panel p-3">
+      <div className="flex items-center gap-2 mb-3 pb-2 border-b border-[#1a1a1a]">
+        <Icon icon="timeline-events" size={14} color="#555" />
+        <span className="text-xs font-semibold text-[#e0e0e0] uppercase tracking-wider">
           12h Band Availability Forecast
         </span>
       </div>
@@ -424,7 +409,7 @@ function ForecastTimeline({ forecasts }: { forecasts: BandForecast[] }) {
                 return (
                   <div
                     key={i}
-                    className="flex-1 rounded-sm relative group cursor-default"
+                    className="flex-1 rounded-[1px] relative group cursor-default"
                     style={{
                       height: 18,
                       backgroundColor: `${color}${Math.round(p.confidence * 255).toString(16).padStart(2, '0')}`,
@@ -435,7 +420,7 @@ function ForecastTimeline({ forecasts }: { forecasts: BandForecast[] }) {
                     {/* Hour marker for every 3rd hour */}
                     {p.hours_ahead % 3 === 0 && (
                       <span className="absolute -bottom-3 left-1/2 -translate-x-1/2 text-[8px]"
-                        style={{ color: 'var(--sda-text-secondary)' }}>
+                        style={{ color: '#555' }}>
                         +{p.hours_ahead}h
                       </span>
                     )}
@@ -448,17 +433,17 @@ function ForecastTimeline({ forecasts }: { forecasts: BandForecast[] }) {
       </div>
 
       {/* Legend */}
-      <div className="flex items-center gap-4 mt-5 text-[10px]" style={{ color: 'var(--sda-text-secondary)' }}>
+      <div className="flex items-center gap-4 mt-5 text-[10px]" style={{ color: '#555' }}>
         <div className="flex items-center gap-1">
-          <div className="w-3 h-2 rounded-sm" style={{ backgroundColor: STATUS_COLORS.operational }} />
+          <div className="w-3 h-2 rounded-[1px]" style={{ backgroundColor: STATUS_COLORS.operational }} />
           GO
         </div>
         <div className="flex items-center gap-1">
-          <div className="w-3 h-2 rounded-sm" style={{ backgroundColor: STATUS_COLORS.degraded }} />
+          <div className="w-3 h-2 rounded-[1px]" style={{ backgroundColor: STATUS_COLORS.degraded }} />
           DEGRADED
         </div>
         <div className="flex items-center gap-1">
-          <div className="w-3 h-2 rounded-sm" style={{ backgroundColor: STATUS_COLORS.blackout }} />
+          <div className="w-3 h-2 rounded-[1px]" style={{ backgroundColor: STATUS_COLORS.blackout }} />
           BLACKOUT
         </div>
         <span className="ml-auto">Opacity = confidence</span>
@@ -481,16 +466,10 @@ function AlternativesPanel({ alternatives }: { alternatives: FrequencyAlternativ
   };
 
   return (
-    <div
-      className="rounded-lg p-3"
-      style={{
-        backgroundColor: 'var(--sda-bg-tertiary)',
-        border: '1px solid rgba(6,182,212,0.3)',
-      }}
-    >
-      <div className="flex items-center gap-2 mb-3">
-        <Icon icon="exchange" size={14} color="#06b6d4" />
-        <span className="text-xs font-semibold" style={{ color: '#06b6d4' }}>
+    <div className="plt-panel p-3" style={{ borderColor: 'rgba(57,197,207,0.3)' }}>
+      <div className="flex items-center gap-2 mb-3 pb-2 border-b border-[#1a1a1a]">
+        <Icon icon="exchange" size={14} color="#39c5cf" />
+        <span className="text-xs font-semibold text-[#39c5cf] uppercase tracking-wider">
           Frequency Routing Recommendations
         </span>
       </div>
@@ -498,21 +477,18 @@ function AlternativesPanel({ alternatives }: { alternatives: FrequencyAlternativ
         {alternatives.map((alt, i) => (
           <div key={i} className="flex items-center gap-2 text-xs">
             <BandTag band={alt.degraded_band} />
-            <Icon icon="arrow-right" size={12} color="var(--sda-text-secondary)" />
+            <Icon icon="arrow-right" size={12} color="#555" />
             <BandTag band={alt.alternative_band} />
-            <span className="flex-1 text-[11px]" style={{ color: 'var(--sda-text-secondary)' }}>
+            <span className="flex-1 text-[11px]" style={{ color: '#555' }}>
               {alt.reason}
             </span>
-            <Tag
-              minimal
-              style={{
-                fontSize: '9px',
-                color: IMPACT_COLORS[alt.link_margin_impact],
-                borderColor: IMPACT_COLORS[alt.link_margin_impact],
-              }}
-            >
+            <span className="plt-badge" style={{
+              backgroundColor: `${IMPACT_COLORS[alt.link_margin_impact]}18`,
+              color: IMPACT_COLORS[alt.link_margin_impact],
+              borderColor: `${IMPACT_COLORS[alt.link_margin_impact]}30`,
+            }}>
               {alt.link_margin_impact} impact
-            </Tag>
+            </span>
           </div>
         ))}
       </div>
@@ -534,17 +510,17 @@ function BandOverview({ bands }: { bands: RFBandSummary[] }) {
           <div className="flex justify-between items-center mb-1">
             <div className="flex items-center gap-2">
               <BandTag band={b.band_name} />
-              <span className="text-xs" style={{ color: 'var(--sda-text-secondary)' }}>
+              <span className="text-xs" style={{ color: '#555' }}>
                 {b.frequency_range}
               </span>
             </div>
-            <span className="text-xs" style={{ color: 'var(--sda-text-secondary)' }}>
+            <span className="text-xs" style={{ color: '#555' }}>
               {b.satellite_count} sats / {b.transmitter_count} tx
             </span>
           </div>
-          <div className="h-2 rounded-full" style={{ backgroundColor: 'var(--sda-bg-tertiary)' }}>
+          <div className="h-1 rounded-[1px]" style={{ backgroundColor: '#111' }}>
             <div
-              className="h-2 rounded-full transition-all"
+              className="h-1 rounded-[1px] transition-all"
               style={{
                 width: `${(b.transmitter_count / maxTx) * 100}%`,
                 backgroundColor: BAND_COLORS[b.band_name] || BAND_COLORS.Unknown,
@@ -585,7 +561,7 @@ function TransmitterTable({ transmitters }: { transmitters: RFTransmitter[] }) {
         <tbody>
           {transmitters.slice(0, 200).map((tx, i) => (
             <tr key={tx.uuid || i}>
-              <td style={{ color: 'var(--sda-accent-cyan)' }}>{tx.norad_cat_id || '-'}</td>
+              <td style={{ color: '#39c5cf' }}>{tx.norad_cat_id || '-'}</td>
               <td>{tx.description || '-'}</td>
               <td><BandTag band={tx.band} /></td>
               <td style={{ fontFamily: 'monospace', fontSize: '0.8rem' }}>
@@ -617,7 +593,7 @@ function TransmitterTable({ transmitters }: { transmitters: RFTransmitter[] }) {
         </tbody>
       </HTMLTable>
       {transmitters.length > 200 && (
-        <p className="text-xs mt-1" style={{ color: 'var(--sda-text-secondary)' }}>
+        <p className="text-xs mt-1" style={{ color: '#555' }}>
           Showing first 200 of {transmitters.length} results.
         </p>
       )}
@@ -762,47 +738,48 @@ export function RFSpectrumPanel() {
   }, []);
 
   // Overall status indicator
-  const overallColor = dashboard?.overall_status === 'critical' ? '#ef4444' :
-    dashboard?.overall_status === 'degraded' ? '#f59e0b' : '#22c55e';
+  const overallColor = dashboard?.overall_status === 'critical' ? '#f85149' :
+    dashboard?.overall_status === 'degraded' ? '#d29922' : '#3fb950';
   const overallLabel = dashboard?.overall_status === 'critical' ? 'CRITICAL' :
     dashboard?.overall_status === 'degraded' ? 'DEGRADED' : 'NOMINAL';
 
   return (
-    <div className="p-4">
+    <div className="p-4 space-y-3">
       {/* Header */}
-      <div className="flex items-center justify-between mb-2">
-        <div>
-          <h2 className="text-lg font-semibold" style={{ color: 'var(--sda-text-primary)' }}>
-            RF Spectrum Awareness
-          </h2>
-          <p className="text-xs" style={{ color: 'var(--sda-text-secondary)' }}>
-            Operational spectrum monitoring with space weather correlation
-          </p>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <Icon icon="satellite" size={14} style={{ color: '#a78bfa' }} />
+          <div>
+            <h2 className="text-xs font-bold text-[#e0e0e0] uppercase tracking-[0.15em]">
+              RF Spectrum Awareness
+            </h2>
+            <p className="text-[10px] text-[#555] font-mono uppercase tracking-wider mt-0.5">
+              Operational spectrum monitoring with space weather correlation
+            </p>
+          </div>
         </div>
         <div className="flex items-center gap-3">
           {/* Overall status badge */}
           {dashboard && (
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg" style={{
-              backgroundColor: `${overallColor}15`,
-              border: `1px solid ${overallColor}40`,
+            <div className="plt-panel flex items-center gap-2 px-3 py-1.5" style={{
+              borderColor: `${overallColor}40`,
             }}>
-              <div className="w-2.5 h-2.5 rounded-full" style={{
+              <div className="w-1.5 h-1.5 rounded-full" style={{
                 backgroundColor: overallColor,
-                boxShadow: dashboard.overall_status !== 'nominal' ? `0 0 6px ${overallColor}` : 'none',
-                animation: dashboard.overall_status === 'critical' ? 'pulse 2s infinite' : 'none',
+                boxShadow: dashboard.overall_status !== 'nominal' ? `0 0 6px ${overallColor}80` : 'none',
               }} />
-              <span className="text-xs font-bold" style={{ color: overallColor }}>
+              <span className="text-[10px] font-mono font-semibold uppercase tracking-widest" style={{ color: overallColor }}>
                 {overallLabel}
               </span>
             </div>
           )}
-          <Button
-            small
-            minimal
-            icon="refresh"
-            loading={dashLoading}
+          <button
+            className="plt-btn p-1.5"
             onClick={fetchDashboard}
-          />
+            disabled={dashLoading}
+          >
+            <Icon icon="refresh" size={12} className={dashLoading ? 'animate-spin text-[#555]' : 'text-[#888]'} />
+          </button>
         </div>
       </div>
 
@@ -814,19 +791,23 @@ export function RFSpectrumPanel() {
       {dashLoading && !dashboard && (
         <div className="flex items-center gap-2 py-8 justify-center">
           <Spinner size={20} />
-          <span className="text-sm" style={{ color: 'var(--sda-text-secondary)' }}>
+          <span className="text-[10px] font-mono text-[#555] uppercase">
             Loading operational dashboard...
           </span>
         </div>
       )}
 
       {dashError && !dashboard && (
-        <Callout intent="danger" title="Dashboard Error" className="mb-4">
-          {dashError}
-          <div className="mt-2">
-            <Button small intent="primary" onClick={fetchDashboard}>Retry</Button>
+        <div className="plt-panel p-3" style={{ borderColor: '#f8514930' }}>
+          <div className="flex items-center gap-2 mb-2">
+            <Icon icon="error" size={12} style={{ color: '#f85149' }} />
+            <span className="text-xs font-semibold text-[#f85149] uppercase tracking-wider">Dashboard Error</span>
           </div>
-        </Callout>
+          <p className="text-[11px] font-mono text-[#888] mb-2">{dashError}</p>
+          <button className="plt-btn px-3 py-1 text-[10px] font-mono text-[#888] hover:text-[#e0e0e0]" onClick={fetchDashboard}>
+            RETRY
+          </button>
+        </div>
       )}
 
       {/* Tabs */}
@@ -835,13 +816,12 @@ export function RFSpectrumPanel() {
           id="operational"
           title="Operational Status"
           panel={
-            <div className="mt-3 space-y-4">
+            <div className="mt-3 space-y-3">
               {dashboard ? (
                 <>
                   {/* Band Operational Status Grid */}
                   <div>
-                    <h3 className="text-xs font-semibold uppercase tracking-wider mb-2"
-                      style={{ color: 'var(--sda-text-secondary)' }}>
+                    <h3 className="text-[9px] font-mono font-medium text-[#555] uppercase tracking-widest mb-2">
                       Band Status
                     </h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-2">
@@ -862,13 +842,13 @@ export function RFSpectrumPanel() {
 
                   {/* Timestamp */}
                   {dashboard.space_weather.timestamp && (
-                    <div className="text-[10px] text-right" style={{ color: 'var(--sda-text-secondary)' }}>
+                    <div className="text-[9px] font-mono text-right text-[#444] uppercase tracking-wider mt-2">
                       Data: {new Date(dashboard.space_weather.timestamp).toLocaleString()} | Auto-refresh 5min
                     </div>
                   )}
                 </>
               ) : (
-                <div className="text-xs py-4 text-center" style={{ color: 'var(--sda-text-secondary)' }}>
+                <div className="text-[10px] font-mono py-8 text-center text-[#555] uppercase">
                   Loading operational data...
                 </div>
               )}
@@ -879,22 +859,25 @@ export function RFSpectrumPanel() {
           id="satellite"
           title="Satellite RF Profile"
           panel={
-            <Card className="mt-2 p-4" style={{ backgroundColor: 'var(--sda-bg-secondary)' }}>
+            <div className="plt-panel mt-2 p-3">
               <div className="flex gap-4" style={{ minHeight: 300 }}>
                 {/* Left: satellite list */}
                 <div className="flex-shrink-0" style={{ width: 280 }}>
-                  <InputGroup
-                    leftIcon="search"
-                    placeholder="Search satellites..."
-                    value={satSearch}
-                    onChange={(e) => setSatSearch(e.target.value)}
-                    small
-                    className="mb-2"
-                  />
+                  <div className="flex items-center gap-2 mb-2 px-2 py-1.5 rounded-[2px]"
+                    style={{ backgroundColor: '#111', border: '1px solid #1a1a1a' }}>
+                    <Icon icon="search" size={12} className="text-[#555]" />
+                    <input
+                      type="text"
+                      placeholder="Search satellites..."
+                      value={satSearch}
+                      onChange={(e) => setSatSearch(e.target.value)}
+                      className="bg-transparent border-none outline-none text-[11px] font-mono text-[#e0e0e0] placeholder-[#444] w-full"
+                    />
+                  </div>
                   {satsLoading ? (
                     <div className="flex items-center gap-2 py-4 justify-center">
                       <Spinner size={16} />
-                      <span className="text-xs" style={{ color: 'var(--sda-text-secondary)' }}>
+                      <span className="text-xs" style={{ color: '#555' }}>
                         Loading fleet...
                       </span>
                     </div>
@@ -915,14 +898,15 @@ export function RFSpectrumPanel() {
                           const isSelected = selectedSatId === s.norad_id;
                           const factionColor =
                             s.faction === 'enemy' ? '#ef4444' :
-                            s.faction === 'allied' ? '#3b82f6' : 'var(--sda-text-secondary)';
+                            s.faction === 'allied' ? '#3b82f6' : '#555';
                           return (
                             <div
                               key={s.id}
-                              className="flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer transition-colors"
+                              className={`flex items-center gap-2 px-2 py-1.5 cursor-pointer transition-colors ${isSelected ? '' : 'plt-row'}`}
                               style={{
-                                backgroundColor: isSelected ? 'var(--sda-bg-tertiary)' : 'transparent',
-                                borderLeft: isSelected ? '2px solid var(--sda-accent-cyan)' : '2px solid transparent',
+                                backgroundColor: isSelected ? 'rgba(57,197,207,0.08)' : undefined,
+                                borderLeft: isSelected ? '2px solid #39c5cf' : '2px solid transparent',
+                                borderRadius: '2px',
                               }}
                               onClick={() => handleSatSelect(s.norad_id)}
                             >
@@ -932,11 +916,11 @@ export function RFSpectrumPanel() {
                                 style={{ color: factionColor }}
                               />
                               <div className="flex-1 min-w-0">
-                                <div className="text-xs font-medium truncate" style={{ color: 'var(--sda-text-primary)' }}>
+                                <div className="text-xs font-medium truncate" style={{ color: '#e0e0e0' }}>
                                   {s.name}
                                 </div>
-                                <div className="flex items-center gap-2 text-[10px]" style={{ color: 'var(--sda-text-secondary)' }}>
-                                  <span style={{ color: 'var(--sda-accent-cyan)', fontFamily: 'monospace' }}>
+                                <div className="flex items-center gap-2 text-[10px]" style={{ color: '#555' }}>
+                                  <span style={{ color: '#39c5cf', fontFamily: 'monospace' }}>
                                     {s.norad_id}
                                   </span>
                                   {s.country && <span>{s.country}</span>}
@@ -952,49 +936,53 @@ export function RFSpectrumPanel() {
                           );
                         })}
                       {satellites.length === 0 && !satsLoading && (
-                        <div className="text-xs text-center py-4" style={{ color: 'var(--sda-text-secondary)' }}>
+                        <div className="text-xs text-center py-4" style={{ color: '#555' }}>
                           No satellites in ontology
                         </div>
                       )}
                     </div>
                   )}
-                  <div className="mt-2 text-[10px]" style={{ color: 'var(--sda-text-secondary)' }}>
+                  <div className="mt-2 text-[10px]" style={{ color: '#555' }}>
                     {satellites.length} satellites in fleet
                   </div>
                 </div>
 
                 {/* Right: RF profile for selected satellite */}
-                <div className="flex-1 min-w-0" style={{ borderLeft: '1px solid var(--sda-border-default)', paddingLeft: 16 }}>
+                <div className="flex-1 min-w-0" style={{ borderLeft: '1px solid #1a1a1a', paddingLeft: 16 }}>
                   {!selectedSatId && !satProfile && (
                     <div className="flex flex-col items-center justify-center h-full text-center py-12">
-                      <Icon icon="satellite" size={32} style={{ color: 'var(--sda-text-secondary)', opacity: 0.4 }} />
-                      <p className="text-sm mt-3" style={{ color: 'var(--sda-text-secondary)' }}>
-                        Select a satellite to view its RF transmitter profile
+                      <Icon icon="satellite" size={24} style={{ color: '#333' }} />
+                      <p className="text-[10px] font-mono text-[#555] uppercase tracking-wider mt-3">
+                        Select a satellite to view RF profile
                       </p>
                     </div>
                   )}
                   {satLoading && (
                     <div className="flex items-center gap-2 py-8 justify-center">
                       <Spinner size={20} />
-                      <span className="text-xs" style={{ color: 'var(--sda-text-secondary)' }}>
+                      <span className="text-xs" style={{ color: '#555' }}>
                         Loading RF profile...
                       </span>
                     </div>
                   )}
                   {satProfile && !satLoading && (
                     <div>
-                      <div className="flex items-center gap-2 mb-3">
-                        <Tag intent="primary" large>
+                      <div className="flex items-center gap-2 mb-3 pb-2 border-b border-[#1a1a1a]">
+                        <span className="plt-badge" style={{
+                          backgroundColor: '#39c5cf18',
+                          color: '#39c5cf',
+                          borderColor: '#39c5cf30',
+                        }}>
                           NORAD {satProfile.norad_id}
-                        </Tag>
+                        </span>
                         {satProfile.satellite_name && (
-                          <span className="font-medium" style={{ color: 'var(--sda-text-primary)' }}>
+                          <span className="text-xs font-mono font-semibold text-[#e0e0e0]">
                             {satProfile.satellite_name}
                           </span>
                         )}
-                        <Tag minimal>
+                        <span className="text-[10px] font-mono text-[#555]">
                           {satProfile.transmitters.length} transmitter{satProfile.transmitters.length !== 1 ? 's' : ''}
-                        </Tag>
+                        </span>
                       </div>
                       {satProfile.transmitters.length > 0 ? (
                         <TransmitterTable transmitters={satProfile.transmitters} />
@@ -1007,23 +995,27 @@ export function RFSpectrumPanel() {
                   )}
                 </div>
               </div>
-            </Card>
+            </div>
           }
         />
         <Tab
           id="bands"
           title="Band Overview"
           panel={
-            <Card className="mt-2 p-4" style={{ backgroundColor: 'var(--sda-bg-secondary)' }}>
+            <div className="plt-panel mt-2 p-3">
               {bandsLoading ? (
                 <div className="flex items-center gap-2 py-4">
-                  <Spinner size={16} /> Loading band data...
+                  <Spinner size={16} />
+                  <span className="text-[10px] font-mono text-[#555] uppercase">Loading band data...</span>
                 </div>
               ) : (
                 <>
-                  <h3 className="text-sm font-semibold mb-3" style={{ color: 'var(--sda-text-primary)' }}>
-                    Spectrum Band Allocation
-                  </h3>
+                  <div className="flex items-center gap-2 mb-3 pb-2 border-b border-[#1a1a1a]">
+                    <Icon icon="panel-stats" size={14} className="text-[#555]" />
+                    <h3 className="text-xs font-semibold text-[#e0e0e0] uppercase tracking-wider">
+                      Spectrum Band Allocation
+                    </h3>
+                  </div>
                   <BandOverview bands={bands} />
                   <div className="mt-4">
                     <HTMLTable compact striped style={{ width: '100%' }}>
@@ -1039,7 +1031,7 @@ export function RFSpectrumPanel() {
                         {bands.map(b => (
                           <tr key={b.band_name}>
                             <td><BandTag band={b.band_name} /></td>
-                            <td style={{ color: 'var(--sda-text-secondary)' }}>{b.frequency_range}</td>
+                            <td style={{ color: '#555' }}>{b.frequency_range}</td>
                             <td>{b.satellite_count}</td>
                             <td>{b.transmitter_count}</td>
                           </tr>
@@ -1049,17 +1041,17 @@ export function RFSpectrumPanel() {
                   </div>
                 </>
               )}
-            </Card>
+            </div>
           }
         />
         <Tab
           id="search"
           title="Search Transmitters"
           panel={
-            <Card className="mt-2 p-4" style={{ backgroundColor: 'var(--sda-bg-secondary)' }}>
+            <div className="plt-panel mt-2 p-3">
               <div className="flex gap-3 items-end flex-wrap mb-3">
                 <div>
-                  <label className="text-xs block mb-1" style={{ color: 'var(--sda-text-secondary)' }}>
+                  <label className="text-[9px] font-mono text-[#555] uppercase tracking-widest block mb-1">
                     Band
                   </label>
                   <HTMLSelect
@@ -1069,7 +1061,7 @@ export function RFSpectrumPanel() {
                   />
                 </div>
                 <div>
-                  <label className="text-xs block mb-1" style={{ color: 'var(--sda-text-secondary)' }}>
+                  <label className="text-[9px] font-mono text-[#555] uppercase tracking-widest block mb-1">
                     Mode
                   </label>
                   <HTMLSelect
@@ -1078,22 +1070,22 @@ export function RFSpectrumPanel() {
                     options={MODE_OPTIONS.map(m => ({ label: m || 'All Modes', value: m }))}
                   />
                 </div>
-                <Button
-                  intent="primary"
-                  icon="search"
-                  loading={searchLoading}
+                <button
+                  className="plt-btn px-3 py-1.5 text-[10px] font-mono font-semibold text-[#888] hover:text-[#e0e0e0] uppercase tracking-wider flex items-center gap-2"
                   onClick={handleSearch}
+                  disabled={searchLoading}
                 >
+                  <Icon icon="search" size={12} className={searchLoading ? 'animate-spin' : ''} />
                   Search
-                </Button>
+                </button>
               </div>
               {searchTotal > 0 && (
-                <p className="text-xs mb-2" style={{ color: 'var(--sda-text-secondary)' }}>
+                <p className="text-[10px] font-mono text-[#555] mb-2">
                   Found {searchTotal} transmitters
                 </p>
               )}
               <TransmitterTable transmitters={searchResults} />
-            </Card>
+            </div>
           }
         />
       </Tabs>

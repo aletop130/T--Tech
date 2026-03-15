@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Seed debris data for SDA Platform.
+"""Seed debris data for Horus.
 
 Creates a large number of debris objects (space junk) in the database with
 associated orbit entries.  The script:

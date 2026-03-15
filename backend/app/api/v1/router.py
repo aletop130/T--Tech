@@ -32,6 +32,7 @@ from app.api.v1 import (
     ground_track,
     debris_genealogy,
     sandbox,
+    italy_bigbrother,
 )
 
 api_router = APIRouter()
@@ -214,4 +215,10 @@ api_router.include_router(
     debris_genealogy.router,
     prefix="/debris-genealogy",
     tags=["Debris Genealogy"],
+)
+
+api_router.include_router(
+    italy_bigbrother.router,
+    prefix="/italy-bigbrother",
+    tags=["Italy Big Brother"],
 )

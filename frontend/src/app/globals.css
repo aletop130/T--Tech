@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Google+Sans+Code:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Google+Sans:wght@300;400;500;600;700&family=Google+Sans+Code:wght@300;400;500;600;700&display=swap');
 
 @import "@blueprintjs/core/lib/css/blueprint.css";
 @import "@blueprintjs/icons/lib/css/blueprint-icons.css";
@@ -19,7 +19,7 @@
   --sda-bg-secondary: #0a0a0a;
   --sda-bg-tertiary: #141414;
   --sda-bg-elevated: #1f1f1f;
-  --sda-bg-sidebar: #0f0f0f;
+  --sda-bg-sidebar: #0a0a0a;
   --sda-border-default: #2a2a2a;
   --sda-text-primary: #f0f0f0;
   --sda-text-secondary: #a0a0a0;
@@ -49,7 +49,7 @@
   --border: 0 0% 16%;
   --input: 0 0% 16%;
   --ring: 200 70% 52%;
-  --radius: 0.5rem;
+  --radius: 0.2rem;
 }
 
 html {
@@ -59,7 +59,7 @@ html {
 body {
   background-color: var(--sda-bg-primary);
   color: var(--sda-text-primary);
-  font-family: var(--font-ibm-plex-sans), 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-family: 'Google Sans', -apple-system, BlinkMacSystemFont, sans-serif;
 }
 
 /* Google Sans Code for technical headers, operations, data and code */
@@ -84,11 +84,11 @@ kbd,
   font-family: 'Google Sans Code', monospace;
 }
 
-/* Monospace fallback for general mono elements */
+/* Monospace / technical elements */
 .font-mono,
 .bp6-monospace-text,
 [data-mono="true"] {
-  font-family: var(--font-ibm-plex-mono), 'IBM Plex Mono', monospace;
+  font-family: 'Google Sans Code', monospace;
 }
 
 /* Blueprint Dark Theme Overrides */
@@ -99,23 +99,23 @@ kbd,
 .bp6-dark .bp6-card {
   background-color: var(--sda-bg-secondary);
   border-color: var(--sda-border-default);
-  border-radius: 8px;
+  border-radius: 3px;
 }
 
 .bp6-dark .bp6-input {
   background-color: var(--sda-bg-tertiary);
   border-color: var(--sda-border-default);
-  border-radius: 8px;
+  border-radius: 3px;
 }
 
 .bp6-dark .bp6-button {
   background-color: var(--sda-bg-tertiary);
-  border-radius: 8px;
+  border-radius: 3px;
 }
 
 .bp6-dark .bp6-menu {
   background-color: var(--sda-bg-secondary);
-  border-radius: 8px;
+  border-radius: 3px;
 }
 
 .bp6-dark .bp6-navbar {
@@ -180,6 +180,11 @@ kbd,
   50% { box-shadow: 0 0 20px var(--sda-accent-cyan); }
 }
 
+@keyframes timeline-sweep {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(400%); }
+}
+
 .pulse-glow {
   animation: pulse-glow 2s infinite;
 }
@@ -208,7 +213,7 @@ kbd,
 }
 
 .markdown-content code {
-  font-family: var(--font-ibm-plex-mono), 'IBM Plex Mono', monospace;
+  font-family: 'Google Sans Code', monospace;
   font-size: 0.875rem;
 }
 
@@ -371,6 +376,27 @@ kbd,
   border-color: transparent !important;
   box-shadow: none !important;
   ring: 0 !important;
+}
+
+/* Remove native browser focus styling from sandbox chat textarea */
+.sandbox-chat-input,
+.sandbox-chat-input:focus,
+.sandbox-chat-input:focus-visible,
+.sandbox-chat-input:active {
+  appearance: none !important;
+  -webkit-appearance: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+  border-color: transparent !important;
+}
+
+/* Remove focus outline from sidebar nav items */
+.bg-sda-bg-sidebar a:focus,
+.bg-sda-bg-sidebar a:focus-visible,
+.bg-sda-bg-sidebar button:focus,
+.bg-sda-bg-sidebar button:focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
 }
 
 /* Panel Resize Handles */
@@ -667,4 +693,140 @@ model-viewer {
   stroke-linecap: round;
   transition: stroke-dashoffset 0.8s ease;
   animation: ring-fill 1s ease forwards;
+}
+
+/* ═══ Palantir / Bloomberg Terminal Style ═══ */
+
+.plt-panel {
+  background: #0a0a0a;
+  border: 1px solid #1a1a1a;
+  border-radius: 3px;
+  position: relative;
+}
+
+.plt-panel:hover {
+  border-color: #222;
+}
+
+.plt-panel-accent {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+}
+
+.plt-row {
+  background: rgba(255, 255, 255, 0.015);
+  border: 1px solid #111;
+  border-radius: 2px;
+  transition: background 0.1s, border-color 0.1s;
+  cursor: pointer;
+}
+
+.plt-row:hover {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: #1a1a1a;
+}
+
+.plt-badge {
+  font-size: 9px;
+  font-weight: 600;
+  font-family: monospace;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 1px 6px;
+  border-radius: 2px;
+  border: 1px solid;
+}
+
+.plt-btn {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid #1a1a1a;
+  border-radius: 2px;
+  cursor: pointer;
+  transition: background 0.1s, border-color 0.1s;
+}
+
+.plt-btn:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: #333;
+}
+
+/* ═══ Map Panel accents ═══ */
+.map-panel-accent {
+  position: relative;
+}
+.map-panel-accent::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(57, 197, 207, 0.35), transparent);
+  pointer-events: none;
+  z-index: 1;
+}
+.map-panel-accent::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 40px;
+  background: linear-gradient(180deg, rgba(57, 197, 207, 0.03), transparent);
+  pointer-events: none;
+  z-index: 0;
+  border-radius: 2px 2px 0 0;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* ═══ Sandbox — Military HUD ═══ */
+
+.mil-bracket {
+  position: relative;
+}
+.mil-bracket::before,
+.mil-bracket::after {
+  content: '';
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  pointer-events: none;
+  z-index: 2;
+}
+.mil-bracket::before {
+  top: -1px;
+  left: -1px;
+  border-top: 1px solid rgba(57, 197, 207, 0.45);
+  border-left: 1px solid rgba(57, 197, 207, 0.45);
+}
+.mil-bracket::after {
+  bottom: -1px;
+  right: -1px;
+  border-bottom: 1px solid rgba(57, 197, 207, 0.45);
+  border-right: 1px solid rgba(57, 197, 207, 0.45);
+}
+
+.mil-accent-top {
+  position: relative;
+}
+.mil-accent-top::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, rgba(57, 197, 207, 0.5), rgba(57, 197, 207, 0.15) 40%, transparent);
+  pointer-events: none;
+  z-index: 1;
 }

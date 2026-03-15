@@ -7,6 +7,7 @@ from datetime import datetime
 import pytest
 
 from app.db.models.ontology import Orbit, Satellite
+from app.services import sandbox as sandbox_service
 
 
 @pytest.mark.asyncio
@@ -115,7 +116,8 @@ async def test_sandbox_imports_live_satellite_as_isolated_actor(client, db_sessi
 
 
 @pytest.mark.asyncio
-async def test_sandbox_chat_compiler_creates_and_moves_actor(client):
+async def test_sandbox_chat_compiler_creates_and_moves_actor(client, monkeypatch):
+    monkeypatch.setattr(sandbox_service, "_get_sandbox_llm_client", lambda: None)
     session_response = await client.post("/api/v1/sandbox/sessions", json={"name": "Chat Sandbox"})
     assert session_response.status_code == 200
     session_id = session_response.json()["session"]["id"]
@@ -139,3 +141,81 @@ async def test_sandbox_chat_compiler_creates_and_moves_actor(client):
     assert actor["behavior"]["type"] == "move_to"
     assert actor["behavior"]["target"]["lat"] == pytest.approx(42.1)
     assert actor["behavior"]["target"]["lon"] == pytest.approx(12.7)
+
+
+@pytest.mark.asyncio
+async def test_sandbox_chat_compiler_creates_drone_subtype(client, monkeypatch):
+    monkeypatch.setattr(sandbox_service, "_get_sandbox_llm_client", lambda: None)
+    session_response = await client.post("/api/v1/sandbox/sessions", json={"name": "Drone Sandbox"})
+    assert session_response.status_code == 200
+    session_id = session_response.json()["session"]["id"]
+
+    create_response = await client.post(
+        f"/api/v1/sandbox/sessions/{session_id}/chat",
+        json={"prompt": "Create hostile drone named Raven at 41.9, 12.5"},
+    )
+    assert create_response.status_code == 200
+    payload = create_response.json()
+
+    actor = next(actor for actor in payload["snapshot"]["actors"] if actor["label"] == "Raven")
+    assert actor["actor_type"] == "aircraft"
+    assert actor["subtype"] == "drone"
+    assert actor["state"]["position"]["alt_m"] == pytest.approx(2500.0)
+    assert actor["state"]["speed_ms"] == pytest.approx(85.0)
+
+
+@pytest.mark.asyncio
+async def test_sandbox_coordinate_approach_target_moves_actor(client):
+    session_response = await client.post(
+        "/api/v1/sandbox/sessions",
+        json={"name": "Coordinate Approach Sandbox"},
+    )
+    assert session_response.status_code == 200
+    session_id = session_response.json()["session"]["id"]
+
+    actor_response = await client.post(
+        f"/api/v1/sandbox/sessions/{session_id}/actors",
+        json={
+            "actor_class": "air",
+            "actor_type": "aircraft",
+            "label": "Falcon",
+            "faction": "allied",
+            "state": {
+                "position": {"lat": 41.9, "lon": 12.5, "alt_m": 8500},
+                "speed_ms": 180,
+                "heading_deg": 90,
+            },
+            "behavior": {"type": "hold"},
+        },
+    )
+    assert actor_response.status_code == 200
+    actor_id = actor_response.json()["actors"][0]["id"]
+
+    update_response = await client.patch(
+        f"/api/v1/sandbox/sessions/{session_id}/actors/{actor_id}",
+        json={
+            "behavior": {
+                "type": "approach_target",
+                "target": {"lat": 41.9, "lon": 12.8, "alt_m": 8500},
+                "speed_ms": 180,
+            }
+        },
+    )
+    assert update_response.status_code == 200
+    updated_actor = next(actor for actor in update_response.json()["actors"] if actor["id"] == actor_id)
+    assert updated_actor["behavior"]["type"] == "approach_target"
+    assert updated_actor["behavior"]["target"]["lon"] == pytest.approx(12.8)
+
+    start_response = await client.post(
+        f"/api/v1/sandbox/sessions/{session_id}/control",
+        json={"action": "start"},
+    )
+    assert start_response.status_code == 200
+
+    tick_response = await client.post(
+        f"/api/v1/sandbox/sessions/{session_id}/tick",
+        json={"delta_seconds": 30},
+    )
+    assert tick_response.status_code == 200
+    actor = next(item for item in tick_response.json()["actors"] if item["id"] == actor_id)
+    assert actor["state"]["position"]["lon"] > 12.5
