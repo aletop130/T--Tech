@@ -102,9 +102,10 @@ class SandboxApiClient extends ApiClient {
   async controlSession(
     sessionId: string,
     data: {
-      action: 'start' | 'pause' | 'resume' | 'reset' | 'set_speed' | 'set_duration';
+      action: 'start' | 'pause' | 'resume' | 'reset' | 'set_speed' | 'set_duration' | 'seek';
       time_multiplier?: number;
       duration_seconds?: number;
+      seek_seconds?: number;
     },
   ): Promise<SandboxSnapshot> {
     return this.post<SandboxSnapshot>(`/api/v1/sandbox/sessions/${sessionId}/control`, data);
@@ -123,6 +124,19 @@ class SandboxApiClient extends ApiClient {
     },
   ): Promise<SandboxSnapshot> {
     return this.post<SandboxSnapshot>(`/api/v1/sandbox/sessions/${sessionId}/import`, data);
+  }
+
+  async renameSession(sessionId: string, name: string): Promise<SandboxSnapshot> {
+    return this._fetch<SandboxSnapshot>(`/api/v1/sandbox/sessions/${sessionId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ name }),
+    });
+  }
+
+  async deleteSession(sessionId: string): Promise<void> {
+    await this._fetch<{ ok: boolean }>(`/api/v1/sandbox/sessions/${sessionId}`, {
+      method: 'DELETE',
+    });
   }
 
   async compileChat(sessionId: string, prompt: string): Promise<SandboxChatResponse> {

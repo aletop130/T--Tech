@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Icon } from '@blueprintjs/core';
 
 import type { SandboxSession } from '@/lib/store/sandbox';
@@ -39,7 +39,7 @@ function formatDurationCompact(seconds: number): string {
 interface SandboxTimelineProps {
   session: SandboxSession | null;
   onControl: (
-    action: 'start' | 'pause' | 'resume' | 'reset' | 'set_speed' | 'set_duration',
+    action: 'start' | 'pause' | 'resume' | 'reset' | 'set_speed' | 'set_duration' | 'seek',
     value?: number,
   ) => void;
 }
@@ -48,13 +48,89 @@ export function SandboxTimeline({ session, onControl }: SandboxTimelineProps) {
   const barRef = useRef<HTMLDivElement>(null);
   const [durationInput, setDurationInput] = useState('');
   const [editingDuration, setEditingDuration] = useState(false);
+  const [dragging, setDragging] = useState(false);
+  const [dragProgress, setDragProgress] = useState(0);
 
   const status = session?.status ?? 'draft';
   const currentTime = session?.current_time_seconds ?? 0;
   const duration = session?.duration_seconds ?? null;
   const speed = session?.time_multiplier ?? 1;
-  const progress = duration && duration > 0 ? Math.min((currentTime / duration) * 100, 100) : 0;
+  const displayProgress = dragging
+    ? dragProgress
+    : duration && duration > 0
+      ? Math.min((currentTime / duration) * 100, 100)
+      : 0;
   const isComplete = duration != null && currentTime >= duration;
+
+  const STEP_SECONDS = 10;
+
+  const handleStep = useCallback(
+    (direction: 1 | -1) => {
+      if (!duration) return;
+      const step = STEP_SECONDS * speed;
+      const target = Math.max(0, Math.min(currentTime + step * direction, duration));
+      onControl('seek', target);
+    },
+    [currentTime, duration, onControl, speed],
+  );
+
+  // Seek to percentage on the bar
+  const seekToPercent = useCallback(
+    (pct: number) => {
+      if (!duration) return;
+      const clamped = Math.max(0, Math.min(pct, 100));
+      const targetTime = (clamped / 100) * duration;
+      onControl('seek', targetTime);
+    },
+    [duration, onControl],
+  );
+
+  // Click on track to seek
+  const handleTrackClick = useCallback(
+    (e: React.MouseEvent<HTMLDivElement>) => {
+      if (!barRef.current || !duration) return;
+      const rect = barRef.current.getBoundingClientRect();
+      const pct = ((e.clientX - rect.left) / rect.width) * 100;
+      seekToPercent(pct);
+    },
+    [duration, seekToPercent],
+  );
+
+  // Drag handlers
+  const handleDragStart = useCallback(
+    (e: React.MouseEvent) => {
+      if (!barRef.current || !duration) return;
+      e.preventDefault();
+      e.stopPropagation();
+      setDragging(true);
+      const rect = barRef.current.getBoundingClientRect();
+      setDragProgress(Math.max(0, Math.min(((e.clientX - rect.left) / rect.width) * 100, 100)));
+    },
+    [duration],
+  );
+
+  useEffect(() => {
+    if (!dragging) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!barRef.current) return;
+      const rect = barRef.current.getBoundingClientRect();
+      const pct = Math.max(0, Math.min(((e.clientX - rect.left) / rect.width) * 100, 100));
+      setDragProgress(pct);
+    };
+
+    const handleMouseUp = () => {
+      setDragging(false);
+      seekToPercent(dragProgress);
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [dragging, dragProgress, seekToPercent]);
 
   const handleDurationSubmit = useCallback(() => {
     const text = durationInput.trim().toLowerCase();
@@ -107,6 +183,17 @@ export function SandboxTimeline({ session, onControl }: SandboxTimelineProps) {
             <Icon icon="reset" size={12} />
           </button>
 
+          {/* Step backward */}
+          <button
+            type="button"
+            onClick={() => handleStep(-1)}
+            disabled={!duration}
+            className="flex w-9 items-center justify-center text-zinc-600 transition-colors hover:bg-white/[0.03] hover:text-zinc-400 disabled:opacity-30"
+            title={`Step back ${STEP_SECONDS}s (×${speed})`}
+          >
+            <Icon icon="step-backward" size={12} />
+          </button>
+
           {/* Play / Pause */}
           <button
             type="button"
@@ -122,12 +209,25 @@ export function SandboxTimeline({ session, onControl }: SandboxTimelineProps) {
           >
             <Icon icon={status === 'running' ? 'pause' : 'play'} size={14} />
           </button>
+
+          {/* Step forward */}
+          <button
+            type="button"
+            onClick={() => handleStep(1)}
+            disabled={!duration}
+            className="flex w-9 items-center justify-center text-zinc-600 transition-colors hover:bg-white/[0.03] hover:text-zinc-400 disabled:opacity-30"
+            title={`Step forward ${STEP_SECONDS}s (×${speed})`}
+          >
+            <Icon icon="step-forward" size={12} />
+          </button>
         </div>
 
         {/* Current time readout */}
         <div className="flex w-[108px] items-center justify-center border-r border-[#1a1a1a] bg-[#0a0a0a]/60">
           <span className="font-code text-[13px] font-semibold tabular-nums tracking-wide text-sda-accent-cyan">
-            {formatTime(currentTime)}
+            {dragging && duration
+              ? formatTime((dragProgress / 100) * duration)
+              : formatTime(currentTime)}
           </span>
         </div>
 
@@ -135,10 +235,11 @@ export function SandboxTimeline({ session, onControl }: SandboxTimelineProps) {
         <div className="relative flex min-w-0 flex-1 flex-col justify-center px-4">
           {duration ? (
             <>
-              {/* Track background */}
+              {/* Track background — clickable */}
               <div
                 ref={barRef}
-                className="relative h-[6px] w-full bg-[#141414]"
+                className="relative h-[6px] w-full cursor-pointer bg-[#141414]"
+                onClick={handleTrackClick}
               >
                 {/* Tick marks on track */}
                 {tickMarks.map((tick) => (
@@ -151,25 +252,28 @@ export function SandboxTimeline({ session, onControl }: SandboxTimelineProps) {
 
                 {/* Progress fill */}
                 <div
-                  className="absolute inset-y-0 left-0 transition-[width] duration-150 ease-linear"
+                  className={`absolute inset-y-0 left-0 ${dragging ? '' : 'transition-[width] duration-150 ease-linear'}`}
                   style={{
-                    width: `${progress}%`,
-                    background: isComplete
+                    width: `${displayProgress}%`,
+                    background: isComplete && !dragging
                       ? 'linear-gradient(90deg, rgba(251,191,36,0.3), rgba(251,191,36,0.5))'
                       : 'linear-gradient(90deg, rgba(34,211,238,0.15), rgba(34,211,238,0.45))',
                   }}
                 />
 
-                {/* Playhead needle */}
+                {/* Playhead needle — draggable */}
                 <div
-                  className="absolute top-1/2 -translate-y-1/2 transition-[left] duration-150 ease-linear"
-                  style={{ left: `${progress}%` }}
+                  className={`absolute top-1/2 -translate-y-1/2 ${dragging ? '' : 'transition-[left] duration-150 ease-linear'}`}
+                  style={{ left: `${displayProgress}%` }}
+                  onMouseDown={handleDragStart}
                 >
                   <div
-                    className={`h-[14px] w-[2px] -translate-x-1/2 ${
-                      isComplete
-                        ? 'bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.6)]'
-                        : 'bg-sda-accent-cyan shadow-[0_0_8px_rgba(34,211,238,0.6)]'
+                    className={`h-[14px] w-[6px] -translate-x-1/2 ${
+                      dragging
+                        ? 'cursor-grabbing bg-white shadow-[0_0_10px_rgba(255,255,255,0.5)]'
+                        : isComplete
+                          ? 'cursor-grab bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.6)]'
+                          : 'cursor-grab bg-sda-accent-cyan shadow-[0_0_8px_rgba(34,211,238,0.6)]'
                     }`}
                   />
                 </div>

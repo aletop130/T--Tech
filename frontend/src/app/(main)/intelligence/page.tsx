@@ -5,6 +5,8 @@ import { ThreatPanel } from '@/components/Threats/ThreatPanel';
 import { LaunchCorrelationPanel } from '@/components/Launch/LaunchCorrelationPanel';
 import { ReentryDashboard } from '@/components/Reentry/ReentryDashboard';
 import { ManeuverDetectionPanel } from '@/components/ManeuverAlertPanel/ManeuverDetectionPanel';
+import { AircraftPanel } from '@/components/Intelligence/AircraftPanel';
+import { VesselPanel } from '@/components/Intelligence/VesselPanel';
 
 export default function IntelligencePage() {
   return (
@@ -19,6 +21,8 @@ export default function IntelligencePage() {
         { id: 'launches',   title: 'Launches',      component: <LaunchCorrelationPanel /> },
         { id: 'reentry',    title: 'Reentry',       component: <ReentryDashboard /> },
         { id: 'maneuvers',  title: 'Maneuvers',     component: <ManeuverDetectionPanel /> },
+        { id: 'aircraft',   title: 'Aircraft',      component: <AircraftPanel /> },
+        { id: 'vessels',    title: 'Vessels',        component: <VesselPanel /> },
       ]}
     />
   );

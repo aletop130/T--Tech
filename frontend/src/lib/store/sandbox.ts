@@ -23,9 +23,10 @@ export type SandboxInteractionMode =
   | 'add_waypoint'
   | 'place_marker'
   | 'draw_route'
-  | 'draw_area';
+  | 'draw_area'
+  | 'place_zone';
 
-export type SandboxContextTab = 'actors' | 'import' | 'saved' | 'ground';
+export type SandboxContextTab = 'actors' | 'import' | 'saved' | 'ground' | 'layers' | 'asset';
 
 export interface SandboxSession {
   id: string;
@@ -94,11 +95,26 @@ export interface SandboxCommand {
   updated_at: string;
 }
 
+export interface SandboxFiredEvent {
+  event_type: string;
+  target_label: string | null;
+  trigger_seconds: number;
+  payload: Record<string, unknown>;
+}
+
 export interface SandboxSnapshot {
   session: SandboxSession;
   actors: SandboxActor[];
   scenario_items: SandboxScenarioItem[];
   commands: SandboxCommand[];
+  events?: Array<{
+    id: string;
+    event_type: string;
+    trigger_seconds: number;
+    target_label: string | null;
+    fired: boolean;
+  }>;
+  fired_events?: SandboxFiredEvent[];
 }
 
 // --------------- GROUND PLANNING TYPES ---------------
@@ -131,10 +147,46 @@ export interface TacticalArea {
   faction: SandboxFaction;
 }
 
+// --------------- ZONE PLANNING TYPES ---------------
+
+export type TacticalZoneType =
+  | 'range_ring'
+  | 'threat_zone'
+  | 'engagement_zone'
+  | 'air_corridor'
+  | 'sensor_coverage'
+  | 'comms_range';
+
+export interface TacticalZone {
+  id: string;
+  zoneType: TacticalZoneType;
+  label: string;
+  centerId: string | null;
+  centerPosition: SandboxPosition;
+  radiusKm: number;
+  minRadiusKm?: number;
+  color: string;
+  opacity: number;
+  faction: SandboxFaction;
+  showLabel: boolean;
+}
+
+export interface PlanningOverlay {
+  id: string;
+  name: string;
+  visible: boolean;
+  zoneIds: string[];
+  markerIds: string[];
+  routeIds: string[];
+  areaIds: string[];
+}
+
 export interface GroundPlan {
   markers: TacticalMarker[];
   routes: TacticalRoute[];
   areas: TacticalArea[];
+  zones: TacticalZone[];
+  overlays: PlanningOverlay[];
 }
 
 export interface GroundDrawingConfig {
@@ -185,9 +237,14 @@ interface SandboxState {
   appendChat: (message: ChatMessage) => void;
   setChatBusy: (busy: boolean) => void;
   addTacticalMarker: (marker: TacticalMarker) => void;
-  removeTacticalElement: (elementType: 'marker' | 'route' | 'area', id: string) => void;
+  removeTacticalElement: (elementType: 'marker' | 'route' | 'area' | 'zone', id: string) => void;
   addTacticalRoute: (route: TacticalRoute) => void;
   addTacticalArea: (area: TacticalArea) => void;
+  addTacticalZone: (zone: TacticalZone) => void;
+  updateTacticalZone: (id: string, patch: Partial<TacticalZone>) => void;
+  addPlanningOverlay: (overlay: PlanningOverlay) => void;
+  removePlanningOverlay: (id: string) => void;
+  toggleOverlayVisibility: (id: string) => void;
   addDrawingPoint: (point: SandboxPosition) => void;
   clearDrawing: () => void;
   setGroundDrawingConfig: (config: Partial<GroundDrawingConfig>) => void;
@@ -213,7 +270,7 @@ export const useSandboxStore = create<SandboxState>((set) => ({
   contextTab: 'actors',
   chatMessages: [],
   chatBusy: false,
-  groundPlan: { markers: [], routes: [], areas: [] },
+  groundPlan: { markers: [], routes: [], areas: [], zones: [], overlays: [] },
   drawingPoints: [],
   groundDrawingConfig: { markerType: 'objective', routeType: 'attack_axis', areaType: 'ao', label: '', faction: 'allied' },
 
@@ -239,21 +296,47 @@ export const useSandboxStore = create<SandboxState>((set) => ({
   removeTacticalElement: (elementType, id) =>
     set((s) => ({
       groundPlan: {
+        ...s.groundPlan,
         markers: elementType === 'marker' ? s.groundPlan.markers.filter((m) => m.id !== id) : s.groundPlan.markers,
         routes: elementType === 'route' ? s.groundPlan.routes.filter((r) => r.id !== id) : s.groundPlan.routes,
         areas: elementType === 'area' ? s.groundPlan.areas.filter((a) => a.id !== id) : s.groundPlan.areas,
+        zones: elementType === 'zone' ? s.groundPlan.zones.filter((z) => z.id !== id) : s.groundPlan.zones,
       },
     })),
   addTacticalRoute: (route) =>
     set((s) => ({ groundPlan: { ...s.groundPlan, routes: [...s.groundPlan.routes, route] } })),
   addTacticalArea: (area) =>
     set((s) => ({ groundPlan: { ...s.groundPlan, areas: [...s.groundPlan.areas, area] } })),
+  addTacticalZone: (zone) =>
+    set((s) => ({ groundPlan: { ...s.groundPlan, zones: [...s.groundPlan.zones, zone] } })),
+  updateTacticalZone: (id, patch) =>
+    set((s) => ({
+      groundPlan: {
+        ...s.groundPlan,
+        zones: s.groundPlan.zones.map((z) => (z.id === id ? { ...z, ...patch } : z)),
+      },
+    })),
+  addPlanningOverlay: (overlay) =>
+    set((s) => ({ groundPlan: { ...s.groundPlan, overlays: [...s.groundPlan.overlays, overlay] } })),
+  removePlanningOverlay: (id) =>
+    set((s) => ({
+      groundPlan: { ...s.groundPlan, overlays: s.groundPlan.overlays.filter((o) => o.id !== id) },
+    })),
+  toggleOverlayVisibility: (id) =>
+    set((s) => ({
+      groundPlan: {
+        ...s.groundPlan,
+        overlays: s.groundPlan.overlays.map((o) =>
+          o.id === id ? { ...o, visible: !o.visible } : o,
+        ),
+      },
+    })),
   addDrawingPoint: (point) =>
     set((s) => ({ drawingPoints: [...s.drawingPoints, point] })),
   clearDrawing: () => set({ drawingPoints: [] }),
   setGroundDrawingConfig: (config) =>
     set((s) => ({ groundDrawingConfig: { ...s.groundDrawingConfig, ...config } })),
-  clearGroundPlan: () => set({ groundPlan: { markers: [], routes: [], areas: [] }, drawingPoints: [] }),
+  clearGroundPlan: () => set({ groundPlan: { markers: [], routes: [], areas: [], zones: [], overlays: [] }, drawingPoints: [] }),
   reset: () =>
     set({
       snapshot: null,
@@ -265,7 +348,7 @@ export const useSandboxStore = create<SandboxState>((set) => ({
       contextTab: 'actors',
       chatMessages: [],
       chatBusy: false,
-      groundPlan: { markers: [], routes: [], areas: [] },
+      groundPlan: { markers: [], routes: [], areas: [], zones: [], overlays: [] },
       drawingPoints: [],
       groundDrawingConfig: { markerType: 'objective', routeType: 'attack_axis', areaType: 'ao', label: '', faction: 'allied' },
     }),

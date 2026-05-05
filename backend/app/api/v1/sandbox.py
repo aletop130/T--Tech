@@ -16,6 +16,7 @@ from app.schemas.sandbox import (
     SandboxSessionCreate,
     SandboxSessionSnapshot,
     SandboxSessionSummary,
+    SandboxSessionUpdate,
     SandboxTickRequest,
     SandboxTLEImportRequest,
 )
@@ -62,6 +63,37 @@ async def get_sandbox_session(
         tenant_id=user.tenant_id,
         user_id=user.sub,
     )
+
+
+@router.patch("/sessions/{session_id}", response_model=SandboxSessionSnapshot)
+async def update_sandbox_session(
+    session_id: str,
+    data: SandboxSessionUpdate,
+    user: Annotated[TokenData, Depends(get_current_user)],
+    service: Annotated[SandboxService, Depends(get_sandbox_service)],
+):
+    """Rename or update a sandbox session."""
+    return await service.update_session(
+        session_id=session_id,
+        tenant_id=user.tenant_id,
+        user_id=user.sub,
+        data=data,
+    )
+
+
+@router.delete("/sessions/{session_id}")
+async def delete_sandbox_session(
+    session_id: str,
+    user: Annotated[TokenData, Depends(get_current_user)],
+    service: Annotated[SandboxService, Depends(get_sandbox_service)],
+):
+    """Delete a sandbox session and all associated data."""
+    await service.delete_session(
+        session_id=session_id,
+        tenant_id=user.tenant_id,
+        user_id=user.sub,
+    )
+    return {"ok": True}
 
 
 @router.post("/sessions/{session_id}/actors", response_model=SandboxSessionSnapshot)

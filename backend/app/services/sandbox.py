@@ -12,7 +12,7 @@ from typing import Any, Optional
 
 import httpx
 from openai import AsyncOpenAI
-from sqlalchemy import or_, select
+from sqlalchemy import delete, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import NotFoundError, ValidationError
@@ -41,6 +41,7 @@ from app.schemas.sandbox import (
     SandboxSessionRead,
     SandboxSessionSnapshot,
     SandboxSessionSummary,
+    SandboxSessionUpdate,
     SandboxTickRequest,
     SandboxActorRead,
     SandboxTLEImportRequest,
@@ -139,7 +140,25 @@ async def _geocode(place_name: str) -> Optional[tuple[float, float]]:
       2. LRU cache
       3. Nominatim API with viewbox bias toward the Old World
     """
-    key = place_name.strip().lower()
+    raw = place_name.strip()
+    if not raw:
+        return None
+
+    # 0. Raw "lat, lon" literal — short-circuit Nominatim
+    coord_match = re.match(
+        r"^\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*$",
+        raw,
+    )
+    if coord_match:
+        try:
+            lat = float(coord_match.group(1))
+            lon = float(coord_match.group(2))
+        except ValueError:
+            return None
+        if -90.0 <= lat <= 90.0 and -180.0 <= lon <= 180.0:
+            return lat, lon
+
+    key = raw.lower()
     key = re.sub(r"^(the|a|an)\s+", "", key)
     key = re.sub(r"[.,;!?]+$", "", key).strip()
     if not key:
@@ -237,13 +256,18 @@ One action = one tool call. If the user asks for 5 things, make 5 tool calls.
 Rules:
 - Always infer a faction from context. Default to "allied" if the user says "our" / "friendly". Default to "neutral" if ambiguous.
 - For actor labels: if the user gives a name, use it. Otherwise generate a short descriptive name.
-- Location must be a place name (city, country, base name, sea, region). The system geocodes it.
+- Location: prefer a place name (city, country, base name, sea, region) — the system geocodes it.
+- COORDINATES: when the user gives explicit decimal coordinates (e.g. "33.724, 51.726", "at lat 33.7 lon 51.7", "(35.52, 51.77)"), set the latitude and longitude fields DIRECTLY. Do NOT put coordinates inside the location string. Do NOT wrap them as a place name. Same rule for place_marker.
 - For satellites, if the user mentions an altitude or orbit, set altitude_km. Otherwise default to 400.
 - For aircraft default speed_ms=250, drones default speed_ms=85, ships default speed_ms=15, ground vehicles default speed_ms=20, missiles default speed_ms=800.
 - "tracking station" or "station" → actor_type "ground_station".
 - "defended zone" or "defense zone" → actor_type "defended_zone".
 - "drone" → actor_type "drone".
 - "convoy" → actor_type "ground_vehicle".
+- "submarine" or "sub" → actor_type "submarine", actor_class "sea".
+- "fighter" or "F-22" or "F-35" or "F-16" or "Su-35" or "MiG-29" or "Eurofighter" or "Rafale" → actor_type "aircraft", subtype "fighter".
+- "bomber" or "B-2" or "B-52" or "B-1" → actor_type "aircraft", subtype "bomber".
+- For military aircraft, ALWAYS set the subtype field to "fighter" or "bomber" based on role.
 
 Movement & heading:
 - "heading south/north/east/west" or "approaching from X toward Y" means the actor is MOVING.
@@ -261,6 +285,10 @@ Patrol:
 Deletion:
 - "remove the drone" or "delete Alpha-1" → delete_actor(actor_label=...).
 - Match actor labels case-insensitively. Partial matches are OK.
+
+Destruction:
+- "destroy X" or "X is shot down" or "X is sunk" or "X eliminated" → destroy_actor(actor_label=...).
+- This removes the actor and marks it as destroyed (different from delete which is just cleanup).
 
 Rename / describe:
 - "name this scenario Mediterranean Exercise" → rename_session(name="Mediterranean Exercise").
@@ -290,7 +318,23 @@ Ground planning overlays:
 - "mark area at X, Y, Z" or "kill zone at X, Y, Z" or "area of operations covering X, Y, Z" → draw_area. Types: ao, kill_zone, safe_zone, restricted, objective_area. Min 3 vertices.
 - Default faction for overlays: "allied" if user says "our"/"friendly", "hostile" if enemy, else "neutral".
 
-Respond with tool calls ONLY. Do not add text. Every user intent = a tool call.
+Structured multi-entity prompts:
+- Users often paste many entities in one message, one per line, in formats such as:
+    defended_zone: "NAME" at LAT, LON, FACTION, coverage Nkm
+    base: "NAME" at LAT, LON, FACTION
+    missile: "NAME" at LAT, LON, FACTION
+    ground_station: "NAME" at LAT, LON, FACTION, coverage Nkm
+- Emit ONE tool call per entity. Never merge multiple entities into a single call.
+- For each entity, parse: actor_type from the leading keyword, label from the quoted name, latitude+longitude from the coords, faction from the trailing word, and coverage_radius_km from "coverage Nkm".
+- "name this scenario X" → rename_session(name="X").
+- "describe this as Y" → rename_session(description="Y") (separate call from any name change unless both fit in one rename_session payload).
+- A single message may combine rename_session, multiple create_actor calls, and control_simulation calls. Emit them ALL.
+
+HARD RULE — count before responding:
+1. Count the actions enumerated in the user message (one per line / one per "type:" keyword / each name-this / describe-this / start / set-speed counts as one).
+2. The number of tool calls you emit MUST equal that count. If you would emit fewer, you are wrong — re-read the message.
+
+Respond with tool calls ONLY. Do not add prose. Every user intent = a tool call.
 """
 
 SANDBOX_TOOLS: list[dict[str, Any]] = [
@@ -307,10 +351,11 @@ SANDBOX_TOOLS: list[dict[str, Any]] = [
                         "enum": [
                             "base", "ground_station", "defended_zone",
                             "ground_vehicle", "aircraft", "drone", "ship",
-                            "satellite", "missile", "interceptor", "sensor",
+                            "submarine", "satellite", "missile", "interceptor", "sensor",
                         ],
                     },
                     "label": {"type": "string", "description": "Name for the actor"},
+                    "subtype": {"type": "string", "description": "Subtype: 'fighter', 'bomber', 'drone', etc. Set for military aircraft."},
                     "faction": {
                         "type": "string",
                         "enum": ["allied", "hostile", "neutral", "unknown"],
@@ -318,14 +363,22 @@ SANDBOX_TOOLS: list[dict[str, Any]] = [
                     },
                     "location": {
                         "type": "string",
-                        "description": "Place name for position (e.g. 'Rome', 'Adriatic Sea', 'Camp Bondsteel')",
+                        "description": "Place name for position (e.g. 'Rome', 'Adriatic Sea', 'Camp Bondsteel'). OMIT if latitude/longitude are provided.",
+                    },
+                    "latitude": {
+                        "type": "number",
+                        "description": "Exact latitude in decimal degrees (-90..90). Use this when the user gives raw coordinates instead of a place name.",
+                    },
+                    "longitude": {
+                        "type": "number",
+                        "description": "Exact longitude in decimal degrees (-180..180). Use this when the user gives raw coordinates instead of a place name.",
                     },
                     "speed_ms": {"type": "number", "description": "Speed in m/s"},
                     "heading_deg": {"type": "number", "description": "Heading in degrees 0-360"},
                     "altitude_km": {"type": "number", "description": "Altitude in km (for satellites)"},
                     "coverage_radius_km": {"type": "number", "description": "Radius in km (for stations/zones)"},
                 },
-                "required": ["actor_type", "label", "location"],
+                "required": ["actor_type", "label"],
             },
         },
     },
@@ -440,14 +493,22 @@ SANDBOX_TOOLS: list[dict[str, Any]] = [
                         "description": "Type of tactical marker",
                     },
                     "label": {"type": "string", "description": "Name for the marker"},
-                    "location": {"type": "string", "description": "Place name to geocode"},
+                    "location": {"type": "string", "description": "Place name to geocode. OMIT if latitude/longitude are provided."},
+                    "latitude": {
+                        "type": "number",
+                        "description": "Exact latitude in decimal degrees (-90..90).",
+                    },
+                    "longitude": {
+                        "type": "number",
+                        "description": "Exact longitude in decimal degrees (-180..180).",
+                    },
                     "faction": {
                         "type": "string",
                         "enum": ["allied", "hostile", "neutral", "unknown"],
                         "default": "neutral",
                     },
                 },
-                "required": ["marker_type", "label", "location"],
+                "required": ["marker_type", "label"],
             },
         },
     },
@@ -507,6 +568,28 @@ SANDBOX_TOOLS: list[dict[str, Any]] = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "destroy_actor",
+            "description": "Schedule the destruction of an actor at a specific time in the simulation. Use when the user says an asset is/will be destroyed, shot down, sunk, eliminated. If no time is given, default to 'now' (current simulation time). The destruction happens during playback when the timeline reaches that point.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "actor_label": {
+                        "type": "string",
+                        "description": "Label of the actor to destroy (partial match OK)",
+                    },
+                    "delay_seconds": {
+                        "type": "number",
+                        "description": "Delay in simulation seconds from current time. 0 = at current time. 300 = 5 min from now. Default 0.",
+                        "default": 0,
+                    },
+                },
+                "required": ["actor_label"],
+            },
+        },
+    },
 ]
 
 # Map actor_type from tool call → (actor_class, actor_type) for the DB
@@ -518,6 +601,7 @@ _TOOL_ACTOR_CLASS_MAP: dict[str, tuple[str, str]] = {
     "aircraft": ("air", "aircraft"),
     "drone": ("air", "aircraft"),
     "ship": ("sea", "ship"),
+    "submarine": ("sea", "submarine"),
     "satellite": ("orbital", "satellite"),
     "missile": ("weapon", "missile"),
     "interceptor": ("weapon", "interceptor"),
@@ -525,6 +609,9 @@ _TOOL_ACTOR_CLASS_MAP: dict[str, tuple[str, str]] = {
 }
 
 _llm_client: Optional[AsyncOpenAI] = None
+# Regolo / Qwen 3.5 may not advertise OpenAI's `parallel_tool_calls` flag.
+# We try with it on first call, then disable on rejection.
+_regolo_supports_parallel_tool_calls: bool = True
 
 
 def _get_sandbox_llm_client() -> Optional[AsyncOpenAI]:
@@ -617,7 +704,8 @@ class SandboxService:
         actors = await self._list_actors(session.id, tenant_id)
         items = await self._list_scenario_items(session.id, tenant_id)
         commands = await self._list_commands(session.id, tenant_id)
-        return self._build_snapshot(session, actors, items, commands)
+        events = await self._list_events(session.id, tenant_id)
+        return self._build_snapshot(session, actors, items, commands, events=events)
 
     async def list_sessions(
         self,
@@ -660,6 +748,43 @@ class SandboxService:
             )
             for row in rows
         ]
+
+    async def update_session(
+        self,
+        session_id: str,
+        tenant_id: str,
+        user_id: str,
+        data: "SandboxSessionUpdate",
+    ) -> SandboxSessionSnapshot:
+        """Rename or update description of a sandbox session."""
+        session = await self._get_session(session_id, tenant_id, user_id)
+        if data.name is not None:
+            session.name = data.name
+        if data.description is not None:
+            session.description = data.description
+        session.updated_by = user_id
+        await self.db.flush()
+        return await self.get_snapshot(session_id, tenant_id, user_id)
+
+    async def delete_session(
+        self,
+        session_id: str,
+        tenant_id: str,
+        user_id: str,
+    ) -> None:
+        """Delete a sandbox session and all associated data."""
+        session = await self._get_session(session_id, tenant_id, user_id)
+        await self.db.execute(
+            delete(SandboxCommand).where(SandboxCommand.session_id == session.id)
+        )
+        await self.db.execute(
+            delete(SandboxScenarioItem).where(SandboxScenarioItem.session_id == session.id)
+        )
+        await self.db.execute(
+            delete(SandboxActor).where(SandboxActor.session_id == session.id)
+        )
+        await self.db.delete(session)
+        await self.db.flush()
 
     async def create_actor(
         self,
@@ -825,6 +950,38 @@ class SandboxService:
                 raise ValidationError("duration_seconds is required for set_duration")
             session.duration_seconds = request.duration_seconds
             summary = f"Set sandbox duration to {request.duration_seconds}s"
+        elif request.action == "seek":
+            if request.seek_seconds is None:
+                raise ValidationError("seek_seconds is required for seek")
+            max_time = session.duration_seconds or float("inf")
+            target_time = max(0.0, min(request.seek_seconds, max_time))
+            session.current_time_seconds = target_time
+            # Recompute all actor positions from initial_state
+            actors = await self._list_actors(session.id, tenant_id)
+            for actor in actors:
+                recomputed = deepcopy(actor.initial_state)
+                if target_time > 0:
+                    recomputed = self._advance_actor_state(
+                        actor=actor,
+                        state=recomputed,
+                        delta_seconds=target_time,
+                        session_time_seconds=target_time,
+                        all_actors=actors,
+                    )
+                actor.state = recomputed
+                actor.updated_by = user_id
+            # Reset events that haven't been reached yet
+            from app.db.models.sandbox import SandboxEvent
+            future_events = await self.db.scalars(
+                select(SandboxEvent).where(
+                    SandboxEvent.session_id == session.id,
+                    SandboxEvent.fired == True,  # noqa: E712
+                    SandboxEvent.trigger_seconds > target_time,
+                )
+            )
+            for ev in future_events.all():
+                ev.fired = False
+            summary = f"Seeked to {target_time:.1f}s (positions recomputed)"
         elif request.action == "reset":
             session.status = "draft"
             session.current_time_seconds = 0.0
@@ -854,19 +1011,23 @@ class SandboxService:
         user_id: str,
         request: SandboxTickRequest,
     ) -> SandboxSessionSnapshot:
+        from app.db.models.sandbox import SandboxEvent
+        from app.schemas.sandbox import FiredEvent
+
         session = await self._get_session(session_id, tenant_id, user_id)
         if session.status != "running":
             return await self.get_snapshot(session_id, tenant_id, user_id)
 
+        prev_time = session.current_time_seconds
         effective_delta = request.delta_seconds * session.time_multiplier
 
         # Clamp to duration if set
-        if session.duration_seconds and session.current_time_seconds + effective_delta >= session.duration_seconds:
-            effective_delta = max(0, session.duration_seconds - session.current_time_seconds)
+        if session.duration_seconds and prev_time + effective_delta >= session.duration_seconds:
+            effective_delta = max(0, session.duration_seconds - prev_time)
             session.current_time_seconds = session.duration_seconds
             session.status = "paused"
         else:
-            session.current_time_seconds += effective_delta
+            session.current_time_seconds = prev_time + effective_delta
 
         session.updated_by = user_id
 
@@ -882,8 +1043,40 @@ class SandboxService:
                 )
                 actor.updated_by = user_id
 
+        # --- Fire scheduled events ---
+        fired_list: list[FiredEvent] = []
+        pending_events = await self.db.scalars(
+            select(SandboxEvent).where(
+                SandboxEvent.session_id == session.id,
+                SandboxEvent.fired == False,  # noqa: E712
+                SandboxEvent.trigger_seconds <= session.current_time_seconds,
+                SandboxEvent.trigger_seconds > prev_time,
+            ).order_by(SandboxEvent.trigger_seconds.asc())
+        )
+        for event in pending_events.all():
+            event.fired = True
+            fired_list.append(FiredEvent(
+                event_type=event.event_type,
+                target_label=event.target_label,
+                trigger_seconds=event.trigger_seconds,
+                payload=event.payload or {},
+            ))
+            # Execute event action
+            if event.event_type == "destroy" and event.target_label:
+                try:
+                    target = await self._find_actor_by_label(session.id, tenant_id, event.target_label)
+                    await self.db.delete(target)
+                except Exception:
+                    pass  # Actor may already be gone
+
         await self.db.flush()
-        return await self.get_snapshot(session_id, tenant_id, user_id)
+
+        # Build snapshot with fired events
+        actors = await self._list_actors(session.id, tenant_id)
+        items = await self._list_scenario_items(session.id, tenant_id)
+        commands = await self._list_commands(session.id, tenant_id)
+        events = await self._list_events(session.id, tenant_id)
+        return self._build_snapshot(session, actors, items, commands, events=events, fired_events=fired_list)
 
     async def import_live_object(
         self,
@@ -1148,8 +1341,9 @@ class SandboxService:
         prompt = request.prompt.strip()
 
         # ---- TLE import is always regex (contains raw TLE data, not NLP) ----
+        # Only trigger if the prompt actually contains TLE line data (lines starting with "1 " and "2 ")
         tle_match = re.search(r"(?:from\s+)?TLE[:\s]+(.+)", prompt, flags=re.IGNORECASE | re.DOTALL)
-        if tle_match:
+        if tle_match and re.search(r"^1 ", tle_match.group(1), flags=re.MULTILINE) and re.search(r"^2 ", tle_match.group(1), flags=re.MULTILINE):
             tle_text = tle_match.group(1).strip()
             pre_tle = prompt[:tle_match.start()].strip()
             label_match = re.search(r"(?:named|called)\s+([A-Za-z0-9 _-]+)", pre_tle, flags=re.IGNORECASE)
@@ -1191,6 +1385,90 @@ class SandboxService:
     #  LLM-powered compiler                                               #
     # ------------------------------------------------------------------ #
 
+    def _estimate_action_count(self, prompt: str) -> int:
+        """Heuristic count of distinct actions enumerated in the prompt.
+
+        Used to detect under-emission by the model and trigger a follow-up round.
+        """
+        lower = prompt.lower()
+        creators = (
+            r"\bdefended[_ ]zone\b",
+            r"\bdefense zone\b",
+            r"\bground[_ ]station\b",
+            r"\btracking station\b",
+            r"\bground[_ ]vehicle\b",
+            r"\bconvoy\b",
+            r"\baircraft\b",
+            r"\bfighter\b",
+            r"\bbomber\b",
+            r"\bdrone\b",
+            r"\bship\b",
+            r"\bsubmarine\b",
+            r"\bsatellite\b",
+            r"\bmissile\b",
+            r"\binterceptor\b",
+            r"\bsensor\b",
+            r"\bbase[\s:]",
+        )
+        creator_count = sum(len(re.findall(p, lower)) for p in creators)
+        misc = (
+            r"\bname this\b",
+            r"\bdescribe this\b",
+            r"\bdestroy\b",
+            r"\bdelete\b",
+            r"\bremove\b",
+            r"\bobjective at\b",
+            r"\brally point\b",
+            r"\battack axis\b",
+            r"\bkill zone\b",
+            r"\bphase line\b",
+            r"\bset speed\b",
+            r"\bset duration\b",
+        )
+        misc_count = sum(len(re.findall(p, lower)) for p in misc)
+        return max(1, creator_count + misc_count)
+
+    async def _regolo_chat(
+        self,
+        client: AsyncOpenAI,
+        messages: list[dict[str, Any]],
+    ) -> Optional[Any]:
+        """Single chat completion call with parallel_tool_calls auto-disable on rejection."""
+        global _regolo_supports_parallel_tool_calls
+
+        base_kwargs: dict[str, Any] = dict(
+            model=settings.REGOLO_MODEL,
+            messages=messages,
+            tools=SANDBOX_TOOLS,
+            tool_choice="auto",
+            max_tokens=8192,
+            temperature=0.1,
+        )
+
+        if _regolo_supports_parallel_tool_calls:
+            try:
+                resp = await client.chat.completions.create(
+                    parallel_tool_calls=True,
+                    **base_kwargs,
+                )
+                return resp.choices[0] if resp.choices else None
+            except Exception as e:
+                err = str(e).lower()
+                if (
+                    "parallel_tool_calls" in err
+                    or "unsupported" in err
+                    or "unknown" in err
+                    or "unexpected keyword" in err
+                    or "invalid" in err and "parallel" in err
+                ):
+                    _regolo_supports_parallel_tool_calls = False
+                    logger.info("sandbox_regolo_parallel_disabled", error=str(e))
+                else:
+                    raise
+
+        resp = await client.chat.completions.create(**base_kwargs)
+        return resp.choices[0] if resp.choices else None
+
     async def _compile_via_llm(
         self,
         client: AsyncOpenAI,
@@ -1200,52 +1478,101 @@ class SandboxService:
         user_id: str,
         prompt: str,
     ) -> SandboxChatResponse:
-        """Send the prompt to the LLM, execute every tool_call it returns."""
+        """Send the prompt to the LLM, execute every tool_call it returns.
+
+        Multi-round: when the model under-emits (Qwen / Regolo often returns one
+        tool_call even with parallel_tool_calls enabled), we count entity-keywords
+        in the prompt as a target and re-prompt up to MAX_ROUNDS to gather more.
+        """
         # Build context: list current actors so the LLM can reference them for moves
         actor_rows = await self._list_actors(session_id, tenant_id)
         actor_summary = ", ".join(f"'{a.label}' ({a.actor_type}, {a.faction})" for a in actor_rows)
         context_msg = f"Current actors in sandbox: [{actor_summary or 'none'}]"
 
-        messages = [
+        messages: list[dict[str, Any]] = [
             {"role": "system", "content": _SANDBOX_SYSTEM_PROMPT},
             {"role": "user", "content": f"{context_msg}\n\nUser request: {prompt}"},
         ]
 
-        try:
-            response = await client.chat.completions.create(
-                model=settings.REGOLO_MODEL,
-                messages=messages,
-                tools=SANDBOX_TOOLS,
-                tool_choice="auto",
-                max_tokens=2048,
-                temperature=0.1,
-            )
-        except Exception as e:
-            logger.warning("sandbox_llm_call_failed", error=str(e))
-            # Fall back to regex
-            return await self._compile_via_regex(
-                session=session, session_id=session_id,
-                tenant_id=tenant_id, user_id=user_id, prompt=prompt,
-            )
+        expected_actions = self._estimate_action_count(prompt)
+        accumulated_calls: list[Any] = []
+        last_text: str = ""
+        MAX_ROUNDS = 3
+        round_idx = 0
 
-        choice = response.choices[0] if response.choices else None
-        if not choice or not choice.message:
-            return await self._compile_via_regex(
-                session=session, session_id=session_id,
-                tenant_id=tenant_id, user_id=user_id, prompt=prompt,
-            )
+        while round_idx < MAX_ROUNDS:
+            try:
+                choice = await self._regolo_chat(client, messages)
+            except Exception as e:
+                logger.warning("sandbox_llm_call_failed", error=str(e))
+                if round_idx == 0:
+                    return await self._compile_via_regex(
+                        session=session, session_id=session_id,
+                        tenant_id=tenant_id, user_id=user_id, prompt=prompt,
+                    )
+                break
 
-        tool_calls = choice.message.tool_calls or []
-        if not tool_calls:
-            # LLM returned text instead of tool calls — use it as the response
+            if not choice or not choice.message:
+                break
+
+            round_calls = choice.message.tool_calls or []
             text = choice.message.content or ""
             if text:
+                last_text = text
+
+            if round_calls:
+                accumulated_calls.extend(round_calls)
+
+            # First-round empty: model said nothing useful — fall back to regex
+            if round_idx == 0 and not round_calls and not text:
+                return await self._compile_via_regex(
+                    session=session, session_id=session_id,
+                    tenant_id=tenant_id, user_id=user_id, prompt=prompt,
+                )
+
+            # Stop conditions
+            if not round_calls:
+                break  # text-only response means model is "done"
+            if text.strip().upper() == "DONE":
+                break
+            if len(accumulated_calls) >= expected_actions:
+                break
+
+            # Build a follow-up nudge (plain text, no tool_call replay — many
+            # OpenAI-compat servers reject strict tool/assistant message pairing).
+            call_summary_parts: list[str] = []
+            for tc in round_calls:
+                try:
+                    targs = json.loads(tc.function.arguments or "{}")
+                except json.JSONDecodeError:
+                    targs = {}
+                ident = targs.get("label") or targs.get("name") or targs.get("actor_label") or "?"
+                call_summary_parts.append(f"{tc.function.name}({ident})")
+            messages.append({
+                "role": "assistant",
+                "content": "Tool calls so far: " + "; ".join(call_summary_parts),
+            })
+            messages.append({
+                "role": "user",
+                "content": (
+                    f"You have emitted {len(accumulated_calls)} tool call(s) but the original "
+                    f"request enumerates roughly {expected_actions} actions. Emit tool calls for the "
+                    f"REMAINING actions ONLY (do not repeat any already listed above). "
+                    f"If you are confident every action is covered, reply with the single literal word 'DONE'."
+                ),
+            })
+            round_idx += 1
+
+        if not accumulated_calls:
+            if last_text:
                 snapshot = await self.get_snapshot(session_id, tenant_id, user_id)
-                return SandboxChatResponse(message=text, snapshot=snapshot)
+                return SandboxChatResponse(message=last_text, snapshot=snapshot)
             return await self._compile_via_regex(
                 session=session, session_id=session_id,
                 tenant_id=tenant_id, user_id=user_id, prompt=prompt,
             )
+
+        tool_calls = accumulated_calls
 
         # Pre-geocode all locations concurrently to avoid serial network calls
         all_locations: list[str] = []
@@ -1330,6 +1657,14 @@ class SandboxService:
                     applied_commands.append(f"delete:{result}")
                     messages_parts.append(f"Removed {result}.")
 
+                elif func_name == "destroy_actor":
+                    result = await self._exec_schedule_destroy(
+                        session=session, session_id=session_id,
+                        tenant_id=tenant_id, user_id=user_id, args=func_args,
+                    )
+                    applied_commands.append(f"destroy:{result}")
+                    messages_parts.append(result)
+
                 elif func_name == "rename_session":
                     result = await self._exec_rename_session(
                         session=session, user_id=user_id, args=func_args,
@@ -1399,13 +1734,24 @@ class SandboxService:
         # Resolve class
         class_info = _TOOL_ACTOR_CLASS_MAP.get(actor_type, ("fixed_ground", actor_type))
         actor_class, db_actor_type = class_info
-        actor_subtype = "drone" if actor_type == "drone" else None
+        actor_subtype = args.get("subtype") or ("drone" if actor_type == "drone" else None)
 
-        # Geocode location + add small random spread (~0.3° ≈ 30km) to prevent stacking
-        coords = await _geocode(location_name) if location_name else None
-        lat, lon = coords if coords else (0.0, 0.0)
-        lat += random.uniform(-0.3, 0.3)
-        lon += random.uniform(-0.3, 0.3)
+        # Resolve position: explicit lat/lon takes priority over geocoding
+        explicit_lat = args.get("latitude")
+        explicit_lon = args.get("longitude")
+        if explicit_lat is not None and explicit_lon is not None:
+            try:
+                lat = float(explicit_lat)
+                lon = float(explicit_lon)
+                # No random spread when caller provided exact coords
+            except (TypeError, ValueError):
+                lat, lon = 0.0, 0.0
+        else:
+            # Geocode location + add small random spread (~0.3° ≈ 30km) to prevent stacking
+            coords = await _geocode(location_name) if location_name else None
+            lat, lon = coords if coords else (0.0, 0.0)
+            lat += random.uniform(-0.3, 0.3)
+            lon += random.uniform(-0.3, 0.3)
 
         # Build state
         state: dict[str, Any] = {}
@@ -1611,6 +1957,35 @@ class SandboxService:
         )
         return label
 
+    async def _exec_schedule_destroy(
+        self, session: SandboxSession, session_id: str,
+        tenant_id: str, user_id: str, args: dict,
+    ) -> str:
+        """Schedule a destroy event on the timeline."""
+        from app.db.models.sandbox import SandboxEvent
+        actor_label = args.get("actor_label", "")
+        delay = float(args.get("delay_seconds", 0))
+        trigger_at = session.current_time_seconds + delay
+
+        event = SandboxEvent(
+            session_id=session.id,
+            tenant_id=tenant_id,
+            event_type="destroy",
+            trigger_seconds=trigger_at,
+            target_label=actor_label,
+            payload={"scheduled_by": "chat"},
+            created_by=user_id,
+            updated_by=user_id,
+        )
+        self.db.add(event)
+        await self.db.flush()
+
+        if delay <= 0:
+            return f"Scheduled destruction of '{actor_label}' at current time ({trigger_at:.0f}s). Press play to execute."
+        else:
+            mins = delay / 60
+            return f"Scheduled destruction of '{actor_label}' at T+{mins:.0f}min ({trigger_at:.0f}s)."
+
     async def _exec_rename_session(
         self, session: SandboxSession, user_id: str, args: dict,
     ) -> str:
@@ -1641,9 +2016,19 @@ class SandboxService:
         location = args.get("location", "")
         faction = args.get("faction", "neutral")
 
-        coords = await _geocode(location) if location else None
-        if not coords:
-            raise ValidationError(f"Could not geocode '{location}'")
+        explicit_lat = args.get("latitude")
+        explicit_lon = args.get("longitude")
+        if explicit_lat is not None and explicit_lon is not None:
+            try:
+                coords = (float(explicit_lat), float(explicit_lon))
+            except (TypeError, ValueError):
+                raise ValidationError(f"Invalid coords for marker '{label}'")
+            location_desc = location or f"{coords[0]:.4f}, {coords[1]:.4f}"
+        else:
+            coords = await _geocode(location) if location else None
+            if not coords:
+                raise ValidationError(f"Could not geocode '{location}'")
+            location_desc = location
 
         item = SandboxScenarioItem(
             session_id=session_id,
@@ -1665,11 +2050,11 @@ class SandboxService:
             session=session,
             command_type="tactical_marker_placed",
             source="chat",
-            summary=f"Placed {marker_type} '{label}' at {location}",
+            summary=f"Placed {marker_type} '{label}' at {location_desc}",
             payload={"item_id": str(item.id), "marker_type": marker_type},
             user_id=user_id,
         )
-        return f"{marker_type} '{label}' at {location}"
+        return f"{marker_type} '{label}' at {location_desc}"
 
     async def _exec_draw_route(
         self, session: SandboxSession, session_id: str,
@@ -2028,18 +2413,35 @@ class SandboxService:
         )
         return list(result.all())
 
+    async def _list_events(self, session_id: str, tenant_id: str) -> list:
+        from app.db.models.sandbox import SandboxEvent
+        result = await self.db.scalars(
+            select(SandboxEvent)
+            .where(
+                SandboxEvent.session_id == session_id,
+                SandboxEvent.tenant_id == tenant_id,
+            )
+            .order_by(SandboxEvent.trigger_seconds.asc())
+        )
+        return list(result.all())
+
     def _build_snapshot(
         self,
         session: SandboxSession,
         actors: list[SandboxActor],
         items: list[SandboxScenarioItem],
         commands: list[SandboxCommand],
+        events: list | None = None,
+        fired_events: list | None = None,
     ) -> SandboxSessionSnapshot:
+        from app.schemas.sandbox import SandboxEventRead, FiredEvent
         return SandboxSessionSnapshot(
             session=SandboxSessionRead.model_validate(session),
             actors=[SandboxActorRead.model_validate(actor) for actor in actors],
             scenario_items=[SandboxScenarioItemRead.model_validate(item) for item in items],
             commands=[SandboxCommandRead.model_validate(command) for command in commands],
+            events=[SandboxEventRead.model_validate(e) for e in (events or [])],
+            fired_events=fired_events or [],
         )
 
     async def _log_command(

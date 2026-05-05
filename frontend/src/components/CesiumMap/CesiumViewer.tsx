@@ -94,6 +94,21 @@ const ViewerConfig = memo(function ViewerConfig({
         }
       });
 
+      // Enable trackpad zoom (pinch + wheel) and adjust tilt controls
+      const controller = viewer.scene.screenSpaceCameraController;
+      controller.zoomEventTypes = [
+        Cesium.CameraEventType.WHEEL,
+        Cesium.CameraEventType.PINCH,
+      ];
+      controller.tiltEventTypes = [
+        Cesium.CameraEventType.MIDDLE_DRAG,
+        Cesium.CameraEventType.PINCH,
+        {
+          eventType: Cesium.CameraEventType.RIGHT_DRAG,
+          modifier: Cesium.KeyboardEventModifier.CTRL,
+        },
+      ];
+
       // Suppress non-critical Cesium rendering errors (e.g. granularity DeveloperErrors)
       // so they don't block the entire scene
       (viewer.cesiumWidget as any).showRenderLoopErrors = false;

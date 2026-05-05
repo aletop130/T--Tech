@@ -41,12 +41,20 @@ class SandboxSessionCreate(BaseSchema):
     duration_seconds: Optional[float] = Field(None, gt=0, le=864000)
 
 
+class SandboxSessionUpdate(BaseSchema):
+    """Update a sandbox session (rename / description)."""
+
+    name: Optional[str] = Field(None, min_length=1, max_length=200)
+    description: Optional[str] = None
+
+
 class SandboxSessionControlRequest(BaseSchema):
     """Session runtime control request."""
 
-    action: Literal["start", "pause", "resume", "reset", "set_speed", "set_duration"]
+    action: Literal["start", "pause", "resume", "reset", "set_speed", "set_duration", "seek"]
     time_multiplier: Optional[float] = Field(None, gt=0, le=1000)
     duration_seconds: Optional[float] = Field(None, gt=0, le=864000)
+    seek_seconds: Optional[float] = Field(None, ge=0)
 
 
 class SandboxTickRequest(BaseSchema):
@@ -112,7 +120,7 @@ class SandboxTLEImportRequest(BaseSchema):
 class SandboxChatRequest(BaseSchema):
     """Natural-language chat request for sandbox commands."""
 
-    prompt: str = Field(..., min_length=1, max_length=4000)
+    prompt: str = Field(..., min_length=1, max_length=32000)
 
 
 class SandboxSessionRead(BaseSchema):
@@ -184,6 +192,26 @@ class SandboxCommandRead(BaseSchema):
     updated_at: datetime
 
 
+class SandboxEventRead(BaseSchema):
+    """Sandbox event response."""
+    id: str
+    session_id: str
+    event_type: str
+    trigger_seconds: float
+    target_label: Optional[str] = None
+    payload: dict[str, Any] = {}
+    fired: bool = False
+    created_at: datetime
+
+
+class FiredEvent(BaseSchema):
+    """Event that fired during this tick."""
+    event_type: str
+    target_label: Optional[str] = None
+    trigger_seconds: float
+    payload: dict[str, Any] = {}
+
+
 class SandboxSessionSnapshot(BaseSchema):
     """Complete sandbox state payload."""
 
@@ -191,6 +219,8 @@ class SandboxSessionSnapshot(BaseSchema):
     actors: list[SandboxActorRead]
     scenario_items: list[SandboxScenarioItemRead]
     commands: list[SandboxCommandRead]
+    events: list[SandboxEventRead] = []
+    fired_events: list[FiredEvent] = []
 
 
 class SandboxSessionSummary(BaseSchema):

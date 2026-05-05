@@ -33,6 +33,8 @@ from app.api.v1 import (
     debris_genealogy,
     sandbox,
     italy_bigbrother,
+    traffic,
+    entity_intel,
 )
 
 api_router = APIRouter()
@@ -221,4 +223,16 @@ api_router.include_router(
     italy_bigbrother.router,
     prefix="/italy-bigbrother",
     tags=["Italy Big Brother"],
+)
+
+api_router.include_router(
+    traffic.router,
+    prefix="/traffic",
+    tags=["Traffic"],
+)
+
+api_router.include_router(
+    entity_intel.router,
+    prefix="/entity-intel",
+    tags=["Entity Intelligence"],
 )

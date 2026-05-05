@@ -39,6 +39,12 @@ class SandboxSession(Base, AuditMixin):
         cascade="all, delete-orphan",
         order_by="SandboxCommand.created_at",
     )
+    events = relationship(
+        "SandboxEvent",
+        back_populates="session",
+        cascade="all, delete-orphan",
+        order_by="SandboxEvent.trigger_seconds",
+    )
 
     __table_args__ = (
         Index("ix_sandbox_sessions_tenant_user", "tenant_id", "user_id"),
@@ -100,6 +106,31 @@ class SandboxScenarioItem(Base, AuditMixin):
 
     __table_args__ = (
         Index("ix_sandbox_items_session_type", "session_id", "item_type"),
+    )
+
+
+class SandboxEvent(Base, AuditMixin):
+    """Scheduled event that fires at a specific simulation time."""
+
+    __tablename__ = "sandbox_events"
+
+    id = Column(String(50), primary_key=True, default=generate_uuid)
+    session_id = Column(
+        String(50),
+        ForeignKey("sandbox_sessions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    event_type = Column(String(40), nullable=False, index=True)  # destroy, spawn, alert
+    trigger_seconds = Column(Float, nullable=False)  # sim time when event fires
+    target_label = Column(String(200), nullable=True)  # actor label to act on
+    payload = Column(JSON, nullable=False, default=dict)  # extra data
+    fired = Column(Boolean, nullable=False, default=False)
+
+    session = relationship("SandboxSession", back_populates="events")
+
+    __table_args__ = (
+        Index("ix_sandbox_events_session_trigger", "session_id", "trigger_seconds"),
     )
 
 

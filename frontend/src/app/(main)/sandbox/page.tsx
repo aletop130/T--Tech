@@ -6,22 +6,28 @@ import { Button, Spinner } from '@blueprintjs/core';
 
 import {
   api,
+  type AircraftPosition,
   type ConjunctionEvent,
   type GroundStation,
   type PositionReport,
   type SatelliteDetail,
+  type VesselPosition,
 } from '@/lib/api';
 import { sandboxApi } from '@/lib/api/sandbox';
 import { getCesium, type CesiumModule } from '@/lib/cesium/loader';
 import { cesiumController } from '@/lib/cesium/controller';
 import { TacticalPlanningLayer } from '@/components/CesiumMap/TacticalPlanningLayer';
+import { ZonePlanningLayer } from '@/components/CesiumMap/ZonePlanningLayer';
+import { ConnectionLinesLayer } from '@/components/CesiumMap/ConnectionLinesLayer';
 import { SandboxActorLayer } from '@/components/Sandbox/SandboxActorLayer';
 import { SandboxChatPanel } from '@/components/Sandbox/SandboxChatPanel';
+import { SandboxIntelOverlay } from '@/components/Sandbox/SandboxIntelOverlay';
 import { SandboxTimeline } from '@/components/Sandbox/SandboxTimeline';
 import {
   SandboxContextPanel,
   type ActorEditorState,
 } from '@/components/Sandbox/SandboxContextPanel';
+import { useLayerManagerStore } from '@/lib/store/layerManager';
 import {
   useSandboxStore,
   buildChatMessage,
@@ -31,6 +37,8 @@ import {
   type SandboxSnapshot,
   type SandboxTemplateDraft,
 } from '@/lib/store/sandbox';
+import { useEntityIntelStore } from '@/lib/store/entityIntel';
+import { normalizeSandboxActor } from '@/lib/entityNormalizer';
 
 type SandboxMapTargetBehavior = 'move_to' | 'approach_target';
 
@@ -151,6 +159,7 @@ export default function SandboxPage() {
   const addTacticalMarker = useSandboxStore((s) => s.addTacticalMarker);
   const addTacticalRoute = useSandboxStore((s) => s.addTacticalRoute);
   const addTacticalArea = useSandboxStore((s) => s.addTacticalArea);
+  const addTacticalZone = useSandboxStore((s) => s.addTacticalZone);
   const addDrawingPoint = useSandboxStore((s) => s.addDrawingPoint);
   const clearDrawing = useSandboxStore((s) => s.clearDrawing);
   const drawingPoints = useSandboxStore((s) => s.drawingPoints);
@@ -161,11 +170,20 @@ export default function SandboxPage() {
   const [chatInput, setChatInput] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [placingBusy, setPlacingBusy] = useState(false);
+  const [destroyNotifs, setDestroyNotifs] = useState<{ id: string; text: string }[]>([]);
   const [mapTargetBehavior, setMapTargetBehavior] = useState<SandboxMapTargetBehavior>('move_to');
   const [liveSatellites, setLiveSatellites] = useState<SatelliteDetail[]>([]);
   const [liveStations, setLiveStations] = useState<GroundStation[]>([]);
   const [liveVehicles, setLiveVehicles] = useState<PositionReport[]>([]);
   const [liveConjunctions, setLiveConjunctions] = useState<ConjunctionEvent[]>([]);
+  const [liveAircraft, setLiveAircraft] = useState<AircraftPosition[]>([]);
+  const [liveVessels, setLiveVessels] = useState<VesselPosition[]>([]);
+  // Layer visibility from layer manager store
+  const layerNodes = useLayerManagerStore((s) => s.nodes);
+  const toggleLayerVisibility = useLayerManagerStore((s) => s.toggleVisibility);
+  const showIntelOverlay = layerNodes.intel?.visible ?? false;
+  const showAircraftOverlay = layerNodes.intel_aircraft?.visible ?? false;
+  const showVesselsOverlay = layerNodes.intel_vessels?.visible ?? false;
 
   const bootstrappedRef = useRef(false);
   const initialPromptHandledRef = useRef(false);
@@ -183,16 +201,17 @@ export default function SandboxPage() {
   );
 
   const loadLiveImports = useCallback(async () => {
-    const [sats, stations, vehicles, conj] = await Promise.all([
+    const [satsR, stationsR, vehiclesR, conjR] = await Promise.allSettled([
       api.getSatellitesWithOrbits(),
       api.getGroundStations({ page_size: 50 }),
       api.getGroundVehicles(),
       api.getConjunctions({ page_size: 20 }),
     ]);
-    setLiveSatellites(sats);
-    setLiveStations(stations.items);
-    setLiveVehicles(vehicles.items);
-    setLiveConjunctions(conj.items);
+    if (satsR.status === 'fulfilled') setLiveSatellites(satsR.value);
+    if (stationsR.status === 'fulfilled') setLiveStations(stationsR.value.items);
+    if (vehiclesR.status === 'fulfilled') setLiveVehicles(vehiclesR.value.items);
+    if (conjR.status === 'fulfilled') setLiveConjunctions(conjR.value.items);
+    // Aircraft & vessels loaded on-demand from INTEL sub-tabs to save API credits
   }, []);
 
   const sendPrompt = useCallback(
@@ -218,13 +237,14 @@ export default function SandboxPage() {
   );
 
   const handleControl = useCallback(
-    async (action: 'start' | 'pause' | 'resume' | 'reset' | 'set_speed' | 'set_duration', value?: number) => {
+    async (action: 'start' | 'pause' | 'resume' | 'reset' | 'set_speed' | 'set_duration' | 'seek', value?: number) => {
       if (!sessionId) return;
       try {
         const next = await sandboxApi.controlSession(sessionId, {
           action,
           time_multiplier: action === 'set_speed' ? value : undefined,
           duration_seconds: action === 'set_duration' ? value : undefined,
+          seek_seconds: action === 'seek' ? value : undefined,
         });
         refreshSession(next);
         setError(null);
@@ -356,6 +376,9 @@ export default function SandboxPage() {
     [refreshSession, sessionId],
   );
 
+  const entityIntelSelect = useEntityIntelStore((s) => s.selectEntity);
+  const entityIntelClear = useEntityIntelStore((s) => s.clearSelection);
+
   const handleActorSelect = useCallback(
     (actorId: string | null) => {
       selectActor(actorId);
@@ -363,8 +386,21 @@ export default function SandboxPage() {
       if (interactionMode !== 'idle') {
         setInteractionMode('idle');
       }
+      // Populate entity intel store
+      if (actorId) {
+        const actor = snapshot?.actors.find((a) => a.id === actorId);
+        if (actor) {
+          entityIntelSelect(normalizeSandboxActor(actor));
+          // Auto-switch to ASSET tab if context panel is open
+          if (contextPanelOpen) {
+            setContextTab('asset');
+          }
+        }
+      } else {
+        entityIntelClear();
+      }
     },
-    [interactionMode, selectActor, setInteractionMode],
+    [contextPanelOpen, entityIntelClear, entityIntelSelect, interactionMode, selectActor, setContextTab, setInteractionMode, snapshot?.actors],
   );
 
   const handleSetInteractionMode = useCallback(
@@ -592,6 +628,22 @@ export default function SandboxPage() {
             } else if (interactionMode === 'draw_route' || interactionMode === 'draw_area') {
               // Ground planning: accumulate drawing points
               addDrawingPoint(position);
+            } else if (interactionMode === 'place_zone') {
+              // Zone planning: place zone at clicked position
+              const config = groundDrawingConfig;
+              addTacticalZone({
+                id: `zone-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+                zoneType: 'range_ring',
+                label: config.label || 'Range Ring',
+                centerId: null,
+                centerPosition: position,
+                radiusKm: 50,
+                color: '#00d4ff',
+                opacity: 0.12,
+                faction: config.faction,
+                showLabel: true,
+              });
+              setInteractionMode('idle');
             }
           } catch (err) {
             setError(err instanceof Error ? err.message : 'Placement failed');
@@ -639,6 +691,16 @@ export default function SandboxPage() {
       try {
         const next = await sandboxApi.tickSession(sessionId, { delta_seconds: deltaSec });
         refreshSession(next);
+        // Show popup for fired destroy events
+        if (next.fired_events?.length) {
+          for (const fe of next.fired_events) {
+            if (fe.event_type === 'destroy' && fe.target_label) {
+              const nid = `${Date.now()}-${Math.random().toString(36).slice(2, 5)}`;
+              setDestroyNotifs((prev) => [...prev, { id: nid, text: fe.target_label! }]);
+              setTimeout(() => setDestroyNotifs((prev) => prev.filter((n) => n.id !== nid)), 5000);
+            }
+          }
+        }
       } catch {
         // Swallow tick errors to avoid spamming
       } finally {
@@ -763,9 +825,45 @@ export default function SandboxPage() {
                   selectionEnabled={interactionMode === 'idle'}
                 />
                 <TacticalPlanningLayer viewer={viewer} />
+                <ZonePlanningLayer viewer={viewer} />
+                <ConnectionLinesLayer viewer={viewer} actors={actors} />
+                <SandboxIntelOverlay
+                  viewer={viewer}
+                  visible={showIntelOverlay}
+                  satellites={liveSatellites}
+                  stations={liveStations}
+                  vehicles={liveVehicles}
+                  aircraft={liveAircraft}
+                  vessels={liveVessels}
+                  showAircraft={showAircraftOverlay}
+                  showVessels={showVesselsOverlay}
+                />
               </>
             )}
           </div>
+
+          {/* Globe overlay: top-left info */}
+          {/* Destruction notifications — top center */}
+          {destroyNotifs.length > 0 && (
+            <div className="pointer-events-auto absolute left-1/2 top-3 z-50 flex -translate-x-1/2 flex-col gap-2">
+              {destroyNotifs.map((n) => (
+                <div
+                  key={n.id}
+                  className="flex items-center gap-3 border border-red-500/50 bg-[#080808]/95 px-4 py-2.5 font-code text-[11px] uppercase tracking-wider text-red-400 backdrop-blur-sm animate-in fade-in slide-in-from-top-2"
+                >
+                  <span className="h-2 w-2 animate-pulse bg-red-500" />
+                  DESTROYED: {n.text}
+                  <button
+                    type="button"
+                    className="ml-2 text-red-500/60 hover:text-red-400"
+                    onClick={() => setDestroyNotifs((prev) => prev.filter((x) => x.id !== n.id))}
+                  >
+                    &#10005;
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
 
           {/* Globe overlay: top-left info */}
           <div className="pointer-events-none absolute left-3 top-3 flex flex-col gap-2">
@@ -782,6 +880,7 @@ export default function SandboxPage() {
                 {interactionMode === 'place_marker' && 'PLACE MARKER'}
                 {interactionMode === 'draw_route' && `DRAW ROUTE (${drawingPoints.length} pts)`}
                 {interactionMode === 'draw_area' && `DRAW AREA (${drawingPoints.length} pts)`}
+                {interactionMode === 'place_zone' && 'PLACE ZONE'}
                 {(interactionMode === 'draw_route' && drawingPoints.length >= 2) ||
                 (interactionMode === 'draw_area' && drawingPoints.length >= 3) ? (
                   <Button
@@ -829,6 +928,52 @@ export default function SandboxPage() {
             <Button
               small
               minimal
+              icon="minus"
+              title="Zoom out"
+              onClick={() => {
+                if (!viewer) return;
+                viewer.camera.zoomOut(viewer.camera.positionCartographic.height * 0.5);
+              }}
+            />
+            <Button
+              small
+              minimal
+              icon="plus"
+              title="Zoom in"
+              onClick={() => {
+                if (!viewer) return;
+                viewer.camera.zoomIn(viewer.camera.positionCartographic.height * 0.3);
+              }}
+            />
+            <div className="h-4 w-px bg-[#1a1a1a]" />
+            <Button
+              small
+              minimal
+              icon="satellite"
+              title={showIntelOverlay ? 'Hide intel overlay' : 'Show intel overlay'}
+              onClick={() => toggleLayerVisibility('intel')}
+              className={showIntelOverlay ? '!text-sda-accent-cyan' : ''}
+            />
+            <Button
+              small
+              minimal
+              icon="airplane"
+              title={showAircraftOverlay ? 'Hide aircraft' : 'Show aircraft'}
+              onClick={() => toggleLayerVisibility('intel_aircraft')}
+              className={showAircraftOverlay ? '!text-blue-400' : ''}
+            />
+            <Button
+              small
+              minimal
+              icon="ship"
+              title={showVesselsOverlay ? 'Hide vessels' : 'Show vessels'}
+              onClick={() => toggleLayerVisibility('intel_vessels')}
+              className={showVesselsOverlay ? '!text-emerald-400' : ''}
+            />
+            <div className="h-4 w-px bg-[#1a1a1a]" />
+            <Button
+              small
+              minimal
               icon="panel-stats"
               title={contextPanelOpen ? 'Hide panel' : 'Show panel'}
               onClick={() => setContextPanelOpen(!contextPanelOpen)}
@@ -854,6 +999,8 @@ export default function SandboxPage() {
               liveStations={liveStations}
               liveVehicles={liveVehicles}
               liveConjunctions={liveConjunctions}
+              liveAircraft={liveAircraft}
+              liveVessels={liveVessels}
               onSelectActor={handleActorSelect}
               onFlyToActor={handleFlyToActor}
               onDeleteActor={handleDeleteActor}
@@ -864,6 +1011,9 @@ export default function SandboxPage() {
               onImportLive={handleImportLive}
               onImportTLE={handleImportTLE}
               onLoadSession={handleLoadSession}
+              onSatellitesChange={setLiveSatellites}
+              onAircraftChange={setLiveAircraft}
+              onVesselsChange={setLiveVessels}
             />
           </div>
         )}

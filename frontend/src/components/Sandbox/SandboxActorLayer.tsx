@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 
 import { getCesium, type CesiumModule } from '@/lib/cesium/loader';
 import type { SandboxActor } from '@/lib/store/sandbox';
+import { useLayerManagerStore } from '@/lib/store/layerManager';
 import { getEntityIcon, inferActorIcon } from '@/lib/cesium/entity-icons';
 
 const FACTION_COLORS: Record<string, string> = {
@@ -41,6 +42,22 @@ export function SandboxActorLayer({
   const cleanupRef = useRef<(() => void) | null>(null);
   const [Cesium, setCesium] = useState<CesiumModule | null>(null);
 
+  // Layer visibility from layer manager
+  const layerNodes = useLayerManagerStore((s) => s.nodes);
+  const actorsGroupVisible = layerNodes.actors?.visible ?? true;
+  const alliedVisible = layerNodes.actors_allied?.visible ?? true;
+  const hostileVisible = layerNodes.actors_hostile?.visible ?? true;
+  const neutralVisible = layerNodes.actors_neutral?.visible ?? true;
+
+  const factionVisibility: Record<string, boolean> = {
+    allied: actorsGroupVisible && alliedVisible,
+    hostile: actorsGroupVisible && hostileVisible,
+    neutral: actorsGroupVisible && neutralVisible,
+    unknown: actorsGroupVisible,
+  };
+
+  const visibleActors = actors.filter((a) => factionVisibility[a.faction] !== false);
+
   useEffect(() => {
     getCesium().then(setCesium);
   }, []);
@@ -77,7 +94,7 @@ export function SandboxActorLayer({
     cleanupRef.current?.();
     const entityIds = new Set<string>();
 
-    actors.forEach((actor) => {
+    visibleActors.forEach((actor) => {
       const actorId = `sandbox-actor-${actor.id}`;
       const position = actor.state.position as { lat?: number; lon?: number; alt_m?: number } | undefined;
       const lat = position?.lat ?? 0;
@@ -201,7 +218,7 @@ export function SandboxActorLayer({
       cleanupRef.current?.();
       cleanupRef.current = null;
     };
-  }, [Cesium, actors, selectedActorId, viewer]);
+  }, [Cesium, visibleActors, selectedActorId, viewer]);
 
   return null;
 }

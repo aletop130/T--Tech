@@ -1,6 +1,6 @@
 'use client';
 
-import { FormEvent, useEffect, useRef, useState } from 'react';
+import { FormEvent, useCallback, useEffect, useRef, useState } from 'react';
 import { Icon } from '@blueprintjs/core';
 
 import type { ChatMessage, SandboxSession } from '@/lib/store/sandbox';
@@ -40,9 +40,29 @@ export function SandboxChatPanel({
   onQuickPrompt,
 }: SandboxChatPanelProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const formRef = useRef<HTMLFormElement>(null);
   const [streamingId, setStreamingId] = useState<string | null>(null);
   const [streamedLen, setStreamedLen] = useState(0);
   const prevCountRef = useRef(messages.length);
+
+  const BASE_HEIGHT = 40; // ~2.5rem
+
+  const autoResize = useCallback(() => {
+    const ta = textareaRef.current;
+    if (!ta) return;
+    ta.style.height = 'auto';
+    // Max height = 50% of the chat panel (parent form's parent)
+    const chatPanel = formRef.current?.parentElement;
+    const maxH = chatPanel ? chatPanel.clientHeight * 0.5 : 300;
+    ta.style.height = `${Math.min(ta.scrollHeight, maxH)}px`;
+  }, []);
+
+  const resetHeight = useCallback(() => {
+    const ta = textareaRef.current;
+    if (!ta) return;
+    ta.style.height = `${BASE_HEIGHT}px`;
+  }, []);
 
   // Detect new assistant message and start streaming
   useEffect(() => {
@@ -91,6 +111,7 @@ export function SandboxChatPanel({
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     await onSubmit();
+    resetHeight();
   };
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -98,9 +119,15 @@ export function SandboxChatPanel({
       event.preventDefault();
       if (input.trim() && !isSubmitting) {
         void onSubmit();
+        resetHeight();
       }
     }
   };
+
+  // Auto-resize on input change
+  useEffect(() => {
+    autoResize();
+  }, [input, autoResize]);
 
   const status = session?.status ?? 'draft';
 
@@ -234,18 +261,19 @@ export function SandboxChatPanel({
       </div>
 
       {/* ── COMMAND INPUT ── */}
-      <form className="flex-shrink-0 border-t border-[#1a1a1a] p-3" onSubmit={handleSubmit}>
+      <form ref={formRef} className="flex-shrink-0 border-t border-[#1a1a1a] p-3" onSubmit={handleSubmit}>
         <div className="relative border border-[#1a1a1a]">
           <div className="px-3 pt-2 pb-0.5 font-code text-[9px] uppercase tracking-widest text-zinc-500">
             ENTER DIRECTIVE
           </div>
           <textarea
-            rows={2}
+            ref={textareaRef}
             placeholder="Deploy, maneuver, or simulate..."
             value={input}
             onChange={(e) => onInputChange(e.target.value)}
             onKeyDown={handleKeyDown}
-            className="sandbox-chat-input min-h-[2.5rem] w-full resize-none border-0 bg-transparent px-3 py-1.5 font-code text-[11px] text-zinc-300 outline-none placeholder:text-zinc-700 focus:outline-none focus:ring-0 focus:shadow-none focus-visible:outline-none focus-visible:ring-0 focus-visible:shadow-none"
+            style={{ height: `${BASE_HEIGHT}px` }}
+            className="sandbox-chat-input w-full resize-none border-0 bg-transparent px-3 py-1.5 font-code text-[11px] text-zinc-300 outline-none placeholder:text-zinc-700 focus:outline-none focus:ring-0 focus:shadow-none focus-visible:outline-none focus-visible:ring-0 focus-visible:shadow-none"
           />
           <div className="flex items-center justify-between px-2 pb-2">
             <span className="font-code text-[9px] text-zinc-600">Enter to send</span>

@@ -1558,6 +1558,35 @@ export class ApiClient {
   async getItalyStats(): Promise<ItalyBigBrotherStats> {
     return this._fetch('/api/v1/italy-bigbrother/stats');
   }
+
+  // ========== Traffic (Aircraft & Vessels) ==========
+  async getTrafficPresets(): Promise<TrafficAreaPreset[]> {
+    return this._fetch('/api/v1/traffic/presets');
+  }
+
+  async getAircraft(preset?: string): Promise<AircraftPosition[]> {
+    const params = new URLSearchParams();
+    if (preset) params.set('preset', preset);
+    return this._fetch(`/api/v1/traffic/aircraft?${params}`);
+  }
+
+  async getVessels(preset?: string): Promise<VesselPosition[]> {
+    const params = new URLSearchParams();
+    if (preset) params.set('preset', preset);
+    return this._fetch(`/api/v1/traffic/vessels?${params}`);
+  }
+
+  async fetchAircraft(preset: string): Promise<{ count: number }> {
+    const params = new URLSearchParams();
+    params.set('preset', preset);
+    return this._fetch(`/api/v1/traffic/aircraft/fetch?${params}`, { method: 'POST' });
+  }
+
+  async subscribeVessels(preset: string): Promise<{ ok: boolean }> {
+    const params = new URLSearchParams();
+    params.set('preset', preset);
+    return this._fetch(`/api/v1/traffic/vessels/subscribe?${params}`, { method: 'POST' });
+  }
 }
 
 export const api = new ApiClient();
@@ -2463,4 +2492,38 @@ export interface CollisionEventsResponse {
   total: number;
   page: number;
   page_size: number;
+}
+
+// ========== Traffic Types (Aircraft & Vessels) ==========
+export interface AircraftPosition {
+  icao24: string;
+  callsign: string | null;
+  latitude: number;
+  longitude: number;
+  altitude_m: number;
+  heading_deg: number | null;
+  speed_ms: number | null;
+  vertical_rate: number | null;
+  on_ground: boolean;
+  category: number | null;
+  last_seen: string;
+}
+
+export interface VesselPosition {
+  mmsi: number;
+  name: string | null;
+  ship_type: number | null;
+  latitude: number;
+  longitude: number;
+  heading_deg: number | null;
+  speed_knots: number | null;
+  course: number | null;
+  destination: string | null;
+  last_seen: string;
+}
+
+export interface TrafficAreaPreset {
+  key: string;
+  label: string;
+  bbox: { lat_min: number; lat_max: number; lon_min: number; lon_max: number } | null;
 }

@@ -87,6 +87,13 @@ class Settings(BaseSettings):
     # Iridium SBD Configuration
     IRIDIUM_DEFAULT_GATEWAY: str = "SNOC Tempe"
 
+    # OpenSky Network (aircraft tracking)
+    OPENSKY_CLIENT_ID: Optional[str] = None
+    OPENSKY_CLIENT_SECRET: Optional[str] = None
+
+    # MyShipTracking (vessel tracking)
+    MYSHIPTRACKING_API_KEY: Optional[str] = None
+
 
 @lru_cache
 def get_settings() -> Settings:

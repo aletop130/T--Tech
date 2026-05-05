@@ -8,7 +8,7 @@ celery_app = Celery(
     "sda_platform",
     broker=settings.REDIS_URL,
     backend=settings.REDIS_URL,
-    include=["app.tasks"],
+    include=["app.tasks", "app.tasks.traffic"],
 )
 
 celery_app.conf.update(
@@ -49,6 +49,10 @@ celery_app.conf.beat_schedule = {
     "fetch-celestrak-debris": {
         "task": "app.tasks.fetch_celestrak_debris",
         "schedule": crontab(hour=2, minute=0),
+    },
+    "poll-aircraft": {
+        "task": "app.tasks.poll_aircraft",
+        "schedule": 60.0,  # Every 60 seconds
     },
 }
 

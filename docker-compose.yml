@@ -65,6 +65,8 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     container_name: sda-backend
+    env_file:
+      - .env
     environment:
       - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-sda_user}:${POSTGRES_PASSWORD:-sda_secret}@postgres:5432/${POSTGRES_DB:-sda_db}
       - REDIS_URL=redis://redis:6379/0
@@ -74,6 +76,9 @@ services:
       - REGOLO_API_KEY=${REGOLO_API_KEY}
       - REGOLO_BASE_URL=${REGOLO_BASE_URL:-https://api.regolo.ai/v1}
       - SECRET_KEY=${SECRET_KEY:-change-me-in-production}
+      - OPENSKY_CLIENT_ID=${OPENSKY_CLIENT_ID}
+      - OPENSKY_CLIENT_SECRET=${OPENSKY_CLIENT_SECRET}
+      - MYSHIPTRACKING_API_KEY=${MYSHIPTRACKING_API_KEY}
     volumes:
       - ./backend:/app
     ports:
