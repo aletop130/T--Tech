@@ -101,11 +101,14 @@ Dedicated view for monitoring Italian space dependencies, ground station coverag
 
 - Docker and Docker Compose
 - Optional: `REGOLO_API_KEY` for AI features
+- Optional: provider keys for full data coverage (N2YO, Space-Track, Copernicus, ESA DISCOS, OpenSky, MyShipTracking) — see `.env.example`
 
 ### Setup
 
 ```bash
-cp .env.example .env
+git clone https://github.com/aletop130/T--Tech.git horus
+cd horus
+cp .env.example .env       # edit .env to add API keys (all optional except SECRET_KEY in prod)
 docker compose up -d
 ```
 

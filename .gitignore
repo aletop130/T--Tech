@@ -39,7 +39,14 @@ package-lock.json
 *.key
 *.csr
 *.pem
+*.crt
 .wrangler/
+
+# Build artifacts
+*.tsbuildinfo
+
+# Reference screenshots
+frontend/screens/
 
 # Legacy
 hackeurope-2026/
